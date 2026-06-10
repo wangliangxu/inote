@@ -165,8 +165,11 @@ trait StripPrefixDate {
 
 impl StripPrefixDate for str {
     fn strip_prefix_date(&self) -> &str {
-        if self.len() >= 10 && NaiveDate::parse_from_str(&self[..10], "%Y-%m-%d").is_ok() {
-            &self[10..]
+        if let Some(date) = self.get(0..10) {
+            if NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok() {
+                return self.get(10..).unwrap_or_default();
+            }
+            self
         } else {
             self
         }
@@ -214,6 +217,19 @@ mod tests {
         fs::write(&note_path, "Body without heading").unwrap();
         let note = parse_note(dir.path(), &note_path).unwrap();
         assert_eq!(note.title, "Quick Thought");
+    }
+
+    #[test]
+    fn derives_title_from_non_ascii_filename_without_panic() {
+        let dir = tempdir().unwrap();
+        let note_path = dir.path().join("knowledge/城市网络大模型.md");
+        fs::create_dir_all(note_path.parent().unwrap()).unwrap();
+        fs::write(&note_path, "Body without heading").unwrap();
+
+        let note = parse_note(dir.path(), &note_path).unwrap();
+
+        assert_eq!(note.title, "城市网络大模型");
+        assert_eq!(note.category, "knowledge");
     }
 
     #[test]
