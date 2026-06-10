@@ -6,6 +6,8 @@ interface SettingsPanelProps {
   onInitializeVault: () => void
   onCreateToday: () => void
   onCreateInbox: () => void
+  onCreateWeeklyReview: () => void
+  onCreateMonthlyReview: () => void
   onCreateFolder: () => void
   onRebuildIndex: () => void
 }
@@ -18,6 +20,8 @@ export function SettingsPanel({
   onInitializeVault,
   onCreateToday,
   onCreateInbox,
+  onCreateWeeklyReview,
+  onCreateMonthlyReview,
   onCreateFolder,
   onRebuildIndex,
 }: SettingsPanelProps) {
@@ -46,6 +50,12 @@ export function SettingsPanel({
           </button>
           <button className="secondary-action" type="button" onClick={onCreateInbox}>
             Inbox note
+          </button>
+          <button className="secondary-action" type="button" onClick={onCreateWeeklyReview}>
+            Weekly review
+          </button>
+          <button className="secondary-action" type="button" onClick={onCreateMonthlyReview}>
+            Monthly review
           </button>
           <button className="secondary-action" type="button" onClick={onCreateFolder}>
             New folder

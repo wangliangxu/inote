@@ -29,6 +29,11 @@ interface SearchIndexInput {
   query: string
 }
 
+interface CreateReviewInput {
+  vaultRoot: string
+  date: string
+}
+
 export async function scanVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault', { vaultRoot })
 }
@@ -71,6 +76,14 @@ export async function createFolder(input: CreateFolderInput): Promise<void> {
 
 export async function createTodayNote(vaultRoot: string): Promise<Note> {
   return invoke<Note>('create_today_note', { vaultRoot })
+}
+
+export async function createWeeklyReview(input: CreateReviewInput): Promise<Note> {
+  return invoke<Note>('create_weekly_review', { input })
+}
+
+export async function createMonthlyReview(input: CreateReviewInput): Promise<Note> {
+  return invoke<Note>('create_monthly_review', { input })
 }
 
 export async function createInboxNote(vaultRoot: string, title: string): Promise<Note> {

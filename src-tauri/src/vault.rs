@@ -1,5 +1,5 @@
 use crate::markdown::{build_note, parse_note, NoteMetadata};
-use chrono::Local;
+use chrono::{Datelike, Local, NaiveDate};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -13,7 +13,8 @@ impl Vault {
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, String> {
         let root = root.into();
         if !root.exists() {
-            fs::create_dir_all(&root).map_err(|error| format!("failed to create vault: {error}"))?;
+            fs::create_dir_all(&root)
+                .map_err(|error| format!("failed to create vault: {error}"))?;
         }
         if !root.is_dir() {
             return Err("vault path must be a directory".to_string());
@@ -53,7 +54,11 @@ impl Vault {
                 notes.push(parse_note(&self.root, path)?);
             }
         }
-        notes.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.title.cmp(&b.title)));
+        notes.sort_by(|a, b| {
+            b.updated_at
+                .cmp(&a.updated_at)
+                .then_with(|| a.title.cmp(&b.title))
+        });
         Ok(notes)
     }
 
@@ -65,7 +70,8 @@ impl Vault {
     pub fn write_note(&self, relative_path: &str, content: &str) -> Result<NoteMetadata, String> {
         let path = self.safe_path(relative_path)?;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| format!("failed to create note folder: {error}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create note folder: {error}"))?;
         }
 
         let tmp = path.with_extension("md.tmp");
@@ -118,19 +124,83 @@ impl Vault {
         self.write_note(&relative_path, &content)
     }
 
+    pub fn create_weekly_review(&self, date: &str) -> Result<NoteMetadata, String> {
+        let target = parse_review_date(date)?;
+        let week = target.iso_week();
+        let title = format!("Weekly Review {}-W{:02}", week.year(), week.week());
+        let relative_path = format!(
+            "journal/reviews/{}-W{:02}-review.md",
+            week.year(),
+            week.week()
+        );
+        let notes = self.review_notes(|note_date| note_date.iso_week() == week)?;
+        let body = build_review_body(&title, &notes);
+        let tags = vec![
+            "journal".to_string(),
+            "review".to_string(),
+            "weekly".to_string(),
+        ];
+        let content = build_note(&title, "journal/reviews", &tags, date, &body);
+        self.write_note(&relative_path, &content)
+    }
+
+    pub fn create_monthly_review(&self, date: &str) -> Result<NoteMetadata, String> {
+        let target = parse_review_date(date)?;
+        let title = format!("Monthly Review {}-{:02}", target.year(), target.month());
+        let relative_path = format!(
+            "journal/reviews/{}-{:02}-review.md",
+            target.year(),
+            target.month()
+        );
+        let notes = self.review_notes(|note_date| {
+            note_date.year() == target.year() && note_date.month() == target.month()
+        })?;
+        let body = build_review_body(&title, &notes);
+        let tags = vec![
+            "journal".to_string(),
+            "review".to_string(),
+            "monthly".to_string(),
+        ];
+        let content = build_note(&title, "journal/reviews", &tags, date, &body);
+        self.write_note(&relative_path, &content)
+    }
+
     pub fn move_note(&self, from: &str, to: &str) -> Result<NoteMetadata, String> {
         let from_path = self.safe_path(from)?;
         let to_path = self.safe_path(to)?;
         if let Some(parent) = to_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| format!("failed to create destination folder: {error}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create destination folder: {error}"))?;
         }
-        fs::rename(&from_path, &to_path).map_err(|error| format!("failed to move note: {error}"))?;
+        fs::rename(&from_path, &to_path)
+            .map_err(|error| format!("failed to move note: {error}"))?;
         parse_note(&self.root, &to_path)
     }
 
     pub fn delete_note(&self, relative_path: &str) -> Result<(), String> {
         let path = self.safe_path(relative_path)?;
         fs::remove_file(path).map_err(|error| format!("failed to delete note: {error}"))
+    }
+
+    fn review_notes(
+        &self,
+        include: impl Fn(NaiveDate) -> bool,
+    ) -> Result<Vec<NoteMetadata>, String> {
+        let mut notes = self
+            .scan()?
+            .into_iter()
+            .filter(|note| note.category == "journal" || note.category.starts_with("journal/"))
+            .filter(|note| {
+                note.category != "journal/reviews" && !note.category.starts_with("journal/reviews/")
+            })
+            .filter(|note| parse_review_date(&note.created_at).is_ok_and(&include))
+            .collect::<Vec<_>>();
+        notes.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        Ok(notes)
     }
 
     fn safe_path(&self, relative_path: &str) -> Result<PathBuf, String> {
@@ -145,7 +215,13 @@ fn slugify(title: &str) -> String {
     let slug = title
         .to_lowercase()
         .chars()
-        .map(|value| if value.is_ascii_alphanumeric() { value } else { '-' })
+        .map(|value| {
+            if value.is_ascii_alphanumeric() {
+                value
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .split('-')
         .filter(|part| !part.is_empty())
@@ -194,6 +270,25 @@ fn unique_note_path(root: &Path, category: &str, filename: &str) -> String {
         index += 1;
     }
     candidate
+}
+
+fn parse_review_date(date: &str) -> Result<NaiveDate, String> {
+    NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|error| format!("invalid review date {date}: {error}"))
+}
+
+fn build_review_body(title: &str, notes: &[NoteMetadata]) -> String {
+    let reviewed = if notes.is_empty() {
+        "No journal notes found for this period.".to_string()
+    } else {
+        notes
+            .iter()
+            .map(|note| format!("- {} - [{}]({})", note.created_at, note.title, note.path))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    format!("# {title}\n\n## Notes Reviewed\n\n{reviewed}\n\n## Highlights\n\n## Follow-ups\n\n")
 }
 
 #[cfg(test)]
@@ -248,12 +343,86 @@ mod tests {
         let dir = tempdir().unwrap();
         let vault = Vault::new(dir.path()).unwrap();
 
-        let first = vault.create_note("城市网络大模型", "knowledge/cities").unwrap();
-        let second = vault.create_note("城市网络大模型", "knowledge/cities").unwrap();
+        let first = vault
+            .create_note("城市网络大模型", "knowledge/cities")
+            .unwrap();
+        let second = vault
+            .create_note("城市网络大模型", "knowledge/cities")
+            .unwrap();
 
         assert_eq!(first.path, "knowledge/cities/城市网络大模型.md");
         assert_eq!(second.path, "knowledge/cities/城市网络大模型-2.md");
-        assert!(dir.path().join("knowledge/cities/城市网络大模型.md").exists());
+        assert!(dir
+            .path()
+            .join("knowledge/cities/城市网络大模型.md")
+            .exists());
+    }
+
+    #[test]
+    fn creates_weekly_review_from_journal_notes() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+
+        vault
+            .write_note(
+                "journal/2026/06/2026-06-08.md",
+                "---\ntitle: Monday\ncategory: journal\ntags: [journal]\ncreated_at: 2026-06-08\nupdated_at: 2026-06-08\n---\n\n# Monday\n\nStart.",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "journal/2026/06/2026-06-10.md",
+                "---\ntitle: Wednesday\ncategory: journal\ntags: [journal]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# Wednesday\n\nMiddle.",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "journal/2026/06/2026-06-01.md",
+                "---\ntitle: Previous Week\ncategory: journal\ntags: [journal]\ncreated_at: 2026-06-01\nupdated_at: 2026-06-01\n---\n\n# Previous Week\n\nOld.",
+            )
+            .unwrap();
+
+        let review = vault.create_weekly_review("2026-06-10").unwrap();
+
+        assert_eq!(review.path, "journal/reviews/2026-W24-review.md");
+        assert_eq!(review.category, "journal/reviews");
+        assert!(review.tags.contains(&"weekly".to_string()));
+        assert!(review
+            .body
+            .contains("[Monday](journal/2026/06/2026-06-08.md)"));
+        assert!(review
+            .body
+            .contains("[Wednesday](journal/2026/06/2026-06-10.md)"));
+        assert!(!review.body.contains("Previous Week"));
+    }
+
+    #[test]
+    fn creates_monthly_review_from_journal_notes() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+
+        vault
+            .write_note(
+                "journal/2026/06/2026-06-10.md",
+                "---\ntitle: June Note\ncategory: journal\ntags: [journal]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# June Note\n\nBody.",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "journal/2026/05/2026-05-31.md",
+                "---\ntitle: May Note\ncategory: journal\ntags: [journal]\ncreated_at: 2026-05-31\nupdated_at: 2026-05-31\n---\n\n# May Note\n\nBody.",
+            )
+            .unwrap();
+
+        let review = vault.create_monthly_review("2026-06-10").unwrap();
+
+        assert_eq!(review.path, "journal/reviews/2026-06-review.md");
+        assert_eq!(review.title, "Monthly Review 2026-06");
+        assert!(review.tags.contains(&"monthly".to_string()));
+        assert!(review
+            .body
+            .contains("[June Note](journal/2026/06/2026-06-10.md)"));
+        assert!(!review.body.contains("May Note"));
     }
 
     #[test]

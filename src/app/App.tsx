@@ -28,8 +28,10 @@ import type { Note, SearchResult, WorkspaceView } from '../shared/types'
 import {
   createFolder,
   createInboxNote,
+  createMonthlyReview,
   createNote,
   createTodayNote,
+  createWeeklyReview,
   deleteNote,
   initializeVault,
   moveNote,
@@ -49,6 +51,11 @@ const LAST_VAULT_KEY = 'inote.lastVaultRoot'
 function noteExcerpt(note: Note | SearchResult): string {
   if ('excerpt' in note) return note.excerpt
   return note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96)
+}
+
+function localDateString(date = new Date()): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 10)
 }
 
 export function App() {
@@ -290,6 +297,46 @@ export function App() {
       setActivePath(note.path)
       setSaveState('saved')
       setStatus(`Opened ${note.path}.`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function addWeeklyReview() {
+    if (!vaultRoot.trim()) {
+      setStatus('Open a real vault before creating weekly review.')
+      return
+    }
+    try {
+      const today = localDateString()
+      const note = await createWeeklyReview({ vaultRoot: vaultRoot.trim(), date: today })
+      await rebuildSearchIndex(vaultRoot.trim())
+      setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
+      setActivePath(note.path)
+      setActiveCategory(note.category)
+      setActiveView('category')
+      setSaveState('saved')
+      setStatus(`Created ${note.path}.`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function addMonthlyReview() {
+    if (!vaultRoot.trim()) {
+      setStatus('Open a real vault before creating monthly review.')
+      return
+    }
+    try {
+      const today = localDateString()
+      const note = await createMonthlyReview({ vaultRoot: vaultRoot.trim(), date: today })
+      await rebuildSearchIndex(vaultRoot.trim())
+      setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
+      setActivePath(note.path)
+      setActiveCategory(note.category)
+      setActiveView('category')
+      setSaveState('saved')
+      setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -546,6 +593,8 @@ export function App() {
             onInitializeVault={initVault}
             onCreateToday={addTodayNote}
             onCreateInbox={addInboxNote}
+            onCreateWeeklyReview={addWeeklyReview}
+            onCreateMonthlyReview={addMonthlyReview}
             onCreateFolder={addFolder}
             onRebuildIndex={rebuildIndex}
           />

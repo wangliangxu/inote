@@ -19,6 +19,8 @@ pub fn run() {
             commands::write_note,
             commands::create_inbox_note,
             commands::create_today_note,
+            commands::create_weekly_review,
+            commands::create_monthly_review,
             commands::create_note,
             commands::create_folder,
             commands::move_note,
