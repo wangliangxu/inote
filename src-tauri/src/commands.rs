@@ -21,6 +21,21 @@ pub struct MoveNoteInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateNoteInput {
+    pub vault_root: String,
+    pub title: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFolderInput {
+    pub vault_root: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LlmPreviewInput {
     pub settings: LlmProviderSettings,
     pub prompt: String,
@@ -30,6 +45,13 @@ pub struct LlmPreviewInput {
 #[tauri::command]
 pub fn scan_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
     Vault::new(vault_root)?.scan()
+}
+
+#[tauri::command]
+pub fn initialize_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
+    let vault = Vault::new(vault_root)?;
+    vault.create_starter_structure()?;
+    vault.scan()
 }
 
 #[tauri::command]
@@ -50,6 +72,16 @@ pub fn create_inbox_note(vault_root: String, title: String) -> Result<NoteMetada
 #[tauri::command]
 pub fn create_today_note(vault_root: String) -> Result<NoteMetadata, String> {
     Vault::new(vault_root)?.create_today_note()
+}
+
+#[tauri::command]
+pub fn create_note(input: CreateNoteInput) -> Result<NoteMetadata, String> {
+    Vault::new(input.vault_root)?.create_note(&input.title, &input.category)
+}
+
+#[tauri::command]
+pub fn create_folder(input: CreateFolderInput) -> Result<(), String> {
+    Vault::new(input.vault_root)?.create_folder(&input.path)
 }
 
 #[tauri::command]
@@ -113,6 +145,34 @@ mod tests {
 
         delete_note(root.clone(), "knowledge/a.md".to_string()).unwrap();
         assert!(scan_vault(root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn command_initializes_vault_and_creates_category_note() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        let notes = initialize_vault(root.clone()).unwrap();
+        assert!(notes.is_empty());
+        assert!(dir.path().join("00-inbox").exists());
+        assert!(dir.path().join("knowledge/rust").exists());
+
+        create_folder(CreateFolderInput {
+            vault_root: root.clone(),
+            path: "knowledge/cities".to_string(),
+        })
+        .unwrap();
+
+        let note = create_note(CreateNoteInput {
+            vault_root: root,
+            title: "城市网络大模型".to_string(),
+            category: "knowledge/cities".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(note.title, "城市网络大模型");
+        assert_eq!(note.category, "knowledge/cities");
+        assert!(dir.path().join("knowledge/cities/城市网络大模型.md").exists());
     }
 
     #[test]

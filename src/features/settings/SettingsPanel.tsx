@@ -3,8 +3,10 @@ interface SettingsPanelProps {
   status: string
   onVaultRootChange: (path: string) => void
   onOpenVault: () => void
+  onInitializeVault: () => void
   onCreateToday: () => void
   onCreateInbox: () => void
+  onCreateFolder: () => void
 }
 
 export function SettingsPanel({
@@ -12,8 +14,10 @@ export function SettingsPanel({
   status,
   onVaultRootChange,
   onOpenVault,
+  onInitializeVault,
   onCreateToday,
   onCreateInbox,
+  onCreateFolder,
 }: SettingsPanelProps) {
   return (
     <section className="settings-panel">
@@ -32,11 +36,17 @@ export function SettingsPanel({
           <button className="secondary-action" type="button" onClick={onOpenVault}>
             Open vault
           </button>
+          <button className="secondary-action" type="button" onClick={onInitializeVault}>
+            Initialize
+          </button>
           <button className="secondary-action" type="button" onClick={onCreateToday}>
             Today note
           </button>
           <button className="secondary-action" type="button" onClick={onCreateInbox}>
             Inbox note
+          </button>
+          <button className="secondary-action" type="button" onClick={onCreateFolder}>
+            New folder
           </button>
         </div>
         <p className="settings-status">{status}</p>

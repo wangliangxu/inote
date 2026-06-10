@@ -124,7 +124,7 @@ button {
 .quick-actions {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin-bottom: 14px;
 }
 
@@ -390,6 +390,30 @@ button {
   padding: 4px 8px;
 }
 
+.metadata .save-state {
+  font-weight: 700;
+}
+
+.metadata .save-state.dirty {
+  background: #fff3d6;
+  color: #7b5315;
+}
+
+.metadata .save-state.saving {
+  background: #dce9f8;
+  color: #254d78;
+}
+
+.metadata .save-state.saved {
+  background: #dfeadf;
+  color: #25533e;
+}
+
+.metadata .save-state.error {
+  background: #f8dddd;
+  color: #842727;
+}
+
 .markdown-input {
   background: transparent;
   border: 0;
@@ -508,6 +532,28 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 12px;
+}
+
+.context-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 14px;
+}
+
+.context-actions button {
+  align-items: center;
+  background: #f8f8f5;
+  border: 1px solid #d7d7cf;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+}
+
+.context-actions button:hover {
+  background: #e9eee7;
 }
 
 .tag-strip span,

@@ -40,6 +40,11 @@ impl Vault {
         Ok(())
     }
 
+    pub fn create_folder(&self, relative_path: &str) -> Result<(), String> {
+        let path = self.safe_path(relative_path)?;
+        fs::create_dir_all(&path).map_err(|error| format!("failed to create folder: {error}"))
+    }
+
     pub fn scan(&self) -> Result<Vec<NoteMetadata>, String> {
         let mut notes = Vec::new();
         for entry in WalkDir::new(&self.root).into_iter().filter_map(Result::ok) {
@@ -75,6 +80,26 @@ impl Vault {
         let relative_path = format!("00-inbox/{date}-{slug}.md");
         let body = format!("# {title}\n\n");
         let content = build_note(title, "00-inbox", &["inbox".to_string()], &date, &body);
+        self.write_note(&relative_path, &content)
+    }
+
+    pub fn create_note(&self, title: &str, category: &str) -> Result<NoteMetadata, String> {
+        let clean_title = title.trim();
+        if clean_title.is_empty() {
+            return Err("note title is required".to_string());
+        }
+        let clean_category = category.trim().trim_matches('/');
+        if clean_category.is_empty() {
+            return Err("note category is required".to_string());
+        }
+
+        self.create_folder(clean_category)?;
+
+        let date = Local::now().format("%Y-%m-%d").to_string();
+        let filename = filename_for_title(clean_title);
+        let relative_path = unique_note_path(&self.root, clean_category, &filename);
+        let body = format!("# {clean_title}\n\n");
+        let content = build_note(clean_title, clean_category, &[], &date, &body);
         self.write_note(&relative_path, &content)
     }
 
@@ -134,6 +159,43 @@ fn slugify(title: &str) -> String {
     }
 }
 
+fn filename_for_title(title: &str) -> String {
+    let trimmed = title.trim();
+    if trimmed.chars().any(|value| !value.is_ascii()) {
+        sanitize_filename(trimmed)
+    } else {
+        slugify(trimmed)
+    }
+}
+
+fn sanitize_filename(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            other => other,
+        })
+        .collect::<String>()
+        .trim_matches(|ch| ch == '-' || ch == ' ')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "note".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn unique_note_path(root: &Path, category: &str, filename: &str) -> String {
+    let mut candidate = format!("{category}/{filename}.md");
+    let mut index = 2;
+    while root.join(&candidate).exists() {
+        candidate = format!("{category}/{filename}-{index}.md");
+        index += 1;
+    }
+    candidate
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +241,19 @@ mod tests {
 
         vault.delete_note("knowledge/a.md").unwrap();
         assert!(!dir.path().join("knowledge/a.md").exists());
+    }
+
+    #[test]
+    fn creates_category_note_and_unique_filename() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+
+        let first = vault.create_note("城市网络大模型", "knowledge/cities").unwrap();
+        let second = vault.create_note("城市网络大模型", "knowledge/cities").unwrap();
+
+        assert_eq!(first.path, "knowledge/cities/城市网络大模型.md");
+        assert_eq!(second.path, "knowledge/cities/城市网络大模型-2.md");
+        assert!(dir.path().join("knowledge/cities/城市网络大模型.md").exists());
     }
 
     #[test]

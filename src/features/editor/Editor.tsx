@@ -4,9 +4,18 @@ interface EditorProps {
   note: Note
   onChange: (body: string) => void
   onSave?: () => void
+  saveState?: 'demo' | 'dirty' | 'saving' | 'saved' | 'error'
 }
 
-export function Editor({ note, onChange, onSave }: EditorProps) {
+export function Editor({ note, onChange, onSave, saveState = 'demo' }: EditorProps) {
+  const saveLabel = {
+    demo: 'Demo only',
+    dirty: 'Unsaved',
+    saving: 'Saving',
+    saved: 'Saved',
+    error: 'Save failed',
+  }[saveState]
+
   return (
     <article className="editor">
       <header className="editor-header">
@@ -22,6 +31,7 @@ export function Editor({ note, onChange, onSave }: EditorProps) {
           ) : null}
         </div>
         <div className="metadata">
+          <span className={`save-state ${saveState}`}>{saveLabel}</span>
           <span>{note.category}</span>
           <span>{note.createdAt}</span>
           <span>{note.wordCount} words</span>
