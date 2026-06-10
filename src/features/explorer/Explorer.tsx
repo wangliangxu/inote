@@ -19,7 +19,7 @@ export function Explorer({ notes, activeCategory, onSelectCategory }: ExplorerPr
             onClick={() => onSelectCategory(category.name)}
           >
             <span>{category.name}</span>
-            <small>{category.count}</small>
+            <small>{category.count.toString().padStart(2, '0')}</small>
           </button>
         ))}
       </div>

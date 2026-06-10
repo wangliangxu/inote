@@ -9,14 +9,23 @@ interface CalendarViewProps {
 export function CalendarView({ notes, onSelectNote }: CalendarViewProps) {
   return (
     <section className="calendar-panel">
-      <h2>Monthly Notes</h2>
+      <header className="panel-heading">
+        <h2>Monthly Notes</h2>
+        <span>{notes.length} notes</span>
+      </header>
       <div className="month-list">
         {groupByMonth(notes).map((group) => (
           <div className="month-item" key={group.month}>
-            <h3>{group.month}</h3>
+            <div className="month-title">
+              <h3>{group.month}</h3>
+              <span>{group.notes.length}</span>
+            </div>
             {group.notes.map((note) => (
               <button className="note-row" key={note.path} onClick={() => onSelectNote(note.path)}>
-                <strong>{note.title}</strong>
+                <span className="note-row-top">
+                  <strong>{note.title}</strong>
+                  <time>{note.updatedAt}</time>
+                </span>
                 <span>{note.category}</span>
               </button>
             ))}

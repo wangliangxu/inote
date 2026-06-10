@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, FolderTree, Inbox, Search, Settings } from 'lucide-react'
+import { Bot, CalendarDays, FilePlus2, FolderTree, Inbox, PanelRight, Search, Settings, Sparkles } from 'lucide-react'
 import { CalendarView } from '../features/calendar/CalendarView'
 import { Editor } from '../features/editor/Editor'
 import { Explorer } from '../features/explorer/Explorer'
@@ -21,6 +21,7 @@ export function App() {
   const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
+  const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
 
   const visibleNotes = useMemo(() => {
     if (activeView === 'search') return searchNotes(notes, query)
@@ -119,6 +120,26 @@ export function App() {
           </div>
         </div>
 
+        <div className="vault-card">
+          <div>
+            <span className="eyebrow">Vault</span>
+            <strong>{vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</strong>
+          </div>
+          <span>{notes.length}</span>
+        </div>
+
+        <div className="quick-actions">
+          <button type="button" onClick={addInboxNote} title="Create inbox note">
+            <FilePlus2 size={17} />
+          </button>
+          <button type="button" onClick={addTodayNote} title="Open today note">
+            <CalendarDays size={17} />
+          </button>
+          <button type="button" onClick={() => setActiveView('search')} title="Search">
+            <Search size={17} />
+          </button>
+        </div>
+
         <nav className="nav-list" aria-label="Workspace views">
           <button className={activeView === 'today' ? 'active' : ''} onClick={() => setActiveView('today')}>
             <Inbox size={18} /> Today
@@ -148,6 +169,25 @@ export function App() {
       </aside>
 
       <section className="workspace">
+        <header className="workspace-topbar">
+          <div className="command-box">
+            <Search size={17} />
+            <input
+              aria-label="Search notes"
+              placeholder="Search notes"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setActiveView('search')
+              }}
+            />
+          </div>
+          <div className="workspace-stats">
+            <span>{notes.length} notes</span>
+            <span>{totalWords} words</span>
+          </div>
+        </header>
+
         {activeView === 'calendar' ? (
           <CalendarView notes={notes} onSelectNote={setActivePath} />
         ) : activeView === 'search' ? (
@@ -164,14 +204,22 @@ export function App() {
         ) : (
           <>
             <div className="note-list">
+              <div className="list-header">
+                <span>{activeView === 'today' ? 'Today' : activeCategory}</span>
+                <small>{visibleNotes.length}</small>
+              </div>
               {visibleNotes.map((note) => (
                 <button
                   key={note.path}
                   className={note.path === activeNote?.path ? 'note-row active' : 'note-row'}
                   onClick={() => setActivePath(note.path)}
                 >
-                  <strong>{note.title}</strong>
-                  <span>{note.category}</span>
+                  <span className="note-row-top">
+                    <strong>{note.title}</strong>
+                    <time>{note.updatedAt}</time>
+                  </span>
+                  <span>{note.path}</span>
+                  <small>{note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96)}</small>
                 </button>
               ))}
             </div>
@@ -185,7 +233,51 @@ export function App() {
       </section>
 
       <aside className="context-panel">
-        {activeNote ? <LlmAssistant note={activeNote} /> : null}
+        {activeNote ? (
+          <>
+            <section className="context-section">
+              <p className="panel-title">
+                <PanelRight size={14} /> Context
+              </p>
+              <h3>{activeNote.title}</h3>
+              <dl className="note-facts">
+                <div>
+                  <dt>Path</dt>
+                  <dd>{activeNote.path}</dd>
+                </div>
+                <div>
+                  <dt>Category</dt>
+                  <dd>{activeNote.category}</dd>
+                </div>
+                <div>
+                  <dt>Created</dt>
+                  <dd>{activeNote.createdAt}</dd>
+                </div>
+                <div>
+                  <dt>Updated</dt>
+                  <dd>{activeNote.updatedAt}</dd>
+                </div>
+              </dl>
+              <div className="tag-strip">
+                {activeNote.tags.map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+              </div>
+            </section>
+            <section className="context-section">
+              <p className="panel-title">
+                <Sparkles size={14} /> Summary
+              </p>
+              <p className="summary-text">{activeNote.summary ?? activeNote.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
+            </section>
+            <section className="context-section">
+              <p className="panel-title">
+                <Bot size={14} /> Assistant
+              </p>
+              <LlmAssistant note={activeNote} />
+            </section>
+          </>
+        ) : null}
       </aside>
     </main>
   )

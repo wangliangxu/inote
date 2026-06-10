@@ -11,7 +11,10 @@ export function Editor({ note, onChange, onSave }: EditorProps) {
     <article className="editor">
       <header className="editor-header">
         <div className="editor-title-row">
-          <h2>{note.title}</h2>
+          <div>
+            <span className="eyebrow">{note.category}</span>
+            <h2>{note.title}</h2>
+          </div>
           {onSave ? (
             <button className="secondary-action" type="button" onClick={onSave}>
               Save

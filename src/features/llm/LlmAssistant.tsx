@@ -10,18 +10,14 @@ export function LlmAssistant({ note }: LlmAssistantProps) {
   const contextPreview = useMemo(() => `${note.title}\n${note.body.slice(0, 600)}`, [note])
 
   return (
-    <section className="llm-box">
-      <p className="panel-title">AI Assistant</p>
-      <p>
-        Scope: <strong>current note</strong>
-      </p>
-      <p>{note.path}</p>
+    <div className="llm-box">
+      <div className="scope-pill">current note</div>
       <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} aria-label="LLM prompt" />
       <button className="llm-action" type="button">
         Prepare request
       </button>
-      <p className="panel-title">Context Preview</p>
+      <p className="panel-title compact">Context Preview</p>
       <pre>{contextPreview}</pre>
-    </section>
+    </div>
   )
 }
