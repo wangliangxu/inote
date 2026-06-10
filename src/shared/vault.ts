@@ -1,4 +1,4 @@
-import type { CategoryGroup, MonthGroup, Note } from './types'
+import type { CategoryGroup, MonthGroup, Note, TagGroup } from './types'
 
 export function titleFromPath(path: string): string {
   const filename = path.split('/').pop()?.replace(/\.md$/i, '') ?? 'Untitled'
@@ -22,6 +22,23 @@ export function groupByCategory(notes: Note[]): CategoryGroup[] {
 
 export function filterNotesByCategory(notes: Note[], category: string): Note[] {
   return sortByUpdatedDesc(notes.filter((note) => note.category === category || note.category.startsWith(`${category}/`)))
+}
+
+export function groupByTag(notes: Note[]): TagGroup[] {
+  const counts = new Map<string, number>()
+  for (const note of notes) {
+    for (const tag of note.tags) {
+      const normalized = tag.trim()
+      if (normalized) counts.set(normalized, (counts.get(normalized) ?? 0) + 1)
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function filterNotesByTag(notes: Note[], tag: string): Note[] {
+  return sortByUpdatedDesc(notes.filter((note) => note.tags.includes(tag)))
 }
 
 export function groupByMonth(notes: Note[]): MonthGroup[] {

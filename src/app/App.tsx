@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Tags,
 } from 'lucide-react'
 import { CalendarView } from '../features/calendar/CalendarView'
 import { Editor } from '../features/editor/Editor'
@@ -21,6 +22,7 @@ import { Explorer } from '../features/explorer/Explorer'
 import { LlmAssistant } from '../features/llm/LlmAssistant'
 import { SearchPanel } from '../features/search/SearchPanel'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
+import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
 import type { Note, SearchResult, WorkspaceView } from '../shared/types'
 import {
@@ -53,6 +55,7 @@ export function App() {
   const [notes, setNotes] = useState<Note[]>(demoNotes)
   const [activeView, setActiveView] = useState<WorkspaceView>('today')
   const [activeCategory, setActiveCategory] = useState('journal')
+  const [activeTag, setActiveTag] = useState('')
   const [activePath, setActivePath] = useState(demoNotes[0]?.path ?? '')
   const [query, setQuery] = useState('')
   const [vaultRoot, setVaultRoot] = useState('')
@@ -159,6 +162,27 @@ export function App() {
               body,
               updatedAt: new Date().toISOString().slice(0, 10),
               wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+            }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteTags(value: string) {
+    if (!activeNote) return
+    const tags = value
+      .split(',')
+      .map((tag) => tag.trim().replace(/^#/, ''))
+      .filter(Boolean)
+      .filter((tag, index, all) => all.indexOf(tag) === index)
+    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+              ...note,
+              tags,
+              updatedAt: new Date().toISOString().slice(0, 10),
             }
           : note,
       ),
@@ -450,6 +474,9 @@ export function App() {
           <button className={activeView === 'category' ? 'active' : ''} onClick={() => setActiveView('category')}>
             <FolderTree size={18} /> Categories
           </button>
+          <button className={activeView === 'tags' ? 'active' : ''} onClick={() => setActiveView('tags')}>
+            <Tags size={18} /> Tags
+          </button>
           <button className={activeView === 'calendar' ? 'active' : ''} onClick={() => setActiveView('calendar')}>
             <CalendarDays size={18} /> Calendar
           </button>
@@ -493,6 +520,15 @@ export function App() {
 
         {activeView === 'calendar' ? (
           <CalendarView notes={notes} onSelectNote={setActivePath} />
+        ) : activeView === 'tags' ? (
+          <TagsPanel
+            notes={notes}
+            activeTag={activeTag}
+            onSelectTag={setActiveTag}
+            onSelectNote={(path) => {
+              setActivePath(path)
+            }}
+          />
         ) : activeView === 'search' ? (
           <SearchPanel
             query={query}
@@ -583,6 +619,10 @@ export function App() {
                   <span key={tag}>#{tag}</span>
                 ))}
               </div>
+              <label className="tag-editor">
+                <span>Tags</span>
+                <input value={activeNote.tags.join(', ')} onChange={(event) => updateActiveNoteTags(event.target.value)} />
+              </label>
               <div className="context-actions">
                 <button type="button" onClick={renameActiveNote} title="Rename note">
                   <Pencil size={15} />

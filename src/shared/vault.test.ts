@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { demoNotes } from './fixtures'
-import { filterNotesByCategory, groupByCategory, groupByMonth, searchNotes, titleFromPath } from './vault'
+import { filterNotesByCategory, filterNotesByTag, groupByCategory, groupByMonth, groupByTag, searchNotes, titleFromPath } from './vault'
 
 describe('vault helpers', () => {
   it('groups notes by top-level and nested categories', () => {
@@ -19,6 +19,22 @@ describe('vault helpers', () => {
   it('groups notes by creation month newest first', () => {
     expect(groupByMonth(demoNotes)[0].month).toBe('2026-06')
     expect(groupByMonth(demoNotes)[0].notes).toHaveLength(3)
+  })
+
+  it('groups notes by tag with counts', () => {
+    expect(groupByTag(demoNotes)).toEqual([
+      { name: 'desktop', count: 1 },
+      { name: 'inbox', count: 1 },
+      { name: 'journal', count: 1 },
+      { name: 'review', count: 1 },
+      { name: 'rust', count: 1 },
+      { name: 'tauri', count: 1 },
+    ])
+  })
+
+  it('filters notes by tag', () => {
+    expect(filterNotesByTag(demoNotes, 'rust')).toHaveLength(1)
+    expect(filterNotesByTag(demoNotes, 'rust')[0].path).toBe('knowledge/rust/tauri-architecture.md')
   })
 
   it('searches title, body, tags, category, and summary', () => {

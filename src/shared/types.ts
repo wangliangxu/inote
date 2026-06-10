@@ -1,4 +1,4 @@
-export type WorkspaceView = 'today' | 'category' | 'calendar' | 'search' | 'settings'
+export type WorkspaceView = 'today' | 'category' | 'tags' | 'calendar' | 'search' | 'settings'
 
 export interface Note {
   path: string
@@ -13,6 +13,11 @@ export interface Note {
 }
 
 export interface CategoryGroup {
+  name: string
+  count: number
+}
+
+export interface TagGroup {
   name: string
   count: number
 }
