@@ -21,7 +21,7 @@ import { LlmAssistant } from '../features/llm/LlmAssistant'
 import { SearchPanel } from '../features/search/SearchPanel'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
 import { demoNotes } from '../shared/fixtures'
-import type { Note, WorkspaceView } from '../shared/types'
+import type { Note, SearchResult, WorkspaceView } from '../shared/types'
 import {
   createFolder,
   createInboxNote,
@@ -32,12 +32,19 @@ import {
   moveNote,
   noteToMarkdown,
   readNote,
+  rebuildSearchIndex,
   scanVault,
+  searchIndex,
   writeNote,
 } from '../shared/api'
 import { filterNotesByCategory, getTodayNote, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 
 const LAST_VAULT_KEY = 'inote.lastVaultRoot'
+
+function noteExcerpt(note: Note | SearchResult): string {
+  if ('excerpt' in note) return note.excerpt
+  return note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96)
+}
 
 export function App() {
   const [notes, setNotes] = useState<Note[]>(demoNotes)
@@ -49,6 +56,7 @@ export function App() {
   const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
   const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
   const [previewMode, setPreviewMode] = useState(false)
+  const [indexedResults, setIndexedResults] = useState<SearchResult[]>([])
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
@@ -62,11 +70,32 @@ export function App() {
   }, [])
 
   const visibleNotes = useMemo(() => {
-    if (activeView === 'search') return searchNotes(notes, query)
+    if (activeView === 'search') return vaultRoot.trim() && query.trim() ? indexedResults : searchNotes(notes, query)
     if (activeView === 'today') return getTodayNote(notes) ? [getTodayNote(notes)!] : sortByUpdatedDesc(notes).slice(0, 5)
     if (activeView === 'category') return filterNotesByCategory(notes, activeCategory)
     return sortByUpdatedDesc(notes)
-  }, [activeCategory, activeView, notes, query])
+  }, [activeCategory, activeView, indexedResults, notes, query, vaultRoot])
+
+  useEffect(() => {
+    if (!vaultRoot.trim() || !query.trim()) {
+      setIndexedResults([])
+      return
+    }
+    let cancelled = false
+    searchIndex({ vaultRoot: vaultRoot.trim(), query })
+      .then((results) => {
+        if (!cancelled) setIndexedResults(results)
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setIndexedResults([])
+          setStatus(error instanceof Error ? error.message : String(error))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [query, vaultRoot])
 
   function updateActiveNote(body: string) {
     if (!activeNote) return
@@ -92,11 +121,12 @@ export function App() {
     }
     try {
       const loadedNotes = await scanVault(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes(loadedNotes)
       setActivePath(loadedNotes[0]?.path ?? '')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
       setSaveState('saved')
-      setStatus(`Loaded ${loadedNotes.length} Markdown notes.`)
+      setStatus(`Loaded ${loadedNotes.length} Markdown notes and rebuilt index.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -109,6 +139,7 @@ export function App() {
     }
     try {
       const loadedNotes = await initializeVault(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes(loadedNotes.length ? loadedNotes : [])
       setActivePath(loadedNotes[0]?.path ?? '')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
@@ -132,6 +163,7 @@ export function App() {
         path: activeNote.path,
         content: noteToMarkdown(activeNote),
       })
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes((current) => current.map((note) => (note.path === saved.path ? saved : note)))
       setSaveState('saved')
       setStatus(`Saved ${saved.path}.`)
@@ -182,6 +214,7 @@ export function App() {
     }
     try {
       const note = await createTodayNote(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
       setSaveState('saved')
@@ -198,6 +231,7 @@ export function App() {
     }
     try {
       const note = await createInboxNote(vaultRoot.trim(), 'Quick Thought')
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
       setSaveState('saved')
@@ -218,6 +252,7 @@ export function App() {
     if (!category) return
     try {
       const note = await createNote({ vaultRoot: vaultRoot.trim(), title, category })
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
       setActiveCategory(note.category)
@@ -239,6 +274,7 @@ export function App() {
     try {
       await createFolder({ vaultRoot: vaultRoot.trim(), path })
       const loadedNotes = await scanVault(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes(loadedNotes)
       setActiveCategory(path)
       setActiveView('category')
@@ -276,6 +312,7 @@ export function App() {
     }
     try {
       const moved = await moveNote({ vaultRoot: vaultRoot.trim(), from: activeNote.path, to })
+      await rebuildSearchIndex(vaultRoot.trim())
       setNotes((current) => current.map((note) => (note.path === activeNote.path ? moved : note)))
       setActivePath(moved.path)
       setActiveCategory(moved.category)
@@ -295,11 +332,28 @@ export function App() {
     if (!confirmed) return
     try {
       await deleteNote(vaultRoot.trim(), activeNote.path)
+      await rebuildSearchIndex(vaultRoot.trim())
       const remaining = notes.filter((note) => note.path !== activeNote.path)
       setNotes(remaining)
       setActivePath(remaining[0]?.path ?? '')
       setSaveState('saved')
       setStatus(`Deleted ${activeNote.path}.`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function rebuildIndex() {
+    if (!vaultRoot.trim()) {
+      setStatus('Open a real vault before rebuilding the index.')
+      return
+    }
+    try {
+      await rebuildSearchIndex(vaultRoot.trim())
+      if (query.trim()) {
+        setIndexedResults(await searchIndex({ vaultRoot: vaultRoot.trim(), query }))
+      }
+      setStatus('Search index rebuilt.')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -393,7 +447,13 @@ export function App() {
         {activeView === 'calendar' ? (
           <CalendarView notes={notes} onSelectNote={setActivePath} />
         ) : activeView === 'search' ? (
-          <SearchPanel query={query} notes={visibleNotes} onQueryChange={setQuery} onSelectNote={setActivePath} />
+          <SearchPanel
+            query={query}
+            notes={visibleNotes}
+            onQueryChange={setQuery}
+            onSelectNote={setActivePath}
+            backendEnabled={Boolean(vaultRoot.trim())}
+          />
         ) : activeView === 'settings' ? (
           <SettingsPanel
             vaultRoot={vaultRoot}
@@ -404,6 +464,7 @@ export function App() {
             onCreateToday={addTodayNote}
             onCreateInbox={addInboxNote}
             onCreateFolder={addFolder}
+            onRebuildIndex={rebuildIndex}
           />
         ) : (
           <>
@@ -423,7 +484,7 @@ export function App() {
                     <time>{note.updatedAt}</time>
                   </span>
                   <span>{note.path}</span>
-                  <small>{note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96)}</small>
+                  <small>{noteExcerpt(note)}</small>
                 </button>
               ))}
             </div>

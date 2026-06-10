@@ -21,3 +21,14 @@ export interface MonthGroup {
   month: string
   notes: Note[]
 }
+
+export interface SearchResult {
+  path: string
+  title: string
+  category: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+  summary?: string
+  excerpt: string
+}

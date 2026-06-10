@@ -7,6 +7,7 @@ interface SettingsPanelProps {
   onCreateToday: () => void
   onCreateInbox: () => void
   onCreateFolder: () => void
+  onRebuildIndex: () => void
 }
 
 export function SettingsPanel({
@@ -18,6 +19,7 @@ export function SettingsPanel({
   onCreateToday,
   onCreateInbox,
   onCreateFolder,
+  onRebuildIndex,
 }: SettingsPanelProps) {
   return (
     <section className="settings-panel">
@@ -47,6 +49,9 @@ export function SettingsPanel({
           </button>
           <button className="secondary-action" type="button" onClick={onCreateFolder}>
             New folder
+          </button>
+          <button className="secondary-action" type="button" onClick={onRebuildIndex}>
+            Rebuild index
           </button>
         </div>
         <p className="settings-status">{status}</p>

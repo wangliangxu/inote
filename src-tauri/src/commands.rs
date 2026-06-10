@@ -1,3 +1,4 @@
+use crate::indexer::{NoteIndex, SearchResult};
 use crate::llm::{build_chat_request_preview, LlmProviderSettings, LlmRequestPreview};
 use crate::markdown::NoteMetadata;
 use crate::vault::Vault;
@@ -17,6 +18,13 @@ pub struct MoveNoteInput {
     pub vault_root: String,
     pub from: String,
     pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchIndexInput {
+    pub vault_root: String,
+    pub query: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +53,21 @@ pub struct LlmPreviewInput {
 #[tauri::command]
 pub fn scan_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
     Vault::new(vault_root)?.scan()
+}
+
+#[tauri::command]
+pub fn rebuild_search_index(vault_root: String) -> Result<(), String> {
+    let vault = Vault::new(&vault_root)?;
+    let notes = vault.scan()?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    index.rebuild(&notes)
+}
+
+#[tauri::command]
+pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String> {
+    let vault = Vault::new(&input.vault_root)?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    index.search(&input.query)
 }
 
 #[tauri::command]
@@ -173,6 +196,29 @@ mod tests {
         assert_eq!(note.title, "城市网络大模型");
         assert_eq!(note.category, "knowledge/cities");
         assert!(dir.path().join("knowledge/cities/城市网络大模型.md").exists());
+    }
+
+    #[test]
+    fn command_rebuilds_and_searches_index() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "knowledge/search.md".to_string(),
+            content: "---\ntitle: Searchable\ntags: [phase2]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nIndexed body text".to_string(),
+        })
+        .unwrap();
+
+        rebuild_search_index(root.clone()).unwrap();
+        let results = search_index(SearchIndexInput {
+            vault_root: root,
+            query: "phase2".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Searchable");
     }
 
     #[test]

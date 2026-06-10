@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Note } from './types'
+import type { Note, SearchResult } from './types'
 
 interface WriteNoteInput {
   vaultRoot: string
@@ -24,8 +24,21 @@ interface MoveNoteInput {
   to: string
 }
 
+interface SearchIndexInput {
+  vaultRoot: string
+  query: string
+}
+
 export async function scanVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault', { vaultRoot })
+}
+
+export async function rebuildSearchIndex(vaultRoot: string): Promise<void> {
+  return invoke<void>('rebuild_search_index', { vaultRoot })
+}
+
+export async function searchIndex(input: SearchIndexInput): Promise<SearchResult[]> {
+  return invoke<SearchResult[]>('search_index', { input })
 }
 
 export async function readNote(vaultRoot: string, path: string): Promise<Note> {
