@@ -27,7 +27,8 @@ pub fn run() {
             commands::move_note,
             commands::archive_note,
             commands::delete_note,
-            commands::build_llm_request_preview
+            commands::build_llm_request_preview,
+            commands::execute_llm_chat
         ])
         .run(tauri::generate_context!())
         .expect("failed to run iNote");

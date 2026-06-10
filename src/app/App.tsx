@@ -26,7 +26,7 @@ import { SearchPanel } from '../features/search/SearchPanel'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
 import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
-import type { Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
+import type { LlmProviderSettings, Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
 import {
   archiveNote,
   createFolder,
@@ -51,6 +51,14 @@ import {
 import { filterNotesByCategory, getTodayNote, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 
 const LAST_VAULT_KEY = 'inote.lastVaultRoot'
+const LLM_SETTINGS_KEY = 'inote.llmSettings'
+
+const defaultLlmSettings: LlmProviderSettings = {
+  providerName: 'OpenAI compatible',
+  apiBaseUrl: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'gpt-4.1-mini',
+}
 
 function noteExcerpt(note: Note | SearchResult): string {
   if ('excerpt' in note) return note.excerpt
@@ -76,6 +84,7 @@ export function App() {
   const [indexedResults, setIndexedResults] = useState<SearchResult[]>([])
   const [noteLinks, setNoteLinks] = useState<NoteLinks>({ outgoing: [], backlinks: [] })
   const [linkVersion, setLinkVersion] = useState(0)
+  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(defaultLlmSettings)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
@@ -105,7 +114,19 @@ export function App() {
       setVaultRoot(remembered)
       setStatus('Last vault path restored. Open it from Settings to refresh notes.')
     }
+    const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
+    if (savedLlmSettings) {
+      try {
+        setLlmSettings({ ...defaultLlmSettings, ...JSON.parse(savedLlmSettings) })
+      } catch {
+        setStatus('LLM settings could not be loaded. Defaults restored.')
+      }
+    }
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(llmSettings))
+  }, [llmSettings])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return
@@ -691,7 +712,9 @@ export function App() {
           <SettingsPanel
             vaultRoot={vaultRoot}
             status={status}
+            llmSettings={llmSettings}
             onVaultRootChange={setVaultRoot}
+            onLlmSettingsChange={setLlmSettings}
             onOpenVault={openVault}
             onInitializeVault={initVault}
             onCreateToday={addTodayNote}
@@ -841,7 +864,7 @@ export function App() {
               <p className="panel-title">
                 <Bot size={14} /> Assistant
               </p>
-              <LlmAssistant note={activeNote} />
+              <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
             </section>
           </>
         ) : null}

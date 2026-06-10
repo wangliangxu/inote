@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Note, NoteLinks, SearchResult } from './types'
+import type { LlmChatResponse, LlmProviderSettings, Note, NoteLinks, SearchResult } from './types'
 
 interface WriteNoteInput {
   vaultRoot: string
@@ -47,6 +47,12 @@ interface NoteLinksInput {
 interface CreateReviewInput {
   vaultRoot: string
   date: string
+}
+
+interface LlmChatInput {
+  settings: LlmProviderSettings
+  prompt: string
+  context: string
 }
 
 export async function scanVault(vaultRoot: string): Promise<Note[]> {
@@ -119,6 +125,10 @@ export async function archiveNote(input: ArchiveNoteInput): Promise<Note> {
 
 export async function deleteNote(vaultRoot: string, path: string): Promise<void> {
   return invoke<void>('delete_note', { vaultRoot, path })
+}
+
+export async function executeLlmChat(input: LlmChatInput): Promise<LlmChatResponse> {
+  return invoke<LlmChatResponse>('execute_llm_chat', { input })
 }
 
 export function noteToMarkdown(note: Note): string {

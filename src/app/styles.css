@@ -765,6 +765,29 @@ button {
   width: 100%;
 }
 
+.llm-task-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 8px;
+}
+
+.llm-task-grid button {
+  background: #f8f8f5;
+  border: 1px solid #d7d7cf;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 6px;
+}
+
+.llm-task-grid button.active {
+  background: #dfe8df;
+  border-color: #9dae9d;
+  color: #263f3b;
+  font-weight: 800;
+}
+
 .llm-action {
   background: #263f3b;
   border: 0;
@@ -786,6 +809,11 @@ button {
   overflow: auto;
   padding: 10px;
   white-space: pre-wrap;
+}
+
+.llm-box pre.llm-error {
+  border-color: #d8a2a2;
+  color: #7c2d2d;
 }
 
 .scope-pill {

@@ -51,3 +51,14 @@ export interface NoteLinks {
   outgoing: NoteLink[]
   backlinks: NoteLink[]
 }
+
+export interface LlmProviderSettings {
+  providerName: string
+  apiBaseUrl: string
+  apiKey: string
+  model: string
+}
+
+export interface LlmChatResponse {
+  content: string
+}

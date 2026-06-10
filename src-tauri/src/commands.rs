@@ -1,5 +1,8 @@
 use crate::indexer::{NoteIndex, NoteLink, SearchResult};
-use crate::llm::{build_chat_request_preview, LlmProviderSettings, LlmRequestPreview};
+use crate::llm::{
+    build_chat_request_preview, send_chat_request, LlmChatResponse, LlmProviderSettings,
+    LlmRequestPreview,
+};
 use crate::markdown::NoteMetadata;
 use crate::vault::{ArchiveNote, Vault};
 use crate::watcher::WatcherState;
@@ -81,6 +84,14 @@ pub struct CreateReviewInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmPreviewInput {
+    pub settings: LlmProviderSettings,
+    pub prompt: String,
+    pub context: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmChatInput {
     pub settings: LlmProviderSettings,
     pub prompt: String,
     pub context: String,
@@ -202,6 +213,11 @@ pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn build_llm_request_preview(input: LlmPreviewInput) -> Result<LlmRequestPreview, String> {
     build_chat_request_preview(&input.settings, &input.prompt, &input.context)
+}
+
+#[tauri::command]
+pub async fn execute_llm_chat(input: LlmChatInput) -> Result<LlmChatResponse, String> {
+    send_chat_request(&input.settings, &input.prompt, &input.context).await
 }
 
 #[cfg(test)]

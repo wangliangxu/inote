@@ -1,7 +1,11 @@
+import type { LlmProviderSettings } from '../../shared/types'
+
 interface SettingsPanelProps {
   vaultRoot: string
   status: string
+  llmSettings: LlmProviderSettings
   onVaultRootChange: (path: string) => void
+  onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onOpenVault: () => void
   onInitializeVault: () => void
   onCreateToday: () => void
@@ -15,7 +19,9 @@ interface SettingsPanelProps {
 export function SettingsPanel({
   vaultRoot,
   status,
+  llmSettings,
   onVaultRootChange,
+  onLlmSettingsChange,
   onOpenVault,
   onInitializeVault,
   onCreateToday,
@@ -25,6 +31,10 @@ export function SettingsPanel({
   onCreateFolder,
   onRebuildIndex,
 }: SettingsPanelProps) {
+  function updateLlmSettings(patch: Partial<LlmProviderSettings>) {
+    onLlmSettingsChange({ ...llmSettings, ...patch })
+  }
+
   return (
     <section className="settings-panel">
       <h2>Settings</h2>
@@ -66,13 +76,44 @@ export function SettingsPanel({
         </div>
         <p className="settings-status">{status}</p>
         <label>
+          Provider
+          <input
+            className="setting-input"
+            value={llmSettings.providerName}
+            onChange={(event) => updateLlmSettings({ providerName: event.target.value })}
+          />
+        </label>
+        <label>
           LLM API base URL
-          <input className="setting-input" placeholder="https://api.openai.com/v1" />
+          <input
+            className="setting-input"
+            placeholder="https://api.openai.com/v1"
+            value={llmSettings.apiBaseUrl}
+            onChange={(event) => updateLlmSettings({ apiBaseUrl: event.target.value })}
+          />
+        </label>
+        <label>
+          API key
+          <input
+            className="setting-input"
+            placeholder="Stored locally in this app"
+            type="password"
+            value={llmSettings.apiKey}
+            onChange={(event) => updateLlmSettings({ apiKey: event.target.value })}
+          />
         </label>
         <label>
           Model
-          <input className="setting-input" placeholder="gpt-4.1-mini" />
+          <input
+            className="setting-input"
+            placeholder="gpt-4.1-mini"
+            value={llmSettings.model}
+            onChange={(event) => updateLlmSettings({ model: event.target.value })}
+          />
         </label>
+        <p className="settings-status">
+          API settings use a localStorage fallback on this machine. System keychain storage is not enabled yet.
+        </p>
       </div>
     </section>
   )

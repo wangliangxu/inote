@@ -18,6 +18,12 @@ pub struct LlmRequestPreview {
     pub body: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmChatResponse {
+    pub content: String,
+}
+
 pub fn build_chat_request_preview(
     settings: &LlmProviderSettings,
     prompt: &str,
@@ -54,6 +60,49 @@ pub fn build_chat_request_preview(
     })
 }
 
+pub async fn send_chat_request(
+    settings: &LlmProviderSettings,
+    prompt: &str,
+    context: &str,
+) -> Result<LlmChatResponse, String> {
+    let preview = build_chat_request_preview(settings, prompt, context)?;
+    let response = reqwest::Client::new()
+        .post(&preview.url)
+        .bearer_auth(settings.api_key.trim())
+        .json(&preview.body)
+        .send()
+        .await
+        .map_err(|error| format!("failed to call LLM API: {error}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("failed to read LLM API response: {error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "LLM API returned {status}: {}",
+            compact_error_body(&body)
+        ));
+    }
+
+    extract_chat_content(&body).map(|content| LlmChatResponse { content })
+}
+
+fn extract_chat_content(body: &str) -> Result<String, String> {
+    let value = serde_json::from_str::<Value>(body)
+        .map_err(|error| format!("failed to parse LLM API response: {error}"))?;
+    value["choices"][0]["message"]["content"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .filter(|content| !content.trim().is_empty())
+        .ok_or_else(|| "LLM API response did not include message content".to_string())
+}
+
+fn compact_error_body(body: &str) -> String {
+    body.trim().chars().take(500).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,6 +134,24 @@ mod tests {
         assert_eq!(
             build_chat_request_preview(&settings, "Summarize", "Note").unwrap_err(),
             "LLM API key is required"
+        );
+    }
+
+    #[test]
+    fn extracts_chat_content_from_openai_compatible_response() {
+        let content = extract_chat_content(
+            r#"{"choices":[{"message":{"role":"assistant","content":"Summary text"}}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(content, "Summary text");
+    }
+
+    #[test]
+    fn rejects_response_without_message_content() {
+        assert_eq!(
+            extract_chat_content(r#"{"choices":[{"message":{}}]}"#).unwrap_err(),
+            "LLM API response did not include message content"
         );
     }
 }
