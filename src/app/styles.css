@@ -1,0 +1,287 @@
+:root {
+  color: #202124;
+  background: #f7f7f4;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  min-height: 100vh;
+}
+
+.sidebar,
+.context-panel {
+  background: #ededdf;
+  border-right: 1px solid #d8d6c7;
+  padding: 20px;
+}
+
+.context-panel {
+  border-left: 1px solid #d8d6c7;
+  border-right: 0;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.brand-mark {
+  align-items: center;
+  background: #2f5d50;
+  border-radius: 8px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 26px;
+  font-weight: 800;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.brand h1,
+.brand p {
+  margin: 0;
+}
+
+.brand h1 {
+  font-size: 20px;
+}
+
+.brand p {
+  color: #666758;
+  font-size: 13px;
+}
+
+.nav-list,
+.category-list {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-list button,
+.category-list button,
+.note-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #2d2d29;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+}
+
+.nav-list button.active,
+.category-list button.active,
+.note-row.active {
+  background: #d8e7dc;
+  color: #1d493d;
+}
+
+.explorer-title,
+.panel-title {
+  color: #666758;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 28px 0 10px;
+  text-transform: uppercase;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.note-list {
+  border-right: 1px solid #dfded3;
+  overflow: auto;
+  padding: 16px;
+}
+
+.note-row {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.note-row strong {
+  font-size: 14px;
+}
+
+.note-row span {
+  color: #77786c;
+  font-size: 12px;
+}
+
+.editor {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  padding: 24px;
+}
+
+.editor-header {
+  border-bottom: 1px solid #dfded3;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+
+.editor-header h2 {
+  font-size: 26px;
+  margin: 0;
+}
+
+.editor-title-row,
+.action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.action-row {
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.secondary-action {
+  background: #fffefa;
+  border: 1px solid #bfc7b7;
+  border-radius: 8px;
+  color: #244a40;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+
+.metadata {
+  color: #77786c;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 10px;
+}
+
+.markdown-input {
+  background: #fffefa;
+  border: 1px solid #d8d6c7;
+  border-radius: 8px;
+  line-height: 1.6;
+  min-height: 70vh;
+  padding: 18px;
+  resize: none;
+  width: 100%;
+}
+
+.search-panel,
+.calendar-panel,
+.settings-panel {
+  grid-column: 1 / -1;
+  overflow: auto;
+  padding: 24px;
+}
+
+.search-input,
+.setting-input {
+  border: 1px solid #d8d6c7;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 16px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.result-list,
+.month-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-item,
+.month-item,
+.llm-box,
+.setting-box {
+  background: #fffefa;
+  border: 1px solid #dfded3;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.settings-status {
+  color: #666758;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.llm-box textarea {
+  border: 1px solid #d8d6c7;
+  border-radius: 8px;
+  min-height: 120px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.llm-action {
+  background: #2f5d50;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+.empty {
+  padding: 24px;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .context-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-bottom: 1px solid #d8d6c7;
+    border-right: 0;
+  }
+}
