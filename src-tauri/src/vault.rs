@@ -1,4 +1,4 @@
-use crate::markdown::{build_note, parse_note, NoteMetadata};
+use crate::markdown::{build_note, build_note_with_dates, parse_note, NoteMetadata};
 use chrono::{Datelike, Local, NaiveDate};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,6 +7,16 @@ use walkdir::WalkDir;
 #[derive(Debug, Clone)]
 pub struct Vault {
     root: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchiveNote {
+    pub from: String,
+    pub title: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub created_at: String,
+    pub body: String,
 }
 
 impl Vault {
@@ -175,6 +185,43 @@ impl Vault {
         fs::rename(&from_path, &to_path)
             .map_err(|error| format!("failed to move note: {error}"))?;
         parse_note(&self.root, &to_path)
+    }
+
+    pub fn archive_note(&self, input: ArchiveNote) -> Result<NoteMetadata, String> {
+        let from_path = self.safe_path(&input.from)?;
+        if !input.from.starts_with("00-inbox/") {
+            return Err("only inbox notes can be archived".to_string());
+        }
+        if !from_path.exists() {
+            return Err("inbox note does not exist".to_string());
+        }
+
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err("note title is required".to_string());
+        }
+        let category = input.category.trim().trim_matches('/');
+        if category.is_empty() || category == "00-inbox" || category.starts_with("00-inbox/") {
+            return Err("archive category must be outside the inbox".to_string());
+        }
+        parse_review_date(&input.created_at)?;
+
+        self.create_folder(category)?;
+        let filename = filename_for_title(title);
+        let relative_path = unique_note_path(&self.root, category, &filename);
+        let updated_at = Local::now().format("%Y-%m-%d").to_string();
+        let content = build_note_with_dates(
+            title,
+            category,
+            &input.tags,
+            &input.created_at,
+            &updated_at,
+            &input.body,
+        );
+        let archived = self.write_note(&relative_path, &content)?;
+        fs::remove_file(from_path)
+            .map_err(|error| format!("failed to remove inbox note: {error}"))?;
+        Ok(archived)
     }
 
     pub fn delete_note(&self, relative_path: &str) -> Result<(), String> {
@@ -356,6 +403,43 @@ mod tests {
             .path()
             .join("knowledge/cities/城市网络大模型.md")
             .exists());
+    }
+
+    #[test]
+    fn archives_inbox_note_to_unique_category_path() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+
+        vault
+            .write_note(
+                "00-inbox/idea.md",
+                "---\ntitle: Raw Idea\ncategory: 00-inbox\ntags: [inbox]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# Raw Idea\n\nBody.",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "knowledge/ai/refined-idea.md",
+                "---\ntitle: Existing\ncategory: knowledge/ai\ntags: []\ncreated_at: 2026-06-09\nupdated_at: 2026-06-09\n---\n\nExisting.",
+            )
+            .unwrap();
+
+        let archived = vault
+            .archive_note(ArchiveNote {
+                from: "00-inbox/idea.md".to_string(),
+                title: "Refined Idea".to_string(),
+                category: "knowledge/ai".to_string(),
+                tags: vec!["ai".to_string()],
+                created_at: "2026-06-10".to_string(),
+                body: "# Raw Idea\n\nBody.".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(archived.path, "knowledge/ai/refined-idea-2.md");
+        assert_eq!(archived.title, "Refined Idea");
+        assert_eq!(archived.category, "knowledge/ai");
+        assert_eq!(archived.tags, vec!["ai"]);
+        assert!(!dir.path().join("00-inbox/idea.md").exists());
+        assert!(dir.path().join("knowledge/ai/refined-idea.md").exists());
     }
 
     #[test]

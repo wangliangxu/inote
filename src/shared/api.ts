@@ -24,6 +24,16 @@ interface MoveNoteInput {
   to: string
 }
 
+interface ArchiveNoteInput {
+  vaultRoot: string
+  from: string
+  title: string
+  category: string
+  tags: string[]
+  createdAt: string
+  body: string
+}
+
 interface SearchIndexInput {
   vaultRoot: string
   query: string
@@ -101,6 +111,10 @@ export async function createInboxNote(vaultRoot: string, title: string): Promise
 
 export async function moveNote(input: MoveNoteInput): Promise<Note> {
   return invoke<Note>('move_note', { input })
+}
+
+export async function archiveNote(input: ArchiveNoteInput): Promise<Note> {
+  return invoke<Note>('archive_note', { input })
 }
 
 export async function deleteNote(vaultRoot: string, path: string): Promise<void> {

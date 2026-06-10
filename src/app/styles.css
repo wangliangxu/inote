@@ -645,20 +645,20 @@ button {
   margin-top: 12px;
 }
 
-.tag-editor {
+.metadata-editor {
   display: grid;
   gap: 6px;
   margin-top: 12px;
 }
 
-.tag-editor span {
+.metadata-editor span {
   color: #73756c;
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.tag-editor input {
+.metadata-editor input {
   background: #fbfbf8;
   border: 1px solid #d7d7cf;
   border-radius: 8px;
@@ -669,7 +669,7 @@ button {
 .context-actions {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
   margin-top: 14px;
 }
 

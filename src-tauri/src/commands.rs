@@ -1,7 +1,7 @@
 use crate::indexer::{NoteIndex, NoteLink, SearchResult};
 use crate::llm::{build_chat_request_preview, LlmProviderSettings, LlmRequestPreview};
 use crate::markdown::NoteMetadata;
-use crate::vault::Vault;
+use crate::vault::{ArchiveNote, Vault};
 use crate::watcher::WatcherState;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -21,6 +21,18 @@ pub struct MoveNoteInput {
     pub vault_root: String,
     pub from: String,
     pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveNoteInput {
+    pub vault_root: String,
+    pub from: String,
+    pub title: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub created_at: String,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +183,18 @@ pub fn move_note(input: MoveNoteInput) -> Result<NoteMetadata, String> {
 }
 
 #[tauri::command]
+pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
+    Vault::new(input.vault_root)?.archive_note(ArchiveNote {
+        from: input.from,
+        title: input.title,
+        category: input.category,
+        tags: input.tags,
+        created_at: input.created_at,
+        body: input.body,
+    })
+}
+
+#[tauri::command]
 pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
     Vault::new(vault_root)?.delete_note(&path)
 }
@@ -226,6 +250,35 @@ mod tests {
 
         delete_note(root.clone(), "knowledge/a.md".to_string()).unwrap();
         assert!(scan_vault(root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn command_archives_inbox_note() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "00-inbox/raw.md".to_string(),
+            content: "---\ntitle: Raw\ncategory: 00-inbox\ntags: [inbox]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# Raw\n\nBody.".to_string(),
+        })
+        .unwrap();
+
+        let archived = archive_note(ArchiveNoteInput {
+            vault_root: root,
+            from: "00-inbox/raw.md".to_string(),
+            title: "Refined".to_string(),
+            category: "knowledge/refined".to_string(),
+            tags: vec!["refined".to_string()],
+            created_at: "2026-06-10".to_string(),
+            body: "# Raw\n\nBody.".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(archived.path, "knowledge/refined/refined.md");
+        assert_eq!(archived.category, "knowledge/refined");
+        assert_eq!(archived.tags, vec!["refined"]);
+        assert!(!dir.path().join("00-inbox/raw.md").exists());
     }
 
     #[test]

@@ -62,13 +62,24 @@ pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
 }
 
 pub fn build_note(title: &str, category: &str, tags: &[String], date: &str, body: &str) -> String {
+    build_note_with_dates(title, category, tags, date, date, body)
+}
+
+pub fn build_note_with_dates(
+    title: &str,
+    category: &str,
+    tags: &[String],
+    created_at: &str,
+    updated_at: &str,
+    body: &str,
+) -> String {
     let tag_list = tags
         .iter()
         .map(|tag| format!("\"{tag}\""))
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "---\ntitle: \"{title}\"\ncategory: \"{category}\"\ntags: [{tag_list}]\ncreated_at: {date}\nupdated_at: {date}\n---\n\n{body}"
+        "---\ntitle: \"{title}\"\ncategory: \"{category}\"\ntags: [{tag_list}]\ncreated_at: {created_at}\nupdated_at: {updated_at}\n---\n\n{body}"
     )
 }
 

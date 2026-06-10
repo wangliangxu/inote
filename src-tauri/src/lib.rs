@@ -25,6 +25,7 @@ pub fn run() {
             commands::create_note,
             commands::create_folder,
             commands::move_note,
+            commands::archive_note,
             commands::delete_note,
             commands::build_llm_request_preview
         ])

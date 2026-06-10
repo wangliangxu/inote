@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import {
+  Archive,
   Bot,
   CalendarDays,
   FileMinus2,
@@ -27,6 +28,7 @@ import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
 import type { Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
 import {
+  archiveNote,
   createFolder,
   createInboxNote,
   createMonthlyReview,
@@ -190,8 +192,40 @@ export function App() {
           ? {
               ...note,
               body,
-              updatedAt: new Date().toISOString().slice(0, 10),
+              updatedAt: localDateString(),
               wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+            }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteTitle(title: string) {
+    if (!activeNote) return
+    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+              ...note,
+              title,
+              updatedAt: localDateString(),
+            }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteCreatedAt(createdAt: string) {
+    if (!activeNote) return
+    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+              ...note,
+              createdAt,
+              updatedAt: localDateString(),
             }
           : note,
       ),
@@ -212,7 +246,7 @@ export function App() {
           ? {
               ...note,
               tags,
-              updatedAt: new Date().toISOString().slice(0, 10),
+              updatedAt: localDateString(),
             }
           : note,
       ),
@@ -309,6 +343,43 @@ export function App() {
     }
   }
 
+  async function archiveActiveInboxNote() {
+    if (!activeNote || !vaultRoot.trim()) {
+      setStatus('Open a real vault before archiving inbox notes.')
+      return
+    }
+    if (!activeNote.path.startsWith('00-inbox/')) {
+      setStatus('Only inbox notes can use the archive flow.')
+      return
+    }
+    const title = window.prompt('Archive title', activeNote.title)
+    if (!title) return
+    const category = window.prompt('Archive category', activeCategory && activeCategory !== '00-inbox' ? activeCategory : 'knowledge')
+    if (!category) return
+    try {
+      const archived = await archiveNote({
+        vaultRoot: vaultRoot.trim(),
+        from: activeNote.path,
+        title,
+        category,
+        tags: activeNote.tags.filter((tag) => tag !== 'inbox'),
+        createdAt: activeNote.createdAt,
+        body: activeNote.body,
+      })
+      await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
+      setNotes((current) => [archived, ...current.filter((note) => note.path !== activeNote.path)])
+      setActivePath(archived.path)
+      setActiveCategory(archived.category)
+      setActiveView('category')
+      setSaveState('saved')
+      setStatus(`Archived to ${archived.path}.`)
+    } catch (error) {
+      setSaveState('error')
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function addTodayNote() {
     if (!vaultRoot.trim()) {
       setStatus('Open a real vault before creating today note.')
@@ -357,6 +428,7 @@ export function App() {
       const today = localDateString()
       const note = await createMonthlyReview({ vaultRoot: vaultRoot.trim(), date: today })
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
       setActiveCategory(note.category)
@@ -699,11 +771,24 @@ export function App() {
                   <span key={tag}>#{tag}</span>
                 ))}
               </div>
-              <label className="tag-editor">
+              <label className="metadata-editor">
+                <span>Title</span>
+                <input value={activeNote.title} onChange={(event) => updateActiveNoteTitle(event.target.value)} />
+              </label>
+              <label className="metadata-editor">
+                <span>Created</span>
+                <input type="date" value={activeNote.createdAt} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
+              </label>
+              <label className="metadata-editor">
                 <span>Tags</span>
                 <input value={activeNote.tags.join(', ')} onChange={(event) => updateActiveNoteTags(event.target.value)} />
               </label>
               <div className="context-actions">
+                {activeNote.path.startsWith('00-inbox/') ? (
+                  <button type="button" onClick={archiveActiveInboxNote} title="Archive inbox note">
+                    <Archive size={15} />
+                  </button>
+                ) : null}
                 <button type="button" onClick={renameActiveNote} title="Rename note">
                   <Pencil size={15} />
                 </button>
