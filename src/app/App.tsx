@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import {
   Bot,
   CalendarDays,
@@ -36,6 +37,8 @@ import {
   scanVault,
   searchIndex,
   writeNote,
+  startVaultWatcher,
+  stopVaultWatcher,
 } from '../shared/api'
 import { filterNotesByCategory, getTodayNote, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 
@@ -61,6 +64,24 @@ export function App() {
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
 
+  const refreshVaultFromDisk = useCallback(
+    async (reason = 'Vault refreshed from disk.') => {
+      if (!vaultRoot.trim()) return
+      const loadedNotes = await scanVault(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim())
+      setNotes(loadedNotes)
+      setActivePath((current) => {
+        if (loadedNotes.some((note) => note.path === current)) return current
+        return loadedNotes[0]?.path ?? ''
+      })
+      if (query.trim()) {
+        setIndexedResults(await searchIndex({ vaultRoot: vaultRoot.trim(), query }))
+      }
+      setStatus(reason)
+    },
+    [query, vaultRoot],
+  )
+
   useEffect(() => {
     const remembered = window.localStorage.getItem(LAST_VAULT_KEY)
     if (remembered) {
@@ -68,6 +89,36 @@ export function App() {
       setStatus('Last vault path restored. Open it from Settings to refresh notes.')
     }
   }, [])
+
+  useEffect(() => {
+    if (!vaultRoot.trim()) return
+    let disposed = false
+    let unlisten: undefined | (() => void)
+
+    startVaultWatcher(vaultRoot.trim()).catch(() => {
+      // Browser-only dev mode has no Tauri backend; keep the UI usable.
+    })
+
+    listen('vault://changed', () => {
+      if (!disposed) {
+        refreshVaultFromDisk('Markdown files changed on disk. Vault refreshed.')
+      }
+    })
+      .then((dispose) => {
+        unlisten = dispose
+      })
+      .catch(() => {
+        // Browser-only dev mode has no event bridge.
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+      stopVaultWatcher().catch(() => {
+        // Ignore when not running inside Tauri.
+      })
+    }
+  }, [refreshVaultFromDisk, vaultRoot])
 
   const visibleNotes = useMemo(() => {
     if (activeView === 'search') return vaultRoot.trim() && query.trim() ? indexedResults : searchNotes(notes, query)
@@ -120,13 +171,9 @@ export function App() {
       return
     }
     try {
-      const loadedNotes = await scanVault(vaultRoot.trim())
-      await rebuildSearchIndex(vaultRoot.trim())
-      setNotes(loadedNotes)
-      setActivePath(loadedNotes[0]?.path ?? '')
+      await refreshVaultFromDisk('Vault opened. Markdown notes indexed.')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
       setSaveState('saved')
-      setStatus(`Loaded ${loadedNotes.length} Markdown notes and rebuilt index.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }

@@ -2,7 +2,10 @@ use crate::indexer::{NoteIndex, SearchResult};
 use crate::llm::{build_chat_request_preview, LlmProviderSettings, LlmRequestPreview};
 use crate::markdown::NoteMetadata;
 use crate::vault::Vault;
+use crate::watcher::WatcherState;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +71,20 @@ pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String
     let vault = Vault::new(&input.vault_root)?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
     index.search(&input.query)
+}
+
+#[tauri::command]
+pub fn start_vault_watcher(
+    vault_root: String,
+    app: AppHandle,
+    state: State<'_, WatcherState>,
+) -> Result<(), String> {
+    state.start(app, PathBuf::from(vault_root))
+}
+
+#[tauri::command]
+pub fn stop_vault_watcher(state: State<'_, WatcherState>) -> Result<(), String> {
+    state.stop()
 }
 
 #[tauri::command]

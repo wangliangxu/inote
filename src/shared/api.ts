@@ -41,6 +41,14 @@ export async function searchIndex(input: SearchIndexInput): Promise<SearchResult
   return invoke<SearchResult[]>('search_index', { input })
 }
 
+export async function startVaultWatcher(vaultRoot: string): Promise<void> {
+  return invoke<void>('start_vault_watcher', { vaultRoot })
+}
+
+export async function stopVaultWatcher(): Promise<void> {
+  return invoke<void>('stop_vault_watcher')
+}
+
 export async function readNote(vaultRoot: string, path: string): Promise<Note> {
   return invoke<Note>('read_note', { vaultRoot, path })
 }
