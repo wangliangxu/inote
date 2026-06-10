@@ -1,13 +1,25 @@
 import type { Note } from '../../shared/types'
+import { renderMarkdownPreview } from '../../shared/markdownPreview'
 
 interface EditorProps {
   note: Note
   onChange: (body: string) => void
   onSave?: () => void
+  onCheckExternal?: () => void
+  previewMode?: boolean
+  onTogglePreview?: () => void
   saveState?: 'demo' | 'dirty' | 'saving' | 'saved' | 'error'
 }
 
-export function Editor({ note, onChange, onSave, saveState = 'demo' }: EditorProps) {
+export function Editor({
+  note,
+  onChange,
+  onSave,
+  onCheckExternal,
+  previewMode = false,
+  onTogglePreview,
+  saveState = 'demo',
+}: EditorProps) {
   const saveLabel = {
     demo: 'Demo only',
     dirty: 'Unsaved',
@@ -24,11 +36,23 @@ export function Editor({ note, onChange, onSave, saveState = 'demo' }: EditorPro
             <span className="eyebrow">{note.category}</span>
             <h2>{note.title}</h2>
           </div>
-          {onSave ? (
-            <button className="secondary-action" type="button" onClick={onSave}>
-              Save
-            </button>
-          ) : null}
+          <div className="editor-actions">
+            {onTogglePreview ? (
+              <button className="secondary-action" type="button" onClick={onTogglePreview}>
+                {previewMode ? 'Edit' : 'Preview'}
+              </button>
+            ) : null}
+            {onCheckExternal ? (
+              <button className="secondary-action" type="button" onClick={onCheckExternal}>
+                Check file
+              </button>
+            ) : null}
+            {onSave ? (
+              <button className="secondary-action" type="button" onClick={onSave}>
+                Save
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="metadata">
           <span className={`save-state ${saveState}`}>{saveLabel}</span>
@@ -40,12 +64,20 @@ export function Editor({ note, onChange, onSave, saveState = 'demo' }: EditorPro
           ))}
         </div>
       </header>
-      <textarea
-        className="markdown-input"
-        aria-label="Markdown editor"
-        value={note.body}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {previewMode ? (
+        <section
+          className="markdown-preview"
+          aria-label="Markdown preview"
+          dangerouslySetInnerHTML={{ __html: renderMarkdownPreview(note.body) }}
+        />
+      ) : (
+        <textarea
+          className="markdown-input"
+          aria-label="Markdown editor"
+          value={note.body}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
     </article>
   )
 }

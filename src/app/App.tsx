@@ -31,6 +31,7 @@ import {
   initializeVault,
   moveNote,
   noteToMarkdown,
+  readNote,
   scanVault,
   writeNote,
 } from '../shared/api'
@@ -47,6 +48,7 @@ export function App() {
   const [vaultRoot, setVaultRoot] = useState('')
   const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
   const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
+  const [previewMode, setPreviewMode] = useState(false)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
@@ -133,6 +135,40 @@ export function App() {
       setNotes((current) => current.map((note) => (note.path === saved.path ? saved : note)))
       setSaveState('saved')
       setStatus(`Saved ${saved.path}.`)
+    } catch (error) {
+      setSaveState('error')
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function checkExternalActiveNote() {
+    if (!activeNote || !vaultRoot.trim()) {
+      setStatus('Open a real vault before checking disk changes.')
+      return
+    }
+    try {
+      const diskNote = await readNote(vaultRoot.trim(), activeNote.path)
+      const changedOnDisk =
+        diskNote.body !== activeNote.body ||
+        diskNote.title !== activeNote.title ||
+        diskNote.updatedAt !== activeNote.updatedAt ||
+        diskNote.tags.join('\n') !== activeNote.tags.join('\n')
+
+      if (!changedOnDisk) {
+        setStatus('Disk version matches the editor.')
+        return
+      }
+
+      const reload = window.confirm(`${activeNote.path} changed on disk. Reload the disk version?`)
+      if (!reload) {
+        setStatus('Kept editor version. Save to overwrite disk when ready.')
+        setSaveState('dirty')
+        return
+      }
+
+      setNotes((current) => current.map((note) => (note.path === diskNote.path ? diskNote : note)))
+      setSaveState('saved')
+      setStatus(`Reloaded ${diskNote.path} from disk.`)
     } catch (error) {
       setSaveState('error')
       setStatus(error instanceof Error ? error.message : String(error))
@@ -392,7 +428,15 @@ export function App() {
               ))}
             </div>
             {activeNote ? (
-              <Editor note={activeNote} onChange={updateActiveNote} onSave={saveActiveNote} saveState={saveState} />
+              <Editor
+                note={activeNote}
+                onChange={updateActiveNote}
+                onSave={saveActiveNote}
+                onCheckExternal={checkExternalActiveNote}
+                previewMode={previewMode}
+                onTogglePreview={() => setPreviewMode((current) => !current)}
+                saveState={saveState}
+              />
             ) : (
               <div className="empty">No note selected.</div>
             )}

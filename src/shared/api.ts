@@ -28,6 +28,10 @@ export async function scanVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault', { vaultRoot })
 }
 
+export async function readNote(vaultRoot: string, path: string): Promise<Note> {
+  return invoke<Note>('read_note', { vaultRoot, path })
+}
+
 export async function initializeVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('initialize_vault', { vaultRoot })
 }
