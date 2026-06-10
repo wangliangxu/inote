@@ -37,3 +37,17 @@ export interface SearchResult {
   summary?: string
   excerpt: string
 }
+
+export interface NoteLink {
+  sourcePath: string
+  sourceTitle: string
+  targetPath: string
+  targetTitle: string
+  label: string
+  kind: string
+}
+
+export interface NoteLinks {
+  outgoing: NoteLink[]
+  backlinks: NoteLink[]
+}

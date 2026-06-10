@@ -1,4 +1,4 @@
-use crate::indexer::{NoteIndex, SearchResult};
+use crate::indexer::{NoteIndex, NoteLink, SearchResult};
 use crate::llm::{build_chat_request_preview, LlmProviderSettings, LlmRequestPreview};
 use crate::markdown::NoteMetadata;
 use crate::vault::Vault;
@@ -28,6 +28,20 @@ pub struct MoveNoteInput {
 pub struct SearchIndexInput {
     pub vault_root: String,
     pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLinksInput {
+    pub vault_root: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLinks {
+    pub outgoing: Vec<NoteLink>,
+    pub backlinks: Vec<NoteLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +92,16 @@ pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String
     let vault = Vault::new(&input.vault_root)?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
     index.search(&input.query)
+}
+
+#[tauri::command]
+pub fn get_note_links(input: NoteLinksInput) -> Result<NoteLinks, String> {
+    let vault = Vault::new(&input.vault_root)?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    Ok(NoteLinks {
+        outgoing: index.outgoing_links(&input.path)?,
+        backlinks: index.backlinks(&input.path)?,
+    })
 }
 
 #[tauri::command]
@@ -285,6 +309,38 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "Searchable");
+    }
+
+    #[test]
+    fn command_returns_note_links() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "knowledge/source.md".to_string(),
+            content: "---\ntitle: Source\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nSee [[Target]].".to_string(),
+        })
+        .unwrap();
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "knowledge/target.md".to_string(),
+            content:
+                "---\ntitle: Target\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nTarget."
+                    .to_string(),
+        })
+        .unwrap();
+
+        rebuild_search_index(root.clone()).unwrap();
+        let links = get_note_links(NoteLinksInput {
+            vault_root: root,
+            path: "knowledge/target.md".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(links.outgoing.len(), 0);
+        assert_eq!(links.backlinks.len(), 1);
+        assert_eq!(links.backlinks[0].source_path, "knowledge/source.md");
     }
 
     #[test]

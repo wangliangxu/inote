@@ -1,7 +1,8 @@
 use crate::markdown::NoteMetadata;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -20,13 +21,26 @@ pub struct NoteIndex {
     conn: Connection,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub source_path: String,
+    pub source_title: String,
+    pub target_path: String,
+    pub target_title: String,
+    pub label: String,
+    pub kind: String,
+}
+
 impl NoteIndex {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| format!("failed to create index folder: {error}"))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create index folder: {error}"))?;
         }
-        let conn = Connection::open(path).map_err(|error| format!("failed to open index: {error}"))?;
+        let conn =
+            Connection::open(path).map_err(|error| format!("failed to open index: {error}"))?;
         let index = Self { conn };
         index.create_schema()?;
         Ok(index)
@@ -38,11 +52,13 @@ impl NoteIndex {
                 "
                 DELETE FROM notes;
                 DELETE FROM tags;
+                DELETE FROM links;
                 DELETE FROM search_index;
                 ",
             )
             .map_err(|error| format!("failed to clear index: {error}"))?;
 
+        let resolver = LinkResolver::new(notes);
         for note in notes {
             let tags = note.tags.join(" ");
             self.conn
@@ -81,6 +97,23 @@ impl NoteIndex {
                     params![note.path, note.title, note.body, tags, note.summary],
                 )
                 .map_err(|error| format!("failed to index note text: {error}"))?;
+
+            for extracted in extract_links(note, &resolver) {
+                self.conn
+                    .execute(
+                        "
+                        INSERT OR IGNORE INTO links (source_path, target_path, label, kind)
+                        VALUES (?1, ?2, ?3, ?4)
+                        ",
+                        params![
+                            note.path,
+                            extracted.target_path,
+                            extracted.label,
+                            extracted.kind
+                        ],
+                    )
+                    .map_err(|error| format!("failed to index note link: {error}"))?;
+            }
         }
 
         Ok(())
@@ -112,7 +145,9 @@ impl NoteIndex {
         let rows = stmt
             .query_map(params![fts_query], |row| self.search_row(row))
             .map_err(|error| format!("failed to run fts search: {error}"))?;
-        let mut results = rows.collect::<Result<Vec<_>, _>>().map_err(|error| format!("failed to read search rows: {error}"))?;
+        let mut results = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("failed to read search rows: {error}"))?;
 
         if results.is_empty() {
             let mut fallback = self
@@ -143,6 +178,34 @@ impl NoteIndex {
         Ok(results)
     }
 
+    pub fn outgoing_links(&self, path: &str) -> Result<Vec<NoteLink>, String> {
+        self.note_links(
+            "
+            SELECT l.source_path, s.title, l.target_path, t.title, l.label, l.kind
+            FROM links l
+            JOIN notes s ON s.path = l.source_path
+            JOIN notes t ON t.path = l.target_path
+            WHERE l.source_path = ?1
+            ORDER BY t.title ASC, l.target_path ASC
+            ",
+            path,
+        )
+    }
+
+    pub fn backlinks(&self, path: &str) -> Result<Vec<NoteLink>, String> {
+        self.note_links(
+            "
+            SELECT l.source_path, s.title, l.target_path, t.title, l.label, l.kind
+            FROM links l
+            JOIN notes s ON s.path = l.source_path
+            JOIN notes t ON t.path = l.target_path
+            WHERE l.target_path = ?1
+            ORDER BY s.updated_at DESC, s.title ASC
+            ",
+            path,
+        )
+    }
+
     fn create_schema(&self) -> Result<(), String> {
         self.conn
             .execute_batch(
@@ -161,6 +224,14 @@ impl NoteIndex {
                   note_path TEXT NOT NULL,
                   tag TEXT NOT NULL,
                   PRIMARY KEY (note_path, tag)
+                );
+
+                CREATE TABLE IF NOT EXISTS links (
+                  source_path TEXT NOT NULL,
+                  target_path TEXT NOT NULL,
+                  label TEXT NOT NULL,
+                  kind TEXT NOT NULL,
+                  PRIMARY KEY (source_path, target_path, label, kind)
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
@@ -190,9 +261,32 @@ impl NoteIndex {
     }
 
     fn tags_for_note(&self, path: &str) -> rusqlite::Result<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT tag FROM tags WHERE note_path = ?1 ORDER BY tag ASC")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT tag FROM tags WHERE note_path = ?1 ORDER BY tag ASC")?;
         let rows = stmt.query_map(params![path], |row| row.get::<_, String>(0))?;
         rows.collect()
+    }
+
+    fn note_links(&self, sql: &str, path: &str) -> Result<Vec<NoteLink>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(sql)
+            .map_err(|error| format!("failed to prepare link query: {error}"))?;
+        let rows = stmt
+            .query_map(params![path], |row| {
+                Ok(NoteLink {
+                    source_path: row.get(0)?,
+                    source_title: row.get(1)?,
+                    target_path: row.get(2)?,
+                    target_title: row.get(3)?,
+                    label: row.get(4)?,
+                    kind: row.get(5)?,
+                })
+            })
+            .map_err(|error| format!("failed to run link query: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("failed to read link rows: {error}"))
     }
 }
 
@@ -204,10 +298,161 @@ fn fts_query(query: &str) -> String {
         .join(" ")
 }
 
+#[derive(Debug)]
+struct ExtractedLink {
+    target_path: String,
+    label: String,
+    kind: String,
+}
+
+struct LinkResolver {
+    by_title: HashMap<String, String>,
+    by_path: HashMap<String, String>,
+}
+
+impl LinkResolver {
+    fn new(notes: &[NoteMetadata]) -> Self {
+        let mut by_title = HashMap::new();
+        let mut by_path = HashMap::new();
+        for note in notes {
+            by_title
+                .entry(note.title.to_lowercase())
+                .or_insert_with(|| note.path.clone());
+            by_path.insert(note.path.clone(), note.path.clone());
+            if let Some(stem) = Path::new(&note.path)
+                .file_stem()
+                .and_then(|value| value.to_str())
+            {
+                by_title
+                    .entry(stem.to_lowercase())
+                    .or_insert_with(|| note.path.clone());
+            }
+        }
+        Self { by_title, by_path }
+    }
+
+    fn resolve_wiki(&self, label: &str) -> Option<String> {
+        let target = label.split('|').next().unwrap_or(label).trim();
+        self.by_title.get(&target.to_lowercase()).cloned()
+    }
+
+    fn resolve_markdown(&self, source_path: &str, target: &str) -> Option<String> {
+        if target.starts_with("http://")
+            || target.starts_with("https://")
+            || target.starts_with('#')
+            || target.starts_with("mailto:")
+        {
+            return None;
+        }
+
+        let without_anchor = target.split('#').next().unwrap_or(target);
+        if without_anchor.is_empty() || !without_anchor.ends_with(".md") {
+            return None;
+        }
+
+        let source_parent = Path::new(source_path)
+            .parent()
+            .unwrap_or_else(|| Path::new(""));
+        let candidate = normalize_relative_path(&source_parent.join(without_anchor));
+        self.by_path.get(&candidate).cloned()
+    }
+}
+
+fn extract_links(note: &NoteMetadata, resolver: &LinkResolver) -> Vec<ExtractedLink> {
+    let mut links = Vec::new();
+    links.extend(extract_wiki_links(&note.body, resolver));
+    links.extend(extract_markdown_links(&note.path, &note.body, resolver));
+    links
+}
+
+fn extract_wiki_links(body: &str, resolver: &LinkResolver) -> Vec<ExtractedLink> {
+    let mut links = Vec::new();
+    let mut remaining = body;
+    while let Some(start) = remaining.find("[[") {
+        let after_start = &remaining[start + 2..];
+        let Some(end) = after_start.find("]]") else {
+            break;
+        };
+        let raw_label = after_start[..end].trim();
+        let label = raw_label
+            .split('|')
+            .nth(1)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| raw_label.split('|').next().unwrap_or(raw_label).trim());
+        if !raw_label.is_empty() {
+            if let Some(target_path) = resolver.resolve_wiki(raw_label) {
+                links.push(ExtractedLink {
+                    target_path,
+                    label: label.to_string(),
+                    kind: "wiki".to_string(),
+                });
+            }
+        }
+        remaining = &after_start[end + 2..];
+    }
+    links
+}
+
+fn extract_markdown_links(
+    source_path: &str,
+    body: &str,
+    resolver: &LinkResolver,
+) -> Vec<ExtractedLink> {
+    let mut links = Vec::new();
+    let mut remaining = body;
+    while let Some(label_start) = remaining.find('[') {
+        if remaining[label_start..].starts_with("[[") {
+            remaining = &remaining[label_start + 2..];
+            continue;
+        }
+        let after_label = &remaining[label_start + 1..];
+        let Some(label_end) = after_label.find(']') else {
+            break;
+        };
+        let after_bracket = &after_label[label_end + 1..];
+        if !after_bracket.starts_with('(') {
+            remaining = after_bracket;
+            continue;
+        }
+        let Some(target_end) = after_bracket[1..].find(')') else {
+            break;
+        };
+        let label = after_label[..label_end].trim();
+        let target = after_bracket[1..target_end + 1].trim();
+        if let Some(target_path) = resolver.resolve_markdown(source_path, target) {
+            links.push(ExtractedLink {
+                target_path,
+                label: label.to_string(),
+                kind: "markdown".to_string(),
+            });
+        }
+        remaining = &after_bracket[target_end + 2..];
+    }
+    links
+}
+
+fn normalize_relative_path(path: &Path) -> String {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => parts.push(value.to_string_lossy().to_string()),
+            Component::ParentDir => {
+                parts.pop();
+            }
+            Component::CurDir => {}
+            _ => {}
+        }
+    }
+    PathBuf::from_iter(parts)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::vault::Vault;
     use super::NoteIndex;
+    use crate::vault::Vault;
     use std::fs;
     use tempfile::tempdir;
 
@@ -241,7 +486,9 @@ mod tests {
     fn rebuild_removes_notes_that_no_longer_exist() {
         let dir = tempdir().unwrap();
         let vault = Vault::new(dir.path()).unwrap();
-        vault.write_note("knowledge/old.md", "# Old\n\nstale body").unwrap();
+        vault
+            .write_note("knowledge/old.md", "# Old\n\nstale body")
+            .unwrap();
 
         let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
         index.rebuild(&vault.scan().unwrap()).unwrap();
@@ -251,5 +498,45 @@ mod tests {
         index.rebuild(&vault.scan().unwrap()).unwrap();
 
         assert!(index.search("stale").unwrap().is_empty());
+    }
+
+    #[test]
+    fn rebuild_extracts_outgoing_links_and_backlinks() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note(
+                "knowledge/source.md",
+                "---\ntitle: Source Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nLinks to [[Target Note]] and [Relative](../projects/linked.md).",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "knowledge/target.md",
+                "---\ntitle: Target Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nTarget body.",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "projects/linked.md",
+                "---\ntitle: Linked Project\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nLinked body.",
+            )
+            .unwrap();
+
+        let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
+        index.rebuild(&vault.scan().unwrap()).unwrap();
+
+        let outgoing = index.outgoing_links("knowledge/source.md").unwrap();
+        let backlinks = index.backlinks("knowledge/target.md").unwrap();
+
+        assert_eq!(outgoing.len(), 2);
+        assert!(outgoing
+            .iter()
+            .any(|link| link.target_path == "knowledge/target.md" && link.label == "Target Note"));
+        assert!(outgoing
+            .iter()
+            .any(|link| link.target_path == "projects/linked.md"));
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0].source_path, "knowledge/source.md");
     }
 }

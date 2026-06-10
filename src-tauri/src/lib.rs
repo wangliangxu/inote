@@ -12,6 +12,7 @@ pub fn run() {
             commands::scan_vault,
             commands::rebuild_search_index,
             commands::search_index,
+            commands::get_note_links,
             commands::start_vault_watcher,
             commands::stop_vault_watcher,
             commands::initialize_vault,

@@ -8,6 +8,7 @@ import {
   FolderPlus,
   FolderTree,
   Inbox,
+  Link2,
   MoveRight,
   PanelRight,
   Pencil,
@@ -24,7 +25,7 @@ import { SearchPanel } from '../features/search/SearchPanel'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
 import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
-import type { Note, SearchResult, WorkspaceView } from '../shared/types'
+import type { Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
 import {
   createFolder,
   createInboxNote,
@@ -33,6 +34,7 @@ import {
   createTodayNote,
   createWeeklyReview,
   deleteNote,
+  getNoteLinks,
   initializeVault,
   moveNote,
   noteToMarkdown,
@@ -70,6 +72,8 @@ export function App() {
   const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
   const [previewMode, setPreviewMode] = useState(false)
   const [indexedResults, setIndexedResults] = useState<SearchResult[]>([])
+  const [noteLinks, setNoteLinks] = useState<NoteLinks>({ outgoing: [], backlinks: [] })
+  const [linkVersion, setLinkVersion] = useState(0)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
@@ -80,6 +84,7 @@ export function App() {
       const loadedNotes = await scanVault(vaultRoot.trim())
       await rebuildSearchIndex(vaultRoot.trim())
       setNotes(loadedNotes)
+      setLinkVersion((current) => current + 1)
       setActivePath((current) => {
         if (loadedNotes.some((note) => note.path === current)) return current
         return loadedNotes[0]?.path ?? ''
@@ -157,6 +162,24 @@ export function App() {
       cancelled = true
     }
   }, [query, vaultRoot])
+
+  useEffect(() => {
+    if (!activeNote || !vaultRoot.trim()) {
+      setNoteLinks({ outgoing: [], backlinks: [] })
+      return
+    }
+    let cancelled = false
+    getNoteLinks({ vaultRoot: vaultRoot.trim(), path: activeNote.path })
+      .then((links) => {
+        if (!cancelled) setNoteLinks(links)
+      })
+      .catch(() => {
+        if (!cancelled) setNoteLinks({ outgoing: [], backlinks: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeNote, linkVersion, vaultRoot])
 
   function updateActiveNote(body: string) {
     if (!activeNote) return
@@ -242,6 +265,7 @@ export function App() {
         content: noteToMarkdown(activeNote),
       })
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => current.map((note) => (note.path === saved.path ? saved : note)))
       setSaveState('saved')
       setStatus(`Saved ${saved.path}.`)
@@ -293,6 +317,7 @@ export function App() {
     try {
       const note = await createTodayNote(vaultRoot.trim())
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
       setSaveState('saved')
@@ -311,6 +336,7 @@ export function App() {
       const today = localDateString()
       const note = await createWeeklyReview({ vaultRoot: vaultRoot.trim(), date: today })
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
       setActiveCategory(note.category)
@@ -350,6 +376,7 @@ export function App() {
     try {
       const note = await createInboxNote(vaultRoot.trim(), 'Quick Thought')
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
       setSaveState('saved')
@@ -371,6 +398,7 @@ export function App() {
     try {
       const note = await createNote({ vaultRoot: vaultRoot.trim(), title, category })
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
       setActiveCategory(note.category)
@@ -431,6 +459,7 @@ export function App() {
     try {
       const moved = await moveNote({ vaultRoot: vaultRoot.trim(), from: activeNote.path, to })
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       setNotes((current) => current.map((note) => (note.path === activeNote.path ? moved : note)))
       setActivePath(moved.path)
       setActiveCategory(moved.category)
@@ -451,6 +480,7 @@ export function App() {
     try {
       await deleteNote(vaultRoot.trim(), activeNote.path)
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       const remaining = notes.filter((note) => note.path !== activeNote.path)
       setNotes(remaining)
       setActivePath(remaining[0]?.path ?? '')
@@ -468,6 +498,7 @@ export function App() {
     }
     try {
       await rebuildSearchIndex(vaultRoot.trim())
+      setLinkVersion((current) => current + 1)
       if (query.trim()) {
         setIndexedResults(await searchIndex({ vaultRoot: vaultRoot.trim(), query }))
       }
@@ -689,6 +720,37 @@ export function App() {
                 <Sparkles size={14} /> Summary
               </p>
               <p className="summary-text">{activeNote.summary ?? activeNote.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
+            </section>
+            <section className="context-section">
+              <p className="panel-title">
+                <Link2 size={14} /> Links
+              </p>
+              <div className="link-group">
+                <h4>Backlinks</h4>
+                {noteLinks.backlinks.length ? (
+                  noteLinks.backlinks.map((link) => (
+                    <button key={`${link.sourcePath}-${link.label}`} type="button" onClick={() => setActivePath(link.sourcePath)}>
+                      <strong>{link.sourceTitle}</strong>
+                      <span>{link.sourcePath}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p>No backlinks.</p>
+                )}
+              </div>
+              <div className="link-group">
+                <h4>Outgoing</h4>
+                {noteLinks.outgoing.length ? (
+                  noteLinks.outgoing.map((link) => (
+                    <button key={`${link.targetPath}-${link.label}`} type="button" onClick={() => setActivePath(link.targetPath)}>
+                      <strong>{link.targetTitle}</strong>
+                      <span>{link.targetPath}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p>No outgoing links.</p>
+                )}
+              </div>
             </section>
             <section className="context-section">
               <p className="panel-title">

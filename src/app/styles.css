@@ -704,6 +704,56 @@ button {
   margin: 0;
 }
 
+.link-group {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.link-group h4 {
+  color: #73756c;
+  font-size: 11px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.link-group button {
+  background: #f8f8f5;
+  border: 1px solid #d7d7cf;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.link-group button:hover {
+  background: #e9eee7;
+}
+
+.link-group strong,
+.link-group span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-group strong {
+  font-size: 12px;
+}
+
+.link-group span,
+.link-group p {
+  color: #73756c;
+  font-size: 11px;
+}
+
+.link-group p {
+  margin: 0;
+}
+
 .llm-box textarea {
   background: #fbfbf8;
   border: 1px solid #d7d7cf;

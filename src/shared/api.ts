@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Note, SearchResult } from './types'
+import type { Note, NoteLinks, SearchResult } from './types'
 
 interface WriteNoteInput {
   vaultRoot: string
@@ -29,6 +29,11 @@ interface SearchIndexInput {
   query: string
 }
 
+interface NoteLinksInput {
+  vaultRoot: string
+  path: string
+}
+
 interface CreateReviewInput {
   vaultRoot: string
   date: string
@@ -44,6 +49,10 @@ export async function rebuildSearchIndex(vaultRoot: string): Promise<void> {
 
 export async function searchIndex(input: SearchIndexInput): Promise<SearchResult[]> {
   return invoke<SearchResult[]>('search_index', { input })
+}
+
+export async function getNoteLinks(input: NoteLinksInput): Promise<NoteLinks> {
+  return invoke<NoteLinks>('get_note_links', { input })
 }
 
 export async function startVaultWatcher(vaultRoot: string): Promise<void> {
