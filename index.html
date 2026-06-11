@@ -4,6 +4,38 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>iNote</title>
+    <style id="inote-startup-theme">
+      :root {
+        background: #f5f5f2;
+        color-scheme: light;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #050606;
+          color-scheme: dark;
+        }
+      }
+
+      html,
+      body,
+      #root {
+        background: inherit;
+        min-height: 100%;
+      }
+    </style>
+    <script>
+      ;(() => {
+        const key = 'inote.themePreference'
+        const saved = window.localStorage.getItem(key)
+        const preference = saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system'
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        const theme = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
+        document.documentElement.dataset.theme = theme
+        document.documentElement.dataset.themePreference = preference
+        document.documentElement.style.colorScheme = theme
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

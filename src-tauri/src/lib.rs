@@ -12,9 +12,15 @@ pub fn run() {
         .manage(watcher::WatcherState::default())
         .menu(menu::build)
         .on_menu_event(menu::handle_event)
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = webview.window().show();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::scan_vault,
             commands::rebuild_search_index,
+            commands::scan_vault_and_rebuild_index,
             commands::search_index,
             commands::get_note_links,
             commands::start_vault_watcher,

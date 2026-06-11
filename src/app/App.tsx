@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -27,14 +27,14 @@ import {
   Tags,
   Trash2,
 } from 'lucide-react'
-import { CalendarView } from '../features/calendar/CalendarView'
+const CalendarView = lazy(() => import('../features/calendar/CalendarView').then(m => ({ default: m.CalendarView })))
 import { Editor } from '../features/editor/Editor'
-import { LlmAssistant } from '../features/llm/LlmAssistant'
-import { SettingsPanel } from '../features/settings/SettingsPanel'
-import { TagsPanel } from '../features/tags/TagsPanel'
+const LlmAssistant = lazy(() => import('../features/llm/LlmAssistant').then(m => ({ default: m.LlmAssistant })))
+const SettingsPanel = lazy(() => import('../features/settings/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
+const TagsPanel = lazy(() => import('../features/tags/TagsPanel').then(m => ({ default: m.TagsPanel })))
 import { demoNotes } from '../shared/fixtures'
-import { getEffectiveTheme, isThemePreference, type ThemePreference } from '../shared/theme'
-import type { LlmProviderSettings, Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
+import { getEffectiveTheme, readStoredThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../shared/theme'
+import type { LlmProviderSettings, Note, NoteLinks, SaveState, SearchResult, WorkspaceView } from '../shared/types'
 import {
   archiveNote,
   createFolder,
@@ -53,17 +53,16 @@ import {
   loadUserSettings,
   saveUserSettings,
   scanVault,
+  scanVaultAndRebuildIndex,
   searchIndex,
   writeNote,
   startVaultWatcher,
   stopVaultWatcher,
 } from '../shared/api'
 import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sortByUpdatedDesc } from '../shared/vault'
+import { createInitialWorkspaceState, LAST_ACTIVE_PATH_KEY, LAST_VAULT_KEY } from './startup'
 
-const LAST_VAULT_KEY = 'inote.lastVaultRoot'
-const LAST_ACTIVE_PATH_KEY = 'inote.activePath'
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
-const THEME_PREFERENCE_KEY = 'inote.themePreference'
 const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
 const defaultLlmSettings: LlmProviderSettings = {
@@ -73,10 +72,97 @@ const defaultLlmSettings: LlmProviderSettings = {
   model: 'gpt-4.1-mini',
 }
 
+const excerptCache = new WeakMap<Note | SearchResult, string>()
+
 function noteExcerpt(note: Note | SearchResult): string {
+  const cached = excerptCache.get(note)
+  if (cached !== undefined) return cached
   const excerpt = 'excerpt' in note ? note.excerpt : (note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96))
-  return stripMarkdownForSummary(excerpt)
+  const result = stripMarkdownForSummary(excerpt)
+  excerptCache.set(note, result)
+  return result
 }
+
+const NOTES_PAGE_SIZE = 60
+
+interface NoteItemProps {
+  note: Note | SearchResult
+  isActive: boolean
+  onSelect: (path: string) => void
+  onDelete: (path: string) => void
+}
+
+const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
+  return (
+    <button
+      className={isActive ? 'note-card active' : 'note-card'}
+      onClick={() => onSelect(note.path)}
+    >
+      <span className="note-card-surface">
+        <span className="note-item-actions">
+          <span
+            className="note-delete-action"
+            role="button"
+            tabIndex={0}
+            title="Move note to trash"
+            aria-label="Move note to trash"
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(note.path)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                event.stopPropagation()
+                onDelete(note.path)
+              }
+            }}
+          >
+            <Trash2 size={14} />
+          </span>
+        </span>
+        <strong>{note.title}</strong>
+        <small>{noteExcerpt(note)}</small>
+      </span>
+      <time>{note.updatedAt}</time>
+    </button>
+  )
+})
+
+const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
+  return (
+    <button
+      className={isActive ? 'note-row active' : 'note-row'}
+      onClick={() => onSelect(note.path)}
+    >
+      <span className="note-item-actions">
+        <span
+          className="note-delete-action"
+          role="button"
+          tabIndex={0}
+          title="Move note to trash"
+          aria-label="Move note to trash"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete(note.path)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              event.stopPropagation()
+              onDelete(note.path)
+            }
+          }}
+        >
+          <Trash2 size={14} />
+        </span>
+      </span>
+      <strong>{note.title}</strong>
+      <small>{noteExcerpt(note)}</small>
+      <time>{note.updatedAt}</time>
+    </button>
+  )
+})
 
 function stripMarkdownForSummary(value: string): string {
   return value
@@ -103,11 +189,15 @@ function localDateString(date = new Date()): string {
 }
 
 export function App() {
-  const [notes, setNotes] = useState<Note[]>(demoNotes)
+  const initialWorkspace = useMemo(
+    () => createInitialWorkspaceState(typeof window === 'undefined' ? undefined : window.localStorage),
+    [],
+  )
+  const [notes, setNotes] = useState<Note[]>(initialWorkspace.notes)
   const [activeView, setActiveView] = useState<WorkspaceView>('today')
   const [activeCategory, setActiveCategory] = useState('journal')
   const [activeTag, setActiveTag] = useState('')
-  const [activePath, setActivePath] = useState(demoNotes[0]?.path ?? '')
+  const [activePath, setActivePath] = useState(initialWorkspace.activePath)
   const [query, setQuery] = useState('')
   const [selectedSearchCategories, setSelectedSearchCategories] = useState<string[]>([])
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false)
@@ -116,9 +206,9 @@ export function App() {
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [vaultRoot, setVaultRoot] = useState('')
-  const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
-  const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
+  const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot)
+  const [status, setStatus] = useState(initialWorkspace.status)
+  const [saveState, setSaveState] = useState<SaveState>(initialWorkspace.saveState)
   const [previewMode, setPreviewMode] = useState(false)
   const [indexedResults, setIndexedResults] = useState<SearchResult[]>([])
   const [noteLinks, setNoteLinks] = useState<NoteLinks>({ outgoing: [], backlinks: [] })
@@ -127,8 +217,7 @@ export function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     if (typeof window === 'undefined') return 'system'
-    const savedThemePreference = window.localStorage.getItem(THEME_PREFERENCE_KEY)
-    return isThemePreference(savedThemePreference) ? savedThemePreference : 'system'
+    return readStoredThemePreference(window.localStorage)
   })
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -136,6 +225,7 @@ export function App() {
   })
   const categoryFilterRef = useRef<HTMLDetailsElement>(null)
   const categoryFilterPointerInsideRef = useRef(false)
+  const skipNextSettingsSaveRef = useRef(true)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const effectiveTheme = useMemo(() => getEffectiveTheme(themePreference, systemPrefersDark), [systemPrefersDark, themePreference])
@@ -149,6 +239,7 @@ export function App() {
         : `${selectedSearchCategories.length} categories`
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
   const saveLabel = {
+    loading: 'Loading',
     demo: 'Demo only',
     dirty: 'Unsaved changes',
     saving: 'Saving',
@@ -180,8 +271,7 @@ export function App() {
     async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
       const trimmedRoot = root.trim()
       if (!trimmedRoot) return
-      const loadedNotes = await scanVault(trimmedRoot)
-      await rebuildSearchIndex(trimmedRoot)
+      const loadedNotes = await scanVaultAndRebuildIndex(trimmedRoot)
       setNotes(loadedNotes)
       setLinkVersion((current) => current + 1)
       setActivePath((current) => {
@@ -189,14 +279,19 @@ export function App() {
         if (loadedNotes.some((note) => note.path === current)) return current
         return loadedNotes[0]?.path ?? ''
       })
-      if (query.trim()) {
-        setIndexedResults(await searchIndex({ vaultRoot: trimmedRoot, query }))
-      }
       setSaveState('saved')
       setStatus(reason)
     },
-    [query],
+    [],
   )
+
+  const loadDemoWorkspace = useCallback(() => {
+    setNotes(demoNotes)
+    setActivePath(demoNotes[0]?.path ?? '')
+    setVaultRoot('')
+    setSaveState('demo')
+    setStatus('Demo vault loaded. Enter a local path in Settings to open real notes.')
+  }, [])
 
   const refreshVaultFromDisk = useCallback(
     async (reason = 'Vault refreshed from disk.') => {
@@ -243,8 +338,11 @@ export function App() {
               savedSettings.activePath || legacyActivePath,
             )
           } catch (error) {
+            setSaveState('error')
             setStatus(error instanceof Error ? error.message : String(error))
           }
+        } else {
+          loadDemoWorkspace()
         }
       })
       .catch(async () => {
@@ -259,8 +357,11 @@ export function App() {
               window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? '',
             )
           } catch (error) {
+            setSaveState('error')
             setStatus(error instanceof Error ? error.message : String(error))
           }
+        } else {
+          loadDemoWorkspace()
         }
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         if (savedLlmSettings) {
@@ -278,10 +379,14 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [loadVaultFromDisk])
+  }, [loadDemoWorkspace, loadVaultFromDisk])
 
   useEffect(() => {
     if (!settingsLoaded) return
+    if (skipNextSettingsSaveRef.current) {
+      skipNextSettingsSaveRef.current = false
+      return
+    }
     const timeout = window.setTimeout(() => {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
       saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, llmSettings })
@@ -393,16 +498,41 @@ export function App() {
     return sortByUpdatedDesc(notes)
   }, [activeCategory, activeView, indexedResults, notes, query, searchCategorySet, vaultRoot])
 
+  const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  // Reset rendered count when the visible notes change (view/category/search switch)
+  useEffect(() => {
+    setRenderedCount(NOTES_PAGE_SIZE)
+  }, [visibleNotes])
+
+  // IntersectionObserver to load more notes when sentinel enters viewport
+  useEffect(() => {
+    const sentinel = loadMoreRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRenderedCount((current) => Math.min(current + NOTES_PAGE_SIZE, visibleNotes.length))
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [visibleNotes.length])
+
   const visibleNoteGroups = useMemo(() => {
+    const sliced = visibleNotes.slice(0, renderedCount)
     const groups = new Map<string, Array<Note | SearchResult>>()
-    for (const note of visibleNotes) {
+    for (const note of sliced) {
       const month = note.createdAt.slice(0, 7)
       groups.set(month, [...(groups.get(month) ?? []), note])
     }
     return Array.from(groups.entries())
       .map(([month, groupedNotes]) => ({ month, notes: groupedNotes }))
       .sort((a, b) => b.month.localeCompare(a.month))
-  }, [visibleNotes])
+  }, [visibleNotes, renderedCount])
 
   useEffect(() => {
     if (!vaultRoot.trim() || !query.trim()) {
@@ -1084,76 +1214,29 @@ export function App() {
                 <div className={noteListMode === 'cards' ? 'note-card-grid' : 'note-summary-stack'}>
                   {group.notes.map((note) =>
                     noteListMode === 'cards' ? (
-                      <button
+                      <NoteCardItem
                         key={note.path}
-                        className={note.path === activeNote?.path ? 'note-card active' : 'note-card'}
-                        onClick={() => setActivePath(note.path)}
-                      >
-                        <span className="note-card-surface">
-                          <span className="note-item-actions">
-                            <span
-                              className="note-delete-action"
-                              role="button"
-                              tabIndex={0}
-                              title="Move note to trash"
-                              aria-label="Move note to trash"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                deleteNoteByPath(note.path)
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  deleteNoteByPath(note.path)
-                                }
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </span>
-                          </span>
-                          <strong>{note.title}</strong>
-                          <small>{noteExcerpt(note)}</small>
-                        </span>
-                        <time>{note.updatedAt}</time>
-                      </button>
+                        note={note}
+                        isActive={note.path === activeNote?.path}
+                        onSelect={setActivePath}
+                        onDelete={deleteNoteByPath}
+                      />
                     ) : (
-                      <button
+                      <NoteRowItem
                         key={note.path}
-                        className={note.path === activeNote?.path ? 'note-row active' : 'note-row'}
-                        onClick={() => setActivePath(note.path)}
-                      >
-                        <span className="note-item-actions">
-                          <span
-                            className="note-delete-action"
-                            role="button"
-                            tabIndex={0}
-                            title="Move note to trash"
-                            aria-label="Move note to trash"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              deleteNoteByPath(note.path)
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                deleteNoteByPath(note.path)
-                              }
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </span>
-                        </span>
-                        <strong>{note.title}</strong>
-                        <small>{noteExcerpt(note)}</small>
-                        <time>{note.updatedAt}</time>
-                      </button>
+                        note={note}
+                        isActive={note.path === activeNote?.path}
+                        onSelect={setActivePath}
+                        onDelete={deleteNoteByPath}
+                      />
                     ),
                   )}
                 </div>
               </section>
             ))}
+            {renderedCount < visibleNotes.length && (
+              <div ref={loadMoreRef} className="load-more-sentinel" aria-hidden="true" />
+            )}
           </div>
         </aside>
         <div
@@ -1177,16 +1260,20 @@ export function App() {
         </header>
 
         {activeView === 'calendar' ? (
-          <CalendarView notes={notes} onSelectNote={setActivePath} />
+          <Suspense fallback={<div className="empty">Loading calendar…</div>}>
+            <CalendarView notes={notes} onSelectNote={setActivePath} />
+          </Suspense>
         ) : activeView === 'tags' ? (
-          <TagsPanel
-            notes={notes}
-            activeTag={activeTag}
-            onSelectTag={setActiveTag}
-            onSelectNote={(path) => {
-              setActivePath(path)
-            }}
-          />
+          <Suspense fallback={<div className="empty">Loading tags…</div>}>
+            <TagsPanel
+              notes={notes}
+              activeTag={activeTag}
+              onSelectTag={setActiveTag}
+              onSelectNote={(path) => {
+                setActivePath(path)
+              }}
+            />
+          </Suspense>
         ) : (
           activeNote ? (
             <Editor
@@ -1305,7 +1392,9 @@ export function App() {
               <p className="panel-title">
                 <Bot size={14} /> Assistant
               </p>
-              <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
+              <Suspense fallback={<div className="empty">Loading assistant…</div>}>
+                <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
+              </Suspense>
             </section>
           </>
         ) : null}
@@ -1321,25 +1410,27 @@ export function App() {
             aria-label="Settings"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <SettingsPanel
-              vaultRoot={vaultRoot}
-              status={status}
-              llmSettings={llmSettings}
-              themePreference={themePreference}
-              effectiveTheme={effectiveTheme}
-              onVaultRootChange={setVaultRoot}
-              onLlmSettingsChange={setLlmSettings}
-              onThemePreferenceChange={setThemePreference}
-              onOpenVault={openVault}
-              onInitializeVault={initVault}
-              onCreateToday={addTodayNote}
-              onCreateInbox={addInboxNote}
-              onCreateWeeklyReview={addWeeklyReview}
-              onCreateMonthlyReview={addMonthlyReview}
-              onCreateFolder={addFolder}
-              onRebuildIndex={rebuildIndex}
-              onClose={() => setSettingsOpen(false)}
-            />
+            <Suspense fallback={<div className="empty">Loading settings…</div>}>
+              <SettingsPanel
+                vaultRoot={vaultRoot}
+                status={status}
+                llmSettings={llmSettings}
+                themePreference={themePreference}
+                effectiveTheme={effectiveTheme}
+                onVaultRootChange={setVaultRoot}
+                onLlmSettingsChange={setLlmSettings}
+                onThemePreferenceChange={setThemePreference}
+                onOpenVault={openVault}
+                onInitializeVault={initVault}
+                onCreateToday={addTodayNote}
+                onCreateInbox={addInboxNote}
+                onCreateWeeklyReview={addWeeklyReview}
+                onCreateMonthlyReview={addMonthlyReview}
+                onCreateFolder={addFolder}
+                onRebuildIndex={rebuildIndex}
+                onClose={() => setSettingsOpen(false)}
+              />
+            </Suspense>
           </div>
         </div>
       ) : null}

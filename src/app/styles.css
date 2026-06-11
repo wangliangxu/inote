@@ -207,6 +207,11 @@ button {
   color: #63665e;
 }
 
+.status-pill.loading {
+  background: #eeeeea;
+  color: #63665e;
+}
+
 .status-pill.dirty {
   background: #fff3d6;
   color: #7b5315;
@@ -791,6 +796,11 @@ button {
 
 .metadata .save-state {
   font-weight: 700;
+}
+
+.metadata .save-state.loading {
+  background: #eeeeea;
+  color: #63665e;
 }
 
 .metadata .save-state.dirty {
@@ -1380,6 +1390,7 @@ button {
 }
 
 :root[data-theme="dark"] .status-pill.demo,
+:root[data-theme="dark"] .status-pill.loading,
 :root[data-theme="dark"] .metadata span {
   background: #121614;
   color: #cbd4c8;

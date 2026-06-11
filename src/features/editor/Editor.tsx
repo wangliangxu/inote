@@ -1,4 +1,4 @@
-import type { Note } from '../../shared/types'
+import type { Note, SaveState } from '../../shared/types'
 import { renderMarkdownPreview } from '../../shared/markdownPreview'
 
 interface EditorProps {
@@ -8,7 +8,7 @@ interface EditorProps {
   onCheckExternal?: () => void
   previewMode?: boolean
   onTogglePreview?: () => void
-  saveState?: 'demo' | 'dirty' | 'saving' | 'saved' | 'error'
+  saveState?: SaveState
 }
 
 export function Editor({
@@ -21,6 +21,7 @@ export function Editor({
   saveState = 'demo',
 }: EditorProps) {
   const saveLabel = {
+    loading: 'Loading',
     demo: 'Demo only',
     dirty: 'Unsaved',
     saving: 'Saving',

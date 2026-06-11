@@ -1,5 +1,7 @@
 export type WorkspaceView = 'today' | 'category' | 'tags' | 'calendar' | 'search' | 'settings'
 
+export type SaveState = 'loading' | 'demo' | 'dirty' | 'saving' | 'saved' | 'error'
+
 export interface Note {
   path: string
   title: string

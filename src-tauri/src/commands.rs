@@ -112,6 +112,15 @@ pub fn rebuild_search_index(vault_root: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn scan_vault_and_rebuild_index(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
+    let vault = Vault::new(&vault_root)?;
+    let notes = vault.scan()?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    index.rebuild(&notes)?;
+    Ok(notes)
+}
+
+#[tauri::command]
 pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String> {
     let vault = Vault::new(&input.vault_root)?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;

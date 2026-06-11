@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getEffectiveTheme, isThemePreference } from './theme'
+import { applyInitialTheme, getEffectiveTheme, isThemePreference, readStoredThemePreference } from './theme'
 
 describe('theme helpers', () => {
   it('defaults system preference to the current OS theme', () => {
@@ -17,5 +17,35 @@ describe('theme helpers', () => {
     expect(isThemePreference('light')).toBe(true)
     expect(isThemePreference('dark')).toBe(true)
     expect(isThemePreference('sepia')).toBe(false)
+  })
+
+  it('reads invalid stored theme preferences as system', () => {
+    const storage = new Map<string, string>([['inote.themePreference', 'sepia']])
+    const localStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+    } as Storage
+
+    expect(readStoredThemePreference(localStorage)).toBe('system')
+  })
+
+  it('applies the initial dark theme before React renders', () => {
+    const element = {
+      dataset: {},
+      style: {},
+    } as HTMLElement
+    const storage = new Map<string, string>([['inote.themePreference', 'system']])
+    const localStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+    } as Storage
+
+    applyInitialTheme({
+      element,
+      localStorage,
+      systemPrefersDark: true,
+    })
+
+    expect(element.dataset.theme).toBe('dark')
+    expect(element.dataset.themePreference).toBe('system')
+    expect(element.style.colorScheme).toBe('dark')
   })
 })
