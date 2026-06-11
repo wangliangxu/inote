@@ -2,6 +2,7 @@ pub mod commands;
 pub mod indexer;
 pub mod llm;
 pub mod markdown;
+pub mod menu;
 pub mod settings;
 pub mod vault;
 pub mod watcher;
@@ -9,6 +10,8 @@ pub mod watcher;
 pub fn run() {
     tauri::Builder::default()
         .manage(watcher::WatcherState::default())
+        .menu(menu::build)
+        .on_menu_event(menu::handle_event)
         .invoke_handler(tauri::generate_handler![
             commands::scan_vault,
             commands::rebuild_search_index,

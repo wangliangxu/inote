@@ -1,18 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   Archive,
   Bot,
   CalendarDays,
+  Check,
   FileMinus2,
   FilePlus2,
   FolderPlus,
   FolderTree,
   Eye,
-  Inbox,
+  LayoutGrid,
   Link2,
+  List,
   MoveRight,
+  PanelLeft,
   PanelRight,
   Pencil,
   RefreshCw,
@@ -21,12 +25,11 @@ import {
   Settings,
   Sparkles,
   Tags,
+  Trash2,
 } from 'lucide-react'
 import { CalendarView } from '../features/calendar/CalendarView'
 import { Editor } from '../features/editor/Editor'
-import { Explorer } from '../features/explorer/Explorer'
 import { LlmAssistant } from '../features/llm/LlmAssistant'
-import { SearchPanel } from '../features/search/SearchPanel'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
 import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
@@ -54,11 +57,12 @@ import {
   startVaultWatcher,
   stopVaultWatcher,
 } from '../shared/api'
-import { filterNotesByCategory, getTodayNote, searchNotes, sortByUpdatedDesc } from '../shared/vault'
+import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 
 const LAST_VAULT_KEY = 'inote.lastVaultRoot'
 const LAST_ACTIVE_PATH_KEY = 'inote.activePath'
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
+const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
 const defaultLlmSettings: LlmProviderSettings = {
   providerName: 'OpenAI compatible',
@@ -68,8 +72,27 @@ const defaultLlmSettings: LlmProviderSettings = {
 }
 
 function noteExcerpt(note: Note | SearchResult): string {
-  if ('excerpt' in note) return note.excerpt
-  return note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96)
+  const excerpt = 'excerpt' in note ? note.excerpt : (note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 96))
+  return stripMarkdownForSummary(excerpt)
+}
+
+function stripMarkdownForSummary(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/\|/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function localDateString(date = new Date()): string {
@@ -84,6 +107,12 @@ export function App() {
   const [activeTag, setActiveTag] = useState('')
   const [activePath, setActivePath] = useState(demoNotes[0]?.path ?? '')
   const [query, setQuery] = useState('')
+  const [selectedSearchCategories, setSelectedSearchCategories] = useState<string[]>([])
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false)
+  const [noteListMode, setNoteListMode] = useState<'cards' | 'summary'>('cards')
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true)
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(true)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
   const [vaultRoot, setVaultRoot] = useState('')
   const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
   const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
@@ -93,8 +122,18 @@ export function App() {
   const [linkVersion, setLinkVersion] = useState(0)
   const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(defaultLlmSettings)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const categoryFilterRef = useRef<HTMLDetailsElement>(null)
+  const categoryFilterPointerInsideRef = useRef(false)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
+  const categoryOptions = useMemo(() => groupByCategory(notes), [notes])
+  const searchCategorySet = useMemo(() => new Set(selectedSearchCategories), [selectedSearchCategories])
+  const searchScopeLabel =
+    selectedSearchCategories.length === 0
+      ? 'All categories'
+      : selectedSearchCategories.length === 1
+        ? selectedSearchCategories[0]
+        : `${selectedSearchCategories.length} categories`
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
   const saveLabel = {
     demo: 'Demo only',
@@ -260,12 +299,62 @@ export function App() {
     }
   }, [refreshVaultFromDisk, vaultRoot])
 
+  useEffect(() => {
+    if (!categoryFilterOpen) return
+
+    function closeCategoryFilter(event: PointerEvent) {
+      if (!categoryFilterRef.current?.contains(event.target as Node)) {
+        setCategoryFilterOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', closeCategoryFilter)
+    return () => {
+      window.removeEventListener('pointerdown', closeCategoryFilter)
+    }
+  }, [categoryFilterOpen])
+
+  useEffect(() => {
+    let unlisten: undefined | (() => void)
+    listen(OPEN_SETTINGS_EVENT, () => {
+      setActiveView('settings')
+    })
+      .then((dispose) => {
+        unlisten = dispose
+      })
+      .catch(() => {
+        // Browser-only dev mode has no native application menu.
+      })
+
+    return () => {
+      unlisten?.()
+    }
+  }, [])
+
   const visibleNotes = useMemo(() => {
-    if (activeView === 'search') return vaultRoot.trim() && query.trim() ? indexedResults : searchNotes(notes, query)
+    if (activeView === 'search') {
+      const matchesSearchScope = (note: Pick<Note, 'category'>) =>
+        searchCategorySet.size === 0 ||
+        searchCategorySet.has(note.category) ||
+        Array.from(searchCategorySet).some((category) => note.category.startsWith(`${category}/`))
+      const searchResults = vaultRoot.trim() && query.trim() ? indexedResults : searchNotes(notes, query)
+      return searchResults.filter(matchesSearchScope)
+    }
     if (activeView === 'today') return getTodayNote(notes) ? [getTodayNote(notes)!] : sortByUpdatedDesc(notes).slice(0, 5)
     if (activeView === 'category') return filterNotesByCategory(notes, activeCategory)
     return sortByUpdatedDesc(notes)
-  }, [activeCategory, activeView, indexedResults, notes, query, vaultRoot])
+  }, [activeCategory, activeView, indexedResults, notes, query, searchCategorySet, vaultRoot])
+
+  const visibleNoteGroups = useMemo(() => {
+    const groups = new Map<string, Array<Note | SearchResult>>()
+    for (const note of visibleNotes) {
+      const month = note.createdAt.slice(0, 7)
+      groups.set(month, [...(groups.get(month) ?? []), note])
+    }
+    return Array.from(groups.entries())
+      .map(([month, groupedNotes]) => ({ month, notes: groupedNotes }))
+      .sort((a, b) => b.month.localeCompare(a.month))
+  }, [visibleNotes])
 
   useEffect(() => {
     if (!vaultRoot.trim() || !query.trim()) {
@@ -665,25 +754,52 @@ export function App() {
     }
   }
 
-  async function deleteActiveNote() {
-    if (!activeNote || !vaultRoot.trim()) {
+  async function deleteNoteByPath(path: string) {
+    if (!vaultRoot.trim()) {
       setStatus('Open a real vault before deleting notes.')
       return
     }
-    const confirmed = window.confirm(`Delete ${activeNote.path}?`)
+    const confirmed = window.confirm(`Move ${path} to trash?`)
     if (!confirmed) return
     try {
-      await deleteNote(vaultRoot.trim(), activeNote.path)
+      await deleteNote(vaultRoot.trim(), path)
       await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
-      const remaining = notes.filter((note) => note.path !== activeNote.path)
+      const remaining = notes.filter((note) => note.path !== path)
       setNotes(remaining)
-      setActivePath(remaining[0]?.path ?? '')
+      setActivePath((current) => (current === path ? (remaining[0]?.path ?? '') : current))
       setSaveState('saved')
-      setStatus(`Deleted ${activeNote.path}.`)
+      setStatus(`Moved ${path} to trash.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  async function deleteActiveNote() {
+    if (!activeNote) return
+    await deleteNoteByPath(activeNote.path)
+  }
+
+  function startSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!leftSidebarVisible || event.button !== 0) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = leftSidebarWidth
+
+    function resize(moveEvent: PointerEvent) {
+      const nextWidth = Math.min(560, Math.max(220, startWidth + moveEvent.clientX - startX))
+      setLeftSidebarWidth(nextWidth)
+    }
+
+    function stopResize() {
+      document.body.style.cursor = ''
+      window.removeEventListener('pointermove', resize)
+      window.removeEventListener('pointerup', stopResize)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('pointermove', resize)
+    window.addEventListener('pointerup', stopResize)
   }
 
   async function rebuildIndex() {
@@ -714,11 +830,73 @@ export function App() {
           getCurrentWindow().startDragging().catch(() => {})
         }}
       >
+        <button
+          className={leftSidebarVisible ? 'topbar-icon-button active' : 'topbar-icon-button'}
+          type="button"
+          onClick={() => setLeftSidebarVisible((current) => !current)}
+          title={leftSidebarVisible ? 'Hide left sidebar' : 'Show left sidebar'}
+          aria-label={leftSidebarVisible ? 'Hide left sidebar' : 'Show left sidebar'}
+        >
+          <PanelLeft size={17} />
+        </button>
         <div className="window-brand" aria-label="iNote window">
           <strong>iNote</strong>
           <span>{vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</span>
         </div>
         <div className="command-box window-command">
+          <details
+            ref={categoryFilterRef}
+            className="category-filter"
+            data-no-drag
+            open={categoryFilterOpen}
+            onBlur={(event) => {
+              if (categoryFilterPointerInsideRef.current) return
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setCategoryFilterOpen(false)
+              }
+            }}
+            onPointerDownCapture={() => {
+              categoryFilterPointerInsideRef.current = true
+              window.setTimeout(() => {
+                categoryFilterPointerInsideRef.current = false
+              }, 0)
+            }}
+            onToggle={(event) => setCategoryFilterOpen(event.currentTarget.open)}
+          >
+            <summary title={searchScopeLabel}>{searchScopeLabel}</summary>
+            <div className="category-filter-menu">
+              <label>
+                <input
+                  checked={selectedSearchCategories.length === 0}
+                  type="checkbox"
+                  onChange={() => {
+                    setSelectedSearchCategories([])
+                    setActiveView('search')
+                  }}
+                />
+                <Check className="category-check" size={14} />
+                <span>All categories</span>
+              </label>
+              {categoryOptions.map((category) => (
+                <label key={category.name}>
+                  <input
+                    checked={searchCategorySet.has(category.name)}
+                    type="checkbox"
+                    onChange={(event) => {
+                      setActiveView('search')
+                      setSelectedSearchCategories((current) => {
+                        if (event.target.checked) return [...current, category.name].sort((a, b) => a.localeCompare(b))
+                        return current.filter((name) => name !== category.name)
+                      })
+                    }}
+                  />
+                  <Check className="category-check" size={14} />
+                  <span>{category.name}</span>
+                  <small>{category.count}</small>
+                </label>
+              ))}
+            </div>
+          </details>
           <Search size={17} />
           <input
             aria-label="Search notes"
@@ -739,13 +917,69 @@ export function App() {
             <CalendarDays size={16} />
             <span>Today</span>
           </button>
-          <button type="button" onClick={() => setPreviewMode((current) => !current)} title={previewMode ? 'Edit note' : 'Preview note'}>
+          <button className="icon-action" type="button" onClick={addCategoryNote} title="Create note" aria-label="Create note">
+            <Pencil size={16} />
+          </button>
+          <button className="icon-action" type="button" onClick={addFolder} title="Create folder" aria-label="Create folder">
+            <FolderPlus size={16} />
+          </button>
+          <button
+            className={previewMode ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setPreviewMode((current) => !current)}
+            title={previewMode ? 'Edit note' : 'Preview note'}
+            aria-label={previewMode ? 'Edit note' : 'Preview note'}
+          >
             <Eye size={16} />
-            <span>{previewMode ? 'Edit' : 'Preview'}</span>
           </button>
           <button type="button" onClick={checkExternalActiveNote} title="Check disk version">
             <RefreshCw size={16} />
             <span>Check</span>
+          </button>
+          <button
+            className={activeView === 'category' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setActiveView('category')}
+            title="Categories"
+            aria-label="Open categories"
+          >
+            <FolderTree size={17} />
+          </button>
+          <button
+            className={activeView === 'tags' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setActiveView('tags')}
+            title="Tags"
+            aria-label="Open tags"
+          >
+            <Tags size={17} />
+          </button>
+          <button
+            className={activeView === 'calendar' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setActiveView('calendar')}
+            title="Calendar"
+            aria-label="Open calendar"
+          >
+            <CalendarDays size={17} />
+          </button>
+          <button
+            className={activeView === 'settings' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setActiveView('settings')}
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <Settings size={17} />
+          </button>
+          <button
+            className={rightSidebarVisible ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => setRightSidebarVisible((current) => !current)}
+            title={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+            aria-label={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+          >
+            <PanelRight size={17} />
           </button>
           <button type="button" onClick={saveActiveNote} title="Save note">
             <Save size={16} />
@@ -754,72 +988,133 @@ export function App() {
         </div>
       </header>
 
-      <div className="app-shell">
-        <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">i</span>
-          <div>
-            <h1>iNote</h1>
-            <p>Local Markdown journal</p>
+      <div
+        className="app-shell"
+        style={{
+          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : '0 0'} minmax(0, 1fr) ${
+            rightSidebarVisible ? '336px' : '0'
+          }`,
+        }}
+      >
+        <aside className={leftSidebarVisible ? 'sidebar' : 'sidebar hidden'}>
+          <div className={`note-list ${noteListMode}`}>
+            <div className="list-header">
+              <span>
+                {activeView === 'today'
+                  ? 'Today'
+                  : activeView === 'search'
+                    ? 'Search results'
+                    : activeView === 'category'
+                      ? activeCategory
+                      : 'All notes'}
+              </span>
+              <div className="note-list-tools" aria-label="Note list display mode">
+                <small>{visibleNotes.length}</small>
+                <button
+                  className={noteListMode === 'cards' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setNoteListMode('cards')}
+                  title="Card view"
+                  aria-label="Card view"
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  className={noteListMode === 'summary' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setNoteListMode('summary')}
+                  title="Summary view"
+                  aria-label="Summary view"
+                >
+                  <List size={14} />
+                </button>
+              </div>
+            </div>
+            {visibleNoteGroups.map((group) => (
+              <section className="note-month-group" key={group.month}>
+                <h3>{group.month}</h3>
+                <div className={noteListMode === 'cards' ? 'note-card-grid' : 'note-summary-stack'}>
+                  {group.notes.map((note) =>
+                    noteListMode === 'cards' ? (
+                      <button
+                        key={note.path}
+                        className={note.path === activeNote?.path ? 'note-card active' : 'note-card'}
+                        onClick={() => setActivePath(note.path)}
+                      >
+                        <span className="note-card-surface">
+                          <span className="note-item-actions">
+                            <span
+                              className="note-delete-action"
+                              role="button"
+                              tabIndex={0}
+                              title="Move note to trash"
+                              aria-label="Move note to trash"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                deleteNoteByPath(note.path)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  deleteNoteByPath(note.path)
+                                }
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </span>
+                          </span>
+                          <strong>{note.title}</strong>
+                          <small>{noteExcerpt(note)}</small>
+                        </span>
+                        <time>{note.updatedAt}</time>
+                      </button>
+                    ) : (
+                      <button
+                        key={note.path}
+                        className={note.path === activeNote?.path ? 'note-row active' : 'note-row'}
+                        onClick={() => setActivePath(note.path)}
+                      >
+                        <span className="note-item-actions">
+                          <span
+                            className="note-delete-action"
+                            role="button"
+                            tabIndex={0}
+                            title="Move note to trash"
+                            aria-label="Move note to trash"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              deleteNoteByPath(note.path)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                deleteNoteByPath(note.path)
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </span>
+                        </span>
+                        <strong>{note.title}</strong>
+                        <small>{noteExcerpt(note)}</small>
+                        <time>{note.updatedAt}</time>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </section>
+            ))}
           </div>
-        </div>
-
-        <div className="vault-card">
-          <div>
-            <span className="eyebrow">Vault</span>
-            <strong>{vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</strong>
-          </div>
-          <span>{notes.length}</span>
-        </div>
-
-        <div className="quick-actions">
-          <button type="button" onClick={addInboxNote} title="Create inbox note">
-            <FilePlus2 size={17} />
-          </button>
-          <button type="button" onClick={addTodayNote} title="Open today note">
-            <CalendarDays size={17} />
-          </button>
-          <button type="button" onClick={addCategoryNote} title="Create note">
-            <Pencil size={17} />
-          </button>
-          <button type="button" onClick={addFolder} title="Create folder">
-            <FolderPlus size={17} />
-          </button>
-          <button type="button" onClick={() => setActiveView('search')} title="Search">
-            <Search size={17} />
-          </button>
-        </div>
-
-        <nav className="nav-list" aria-label="Workspace views">
-          <button className={activeView === 'today' ? 'active' : ''} onClick={() => setActiveView('today')}>
-            <Inbox size={18} /> Today
-          </button>
-          <button className={activeView === 'category' ? 'active' : ''} onClick={() => setActiveView('category')}>
-            <FolderTree size={18} /> Categories
-          </button>
-          <button className={activeView === 'tags' ? 'active' : ''} onClick={() => setActiveView('tags')}>
-            <Tags size={18} /> Tags
-          </button>
-          <button className={activeView === 'calendar' ? 'active' : ''} onClick={() => setActiveView('calendar')}>
-            <CalendarDays size={18} /> Calendar
-          </button>
-          <button className={activeView === 'search' ? 'active' : ''} onClick={() => setActiveView('search')}>
-            <Search size={18} /> Search
-          </button>
-          <button className={activeView === 'settings' ? 'active' : ''} onClick={() => setActiveView('settings')}>
-            <Settings size={18} /> Settings
-          </button>
-        </nav>
-
-        <Explorer
-          notes={notes}
-          activeCategory={activeCategory}
-          onSelectCategory={(category) => {
-            setActiveCategory(category)
-            setActiveView('category')
-          }}
-        />
         </aside>
+        <div
+          className={leftSidebarVisible ? 'sidebar-resizer' : 'sidebar-resizer hidden'}
+          onPointerDown={startSidebarResize}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize left sidebar"
+        />
 
         <section className="workspace">
         <header className="workspace-topbar">
@@ -844,14 +1139,6 @@ export function App() {
               setActivePath(path)
             }}
           />
-        ) : activeView === 'search' ? (
-          <SearchPanel
-            query={query}
-            notes={visibleNotes}
-            onQueryChange={setQuery}
-            onSelectNote={setActivePath}
-            backendEnabled={Boolean(vaultRoot.trim())}
-          />
         ) : activeView === 'settings' ? (
           <SettingsPanel
             vaultRoot={vaultRoot}
@@ -869,45 +1156,23 @@ export function App() {
             onRebuildIndex={rebuildIndex}
           />
         ) : (
-          <>
-            <div className="note-list">
-              <div className="list-header">
-                <span>{activeView === 'today' ? 'Today' : activeCategory}</span>
-                <small>{visibleNotes.length}</small>
-              </div>
-              {visibleNotes.map((note) => (
-                <button
-                  key={note.path}
-                  className={note.path === activeNote?.path ? 'note-row active' : 'note-row'}
-                  onClick={() => setActivePath(note.path)}
-                >
-                  <span className="note-row-top">
-                    <strong>{note.title}</strong>
-                    <time>{note.updatedAt}</time>
-                  </span>
-                  <span>{note.path}</span>
-                  <small>{noteExcerpt(note)}</small>
-                </button>
-              ))}
-            </div>
-            {activeNote ? (
-              <Editor
-                note={activeNote}
-                onChange={updateActiveNote}
-                onSave={saveActiveNote}
-                onCheckExternal={checkExternalActiveNote}
-                previewMode={previewMode}
-                onTogglePreview={() => setPreviewMode((current) => !current)}
-                saveState={saveState}
-              />
-            ) : (
-              <div className="empty">No note selected.</div>
-            )}
-          </>
+          activeNote ? (
+            <Editor
+              note={activeNote}
+              onChange={updateActiveNote}
+              onSave={saveActiveNote}
+              onCheckExternal={checkExternalActiveNote}
+              previewMode={previewMode}
+              onTogglePreview={() => setPreviewMode((current) => !current)}
+              saveState={saveState}
+            />
+          ) : (
+            <div className="empty">No note selected.</div>
+          )
         )}
         </section>
 
-        <aside className="context-panel">
+        <aside className={rightSidebarVisible ? 'context-panel' : 'context-panel hidden'}>
         {activeNote ? (
           <>
             <section className="context-section">
@@ -1017,6 +1282,8 @@ export function App() {
 
       <footer className="status-bar">
         <span className={`status-pill ${saveState}`}>{saveLabel}</span>
+        <span>Vault: {vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</span>
+        <span>{notes.length} notes</span>
         <span>{status}</span>
         <span>{activeNote ? activeNote.path : 'No note'}</span>
         <span>{activeNote ? `${activeNote.wordCount} words` : `${totalWords} words total`}</span>
