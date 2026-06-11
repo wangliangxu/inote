@@ -46,6 +46,8 @@ import {
   noteToMarkdown,
   readNote,
   rebuildSearchIndex,
+  loadUserSettings,
+  saveUserSettings,
   scanVault,
   searchIndex,
   writeNote,
@@ -89,6 +91,7 @@ export function App() {
   const [noteLinks, setNoteLinks] = useState<NoteLinks>({ outgoing: [], backlinks: [] })
   const [linkVersion, setLinkVersion] = useState(0)
   const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(defaultLlmSettings)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
@@ -120,24 +123,81 @@ export function App() {
   )
 
   useEffect(() => {
-    const remembered = window.localStorage.getItem(LAST_VAULT_KEY)
-    if (remembered) {
-      setVaultRoot(remembered)
-      setStatus('Last vault path restored. Open it from Settings to refresh notes.')
-    }
-    const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
-    if (savedLlmSettings) {
-      try {
-        setLlmSettings({ ...defaultLlmSettings, ...JSON.parse(savedLlmSettings) })
-      } catch {
-        setStatus('LLM settings could not be loaded. Defaults restored.')
-      }
+    let cancelled = false
+
+    loadUserSettings()
+      .then((savedSettings) => {
+        if (cancelled) return
+        const legacyVaultRoot = window.localStorage.getItem(LAST_VAULT_KEY) ?? ''
+        const vaultRootFromSettings = savedSettings.vaultRoot || legacyVaultRoot
+        if (vaultRootFromSettings) {
+          setVaultRoot(vaultRootFromSettings)
+          setStatus(
+            savedSettings.vaultRoot
+              ? 'Last vault path restored from SQLite. Open it from Settings to refresh notes.'
+              : 'Last vault path migrated from browser fallback. Open it from Settings to refresh notes.',
+          )
+        }
+
+        let llmSettingsFromStorage = savedSettings.llmSettings
+        const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
+        const hasStoredLlmSettings =
+          savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
+          savedSettings.llmSettings.apiBaseUrl !== defaultLlmSettings.apiBaseUrl ||
+          savedSettings.llmSettings.apiKey !== defaultLlmSettings.apiKey ||
+          savedSettings.llmSettings.model !== defaultLlmSettings.model
+        if (!hasStoredLlmSettings && savedLlmSettings) {
+          try {
+            llmSettingsFromStorage = { ...defaultLlmSettings, ...JSON.parse(savedLlmSettings) }
+          } catch {
+            setStatus('LLM settings could not be loaded. Defaults restored.')
+          }
+        }
+        setLlmSettings({ ...defaultLlmSettings, ...llmSettingsFromStorage })
+      })
+      .catch(() => {
+        if (cancelled) return
+        const remembered = window.localStorage.getItem(LAST_VAULT_KEY)
+        if (remembered) {
+          setVaultRoot(remembered)
+          setStatus('Last vault path restored from browser fallback. Open it from Settings to refresh notes.')
+        }
+        const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
+        if (savedLlmSettings) {
+          try {
+            setLlmSettings({ ...defaultLlmSettings, ...JSON.parse(savedLlmSettings) })
+          } catch {
+            setStatus('LLM settings could not be loaded. Defaults restored.')
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSettingsLoaded(true)
+      })
+
+    return () => {
+      cancelled = true
     }
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(llmSettings))
-  }, [llmSettings])
+    if (!settingsLoaded) return
+    const timeout = window.setTimeout(() => {
+      saveUserSettings({ vaultRoot: vaultRoot.trim(), llmSettings })
+        .then(() => {
+          window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
+          window.localStorage.removeItem(LLM_SETTINGS_KEY)
+        })
+        .catch(() => {
+          window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
+          window.localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify({ ...llmSettings, apiKey: '' }))
+        })
+    }, 300)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [llmSettings, settingsLoaded, vaultRoot])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return

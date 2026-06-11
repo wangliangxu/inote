@@ -112,7 +112,7 @@ export function SettingsPanel({
           />
         </label>
         <p className="settings-status">
-          API settings use a localStorage fallback on this machine. System keychain storage is not enabled yet.
+          API keys are encrypted before being stored locally in SQLite. Browser fallback storage never keeps the key.
         </p>
       </div>
     </section>

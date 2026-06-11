@@ -4,11 +4,12 @@ use crate::llm::{
     LlmRequestPreview,
 };
 use crate::markdown::NoteMetadata;
+use crate::settings::{UserSettings, UserSettingsStore};
 use crate::vault::{ArchiveNote, Vault};
 use crate::watcher::WatcherState;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +219,24 @@ pub fn build_llm_request_preview(input: LlmPreviewInput) -> Result<LlmRequestPre
 #[tauri::command]
 pub async fn execute_llm_chat(input: LlmChatInput) -> Result<LlmChatResponse, String> {
     send_chat_request(&input.settings, &input.prompt, &input.context).await
+}
+
+#[tauri::command]
+pub fn load_user_settings(app: AppHandle) -> Result<UserSettings, String> {
+    UserSettingsStore::open(settings_db_path(&app)?)?.load()
+}
+
+#[tauri::command]
+pub fn save_user_settings(app: AppHandle, settings: UserSettings) -> Result<(), String> {
+    UserSettingsStore::open(settings_db_path(&app)?)?.save(&settings)
+}
+
+fn settings_db_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data folder: {error}"))?
+        .join("settings.sqlite3"))
 }
 
 #[cfg(test)]

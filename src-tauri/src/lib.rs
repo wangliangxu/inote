@@ -2,6 +2,7 @@ pub mod commands;
 pub mod indexer;
 pub mod llm;
 pub mod markdown;
+pub mod settings;
 pub mod vault;
 pub mod watcher;
 
@@ -27,6 +28,8 @@ pub fn run() {
             commands::move_note,
             commands::archive_note,
             commands::delete_note,
+            commands::load_user_settings,
+            commands::save_user_settings,
             commands::build_llm_request_preview,
             commands::execute_llm_chat
         ])

@@ -59,6 +59,11 @@ export interface LlmProviderSettings {
   model: string
 }
 
+export interface UserSettings {
+  vaultRoot: string
+  llmSettings: LlmProviderSettings
+}
+
 export interface LlmChatResponse {
   content: string
 }
