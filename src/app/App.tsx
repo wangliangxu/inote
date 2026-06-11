@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -33,6 +33,7 @@ import { LlmAssistant } from '../features/llm/LlmAssistant'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
 import { TagsPanel } from '../features/tags/TagsPanel'
 import { demoNotes } from '../shared/fixtures'
+import { getEffectiveTheme, isThemePreference, type ThemePreference } from '../shared/theme'
 import type { LlmProviderSettings, Note, NoteLinks, SearchResult, WorkspaceView } from '../shared/types'
 import {
   archiveNote,
@@ -62,6 +63,7 @@ import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sort
 const LAST_VAULT_KEY = 'inote.lastVaultRoot'
 const LAST_ACTIVE_PATH_KEY = 'inote.activePath'
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
+const THEME_PREFERENCE_KEY = 'inote.themePreference'
 const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
 const defaultLlmSettings: LlmProviderSettings = {
@@ -113,6 +115,7 @@ export function App() {
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(true)
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [vaultRoot, setVaultRoot] = useState('')
   const [status, setStatus] = useState('Demo vault loaded. Enter a local path in Settings to open real notes.')
   const [saveState, setSaveState] = useState<'demo' | 'dirty' | 'saving' | 'saved' | 'error'>('demo')
@@ -122,10 +125,20 @@ export function App() {
   const [linkVersion, setLinkVersion] = useState(0)
   const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(defaultLlmSettings)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    if (typeof window === 'undefined') return 'system'
+    const savedThemePreference = window.localStorage.getItem(THEME_PREFERENCE_KEY)
+    return isThemePreference(savedThemePreference) ? savedThemePreference : 'system'
+  })
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const categoryFilterRef = useRef<HTMLDetailsElement>(null)
   const categoryFilterPointerInsideRef = useRef(false)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
+  const effectiveTheme = useMemo(() => getEffectiveTheme(themePreference, systemPrefersDark), [systemPrefersDark, themePreference])
   const categoryOptions = useMemo(() => groupByCategory(notes), [notes])
   const searchCategorySet = useMemo(() => new Set(selectedSearchCategories), [selectedSearchCategories])
   const searchScopeLabel =
@@ -142,6 +155,26 @@ export function App() {
     saved: 'Saved',
     error: 'Save failed',
   }[saveState]
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateSystemTheme = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches)
+    }
+
+    setSystemPrefersDark(query.matches)
+    query.addEventListener('change', updateSystemTheme)
+    return () => {
+      query.removeEventListener('change', updateSystemTheme)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    window.localStorage.setItem(THEME_PREFERENCE_KEY, themePreference)
+    document.documentElement.dataset.theme = effectiveTheme
+    document.documentElement.dataset.themePreference = themePreference
+    document.documentElement.style.colorScheme = effectiveTheme
+  }, [effectiveTheme, themePreference])
 
   const loadVaultFromDisk = useCallback(
     async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
@@ -315,9 +348,24 @@ export function App() {
   }, [categoryFilterOpen])
 
   useEffect(() => {
+    if (!settingsOpen) return
+
+    function closeSettings(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSettingsOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', closeSettings)
+    return () => {
+      window.removeEventListener('keydown', closeSettings)
+    }
+  }, [settingsOpen])
+
+  useEffect(() => {
     let unlisten: undefined | (() => void)
     listen(OPEN_SETTINGS_EVENT, () => {
-      setActiveView('settings')
+      setSettingsOpen(true)
     })
       .then((dispose) => {
         unlisten = dispose
@@ -820,7 +868,7 @@ export function App() {
   }
 
   return (
-    <main className="app-frame">
+    <main className="app-frame" data-theme={effectiveTheme}>
       <header
         className="window-topbar"
         onMouseDown={(e) => {
@@ -964,9 +1012,9 @@ export function App() {
             <CalendarDays size={17} />
           </button>
           <button
-            className={activeView === 'settings' ? 'icon-action active' : 'icon-action'}
+            className={settingsOpen ? 'icon-action active' : 'icon-action'}
             type="button"
-            onClick={() => setActiveView('settings')}
+            onClick={() => setSettingsOpen(true)}
             title="Settings"
             aria-label="Open settings"
           >
@@ -1139,22 +1187,6 @@ export function App() {
               setActivePath(path)
             }}
           />
-        ) : activeView === 'settings' ? (
-          <SettingsPanel
-            vaultRoot={vaultRoot}
-            status={status}
-            llmSettings={llmSettings}
-            onVaultRootChange={setVaultRoot}
-            onLlmSettingsChange={setLlmSettings}
-            onOpenVault={openVault}
-            onInitializeVault={initVault}
-            onCreateToday={addTodayNote}
-            onCreateInbox={addInboxNote}
-            onCreateWeeklyReview={addWeeklyReview}
-            onCreateMonthlyReview={addMonthlyReview}
-            onCreateFolder={addFolder}
-            onRebuildIndex={rebuildIndex}
-          />
         ) : (
           activeNote ? (
             <Editor
@@ -1279,6 +1311,38 @@ export function App() {
         ) : null}
         </aside>
       </div>
+
+      {settingsOpen ? (
+        <div className="settings-window-backdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+          <div
+            className="settings-window"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <SettingsPanel
+              vaultRoot={vaultRoot}
+              status={status}
+              llmSettings={llmSettings}
+              themePreference={themePreference}
+              effectiveTheme={effectiveTheme}
+              onVaultRootChange={setVaultRoot}
+              onLlmSettingsChange={setLlmSettings}
+              onThemePreferenceChange={setThemePreference}
+              onOpenVault={openVault}
+              onInitializeVault={initVault}
+              onCreateToday={addTodayNote}
+              onCreateInbox={addInboxNote}
+              onCreateWeeklyReview={addWeeklyReview}
+              onCreateMonthlyReview={addMonthlyReview}
+              onCreateFolder={addFolder}
+              onRebuildIndex={rebuildIndex}
+              onClose={() => setSettingsOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <footer className="status-bar">
         <span className={`status-pill ${saveState}`}>{saveLabel}</span>

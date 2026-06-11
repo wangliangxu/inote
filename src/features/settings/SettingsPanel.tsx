@@ -1,11 +1,15 @@
 import type { LlmProviderSettings } from '../../shared/types'
+import type { EffectiveTheme, ThemePreference } from '../../shared/theme'
 
 interface SettingsPanelProps {
   vaultRoot: string
   status: string
   llmSettings: LlmProviderSettings
+  themePreference: ThemePreference
+  effectiveTheme: EffectiveTheme
   onVaultRootChange: (path: string) => void
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
+  onThemePreferenceChange: (preference: ThemePreference) => void
   onOpenVault: () => void
   onInitializeVault: () => void
   onCreateToday: () => void
@@ -14,14 +18,18 @@ interface SettingsPanelProps {
   onCreateMonthlyReview: () => void
   onCreateFolder: () => void
   onRebuildIndex: () => void
+  onClose: () => void
 }
 
 export function SettingsPanel({
   vaultRoot,
   status,
   llmSettings,
+  themePreference,
+  effectiveTheme,
   onVaultRootChange,
   onLlmSettingsChange,
+  onThemePreferenceChange,
   onOpenVault,
   onInitializeVault,
   onCreateToday,
@@ -30,6 +38,7 @@ export function SettingsPanel({
   onCreateMonthlyReview,
   onCreateFolder,
   onRebuildIndex,
+  onClose,
 }: SettingsPanelProps) {
   function updateLlmSettings(patch: Partial<LlmProviderSettings>) {
     onLlmSettingsChange({ ...llmSettings, ...patch })
@@ -37,8 +46,25 @@ export function SettingsPanel({
 
   return (
     <section className="settings-panel">
-      <h2>Settings</h2>
+      <header className="settings-window-header">
+        <h2>Settings</h2>
+        <button className="settings-close-button" type="button" onClick={onClose} aria-label="Close settings">
+          x
+        </button>
+      </header>
       <div className="setting-box">
+        <label>
+          Theme
+          <select
+            className="setting-input"
+            value={themePreference}
+            onChange={(event) => onThemePreferenceChange(event.target.value as ThemePreference)}
+          >
+            <option value="system">Follow system ({effectiveTheme})</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
         <label>
           Vault path
           <input
