@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   Archive,
   Bot,
@@ -8,11 +9,14 @@ import {
   FilePlus2,
   FolderPlus,
   FolderTree,
+  Eye,
   Inbox,
   Link2,
   MoveRight,
   PanelRight,
   Pencil,
+  RefreshCw,
+  Save,
   Search,
   Settings,
   Sparkles,
@@ -88,6 +92,13 @@ export function App() {
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
+  const saveLabel = {
+    demo: 'Demo only',
+    dirty: 'Unsaved changes',
+    saving: 'Saving',
+    saved: 'Saved',
+    error: 'Save failed',
+  }[saveState]
 
   const refreshVaultFromDisk = useCallback(
     async (reason = 'Vault refreshed from disk.') => {
@@ -602,8 +613,58 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
+    <main className="app-frame">
+      <header
+        className="window-topbar"
+        onMouseDown={(e) => {
+          if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return
+          if (e.button !== 0) return
+          e.preventDefault()
+          getCurrentWindow().startDragging().catch(() => {})
+        }}
+      >
+        <div className="window-brand" aria-label="iNote window">
+          <strong>iNote</strong>
+          <span>{vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</span>
+        </div>
+        <div className="command-box window-command">
+          <Search size={17} />
+          <input
+            aria-label="Search notes"
+            placeholder="Search notes"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setActiveView('search')
+            }}
+          />
+        </div>
+        <div className="window-actions" aria-label="Window actions">
+          <button type="button" onClick={addInboxNote} title="New inbox note">
+            <FilePlus2 size={16} />
+            <span>Inbox</span>
+          </button>
+          <button type="button" onClick={addTodayNote} title="Open today note">
+            <CalendarDays size={16} />
+            <span>Today</span>
+          </button>
+          <button type="button" onClick={() => setPreviewMode((current) => !current)} title={previewMode ? 'Edit note' : 'Preview note'}>
+            <Eye size={16} />
+            <span>{previewMode ? 'Edit' : 'Preview'}</span>
+          </button>
+          <button type="button" onClick={checkExternalActiveNote} title="Check disk version">
+            <RefreshCw size={16} />
+            <span>Check</span>
+          </button>
+          <button type="button" onClick={saveActiveNote} title="Save note">
+            <Save size={16} />
+            <span>Save</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="app-shell">
+        <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">i</span>
           <div>
@@ -667,21 +728,13 @@ export function App() {
             setActiveView('category')
           }}
         />
-      </aside>
+        </aside>
 
-      <section className="workspace">
+        <section className="workspace">
         <header className="workspace-topbar">
-          <div className="command-box">
-            <Search size={17} />
-            <input
-              aria-label="Search notes"
-              placeholder="Search notes"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setActiveView('search')
-              }}
-            />
+          <div className="workspace-title">
+            <span className="eyebrow">{activeView}</span>
+            <strong>{activeNote?.title ?? 'No note selected'}</strong>
           </div>
           <div className="workspace-stats">
             <span>{notes.length} notes</span>
@@ -761,9 +814,9 @@ export function App() {
             )}
           </>
         )}
-      </section>
+        </section>
 
-      <aside className="context-panel">
+        <aside className="context-panel">
         {activeNote ? (
           <>
             <section className="context-section">
@@ -868,7 +921,15 @@ export function App() {
             </section>
           </>
         ) : null}
-      </aside>
+        </aside>
+      </div>
+
+      <footer className="status-bar">
+        <span className={`status-pill ${saveState}`}>{saveLabel}</span>
+        <span>{status}</span>
+        <span>{activeNote ? activeNote.path : 'No note'}</span>
+        <span>{activeNote ? `${activeNote.wordCount} words` : `${totalWords} words total`}</span>
+      </footer>
     </main>
   )
 }
