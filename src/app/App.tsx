@@ -57,6 +57,7 @@ import {
 import { filterNotesByCategory, getTodayNote, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 
 const LAST_VAULT_KEY = 'inote.lastVaultRoot'
+const LAST_ACTIVE_PATH_KEY = 'inote.activePath'
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
 
 const defaultLlmSettings: LlmProviderSettings = {
@@ -103,40 +104,46 @@ export function App() {
     error: 'Save failed',
   }[saveState]
 
-  const refreshVaultFromDisk = useCallback(
-    async (reason = 'Vault refreshed from disk.') => {
-      if (!vaultRoot.trim()) return
-      const loadedNotes = await scanVault(vaultRoot.trim())
-      await rebuildSearchIndex(vaultRoot.trim())
+  const loadVaultFromDisk = useCallback(
+    async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
+      const trimmedRoot = root.trim()
+      if (!trimmedRoot) return
+      const loadedNotes = await scanVault(trimmedRoot)
+      await rebuildSearchIndex(trimmedRoot)
       setNotes(loadedNotes)
       setLinkVersion((current) => current + 1)
       setActivePath((current) => {
+        if (preferredPath && loadedNotes.some((note) => note.path === preferredPath)) return preferredPath
         if (loadedNotes.some((note) => note.path === current)) return current
         return loadedNotes[0]?.path ?? ''
       })
       if (query.trim()) {
-        setIndexedResults(await searchIndex({ vaultRoot: vaultRoot.trim(), query }))
+        setIndexedResults(await searchIndex({ vaultRoot: trimmedRoot, query }))
       }
+      setSaveState('saved')
       setStatus(reason)
     },
-    [query, vaultRoot],
+    [query],
+  )
+
+  const refreshVaultFromDisk = useCallback(
+    async (reason = 'Vault refreshed from disk.') => {
+      await loadVaultFromDisk(vaultRoot, reason)
+    },
+    [loadVaultFromDisk, vaultRoot],
   )
 
   useEffect(() => {
     let cancelled = false
 
     loadUserSettings()
-      .then((savedSettings) => {
+      .then(async (savedSettings) => {
         if (cancelled) return
         const legacyVaultRoot = window.localStorage.getItem(LAST_VAULT_KEY) ?? ''
+        const legacyActivePath = window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? ''
         const vaultRootFromSettings = savedSettings.vaultRoot || legacyVaultRoot
         if (vaultRootFromSettings) {
           setVaultRoot(vaultRootFromSettings)
-          setStatus(
-            savedSettings.vaultRoot
-              ? 'Last vault path restored from SQLite. Open it from Settings to refresh notes.'
-              : 'Last vault path migrated from browser fallback. Open it from Settings to refresh notes.',
-          )
         }
 
         let llmSettingsFromStorage = savedSettings.llmSettings
@@ -154,13 +161,34 @@ export function App() {
           }
         }
         setLlmSettings({ ...defaultLlmSettings, ...llmSettingsFromStorage })
+        if (vaultRootFromSettings) {
+          try {
+            await loadVaultFromDisk(
+              vaultRootFromSettings,
+              savedSettings.vaultRoot
+                ? 'Last vault restored from SQLite.'
+                : 'Last vault migrated from browser fallback.',
+              savedSettings.activePath || legacyActivePath,
+            )
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : String(error))
+          }
+        }
       })
-      .catch(() => {
+      .catch(async () => {
         if (cancelled) return
         const remembered = window.localStorage.getItem(LAST_VAULT_KEY)
         if (remembered) {
           setVaultRoot(remembered)
-          setStatus('Last vault path restored from browser fallback. Open it from Settings to refresh notes.')
+          try {
+            await loadVaultFromDisk(
+              remembered,
+              'Last vault restored from browser fallback.',
+              window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? '',
+            )
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : String(error))
+          }
         }
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         if (savedLlmSettings) {
@@ -178,18 +206,21 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadVaultFromDisk])
 
   useEffect(() => {
     if (!settingsLoaded) return
     const timeout = window.setTimeout(() => {
-      saveUserSettings({ vaultRoot: vaultRoot.trim(), llmSettings })
+      const activePathForStorage = vaultRoot.trim() ? activePath : ''
+      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, llmSettings })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
+          window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
           window.localStorage.removeItem(LLM_SETTINGS_KEY)
         })
         .catch(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
+          window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
           window.localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify({ ...llmSettings, apiKey: '' }))
         })
     }, 300)
@@ -197,7 +228,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [llmSettings, settingsLoaded, vaultRoot])
+  }, [activePath, llmSettings, settingsLoaded, vaultRoot])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return

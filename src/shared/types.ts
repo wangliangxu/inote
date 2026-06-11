@@ -61,6 +61,7 @@ export interface LlmProviderSettings {
 
 export interface UserSettings {
   vaultRoot: string
+  activePath: string
   llmSettings: LlmProviderSettings
 }
 

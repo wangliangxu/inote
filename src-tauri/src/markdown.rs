@@ -22,6 +22,8 @@ struct Frontmatter {
     title: Option<String>,
     category: Option<String>,
     tags: Option<Vec<String>>,
+    created: Option<String>,
+    updated: Option<String>,
     created_at: Option<String>,
     updated_at: Option<String>,
     summary: Option<String>,
@@ -43,9 +45,13 @@ pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
         .unwrap_or_else(|| title_from_path(&relative_path));
     let created_at = parsed
         .created_at
+        .or(parsed.created)
         .or_else(|| date_from_filename(&relative_path))
         .unwrap_or_else(|| file_date(path));
-    let updated_at = parsed.updated_at.unwrap_or_else(|| file_date(path));
+    let updated_at = parsed
+        .updated_at
+        .or(parsed.updated)
+        .unwrap_or_else(|| file_date(path));
     let word_count = count_words(&body);
 
     Ok(NoteMetadata {
@@ -213,6 +219,23 @@ mod tests {
         assert_eq!(note.updated_at, "2026-06-09");
         assert_eq!(note.summary, Some("Desktop shell".to_string()));
         assert!(note.body.contains("Body text here."));
+    }
+
+    #[test]
+    fn parses_created_and_updated_frontmatter_aliases() {
+        let dir = tempdir().unwrap();
+        let note_path = dir.path().join("knowledge/rust/aliases.md");
+        fs::create_dir_all(note_path.parent().unwrap()).unwrap();
+        fs::write(
+            &note_path,
+            "---\ntitle: Alias Dates\ncreated: 2026-06-07\nupdated: 2026-06-11\n---\n\nBody.",
+        )
+        .unwrap();
+
+        let note = parse_note(dir.path(), &note_path).unwrap();
+
+        assert_eq!(note.created_at, "2026-06-07");
+        assert_eq!(note.updated_at, "2026-06-11");
     }
 
     #[test]

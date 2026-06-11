@@ -12,6 +12,7 @@ const ENCRYPTED_SECRET_PREFIX: &str = "enc:v1:";
 #[serde(rename_all = "camelCase")]
 pub struct UserSettings {
     pub vault_root: String,
+    pub active_path: String,
     pub llm_settings: LlmProviderSettings,
 }
 
@@ -19,6 +20,7 @@ impl Default for UserSettings {
     fn default() -> Self {
         Self {
             vault_root: String::new(),
+            active_path: String::new(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.openai.com/v1".to_string(),
@@ -55,6 +57,9 @@ impl UserSettingsStore {
         if let Some(vault_root) = self.get_value("vault_root")? {
             settings.vault_root = vault_root;
         }
+        if let Some(active_path) = self.get_value("active_path")? {
+            settings.active_path = active_path;
+        }
 
         if let Some(llm_settings) = self.get_value("llm_settings")? {
             let mut llm_settings: LlmProviderSettings = serde_json::from_str(&llm_settings)
@@ -68,6 +73,7 @@ impl UserSettingsStore {
 
     pub fn save(&self, settings: &UserSettings) -> Result<(), String> {
         self.set_value("vault_root", &settings.vault_root)?;
+        self.set_value("active_path", &settings.active_path)?;
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
         let llm_settings = serde_json::to_string(&llm_settings)
@@ -254,6 +260,7 @@ mod tests {
 
         let settings = UserSettings {
             vault_root: "/Users/example/Notes".to_string(),
+            active_path: "knowledge/current.md".to_string(),
             llm_settings: LlmProviderSettings {
                 provider_name: "Local".to_string(),
                 api_base_url: "http://localhost:11434/v1".to_string(),
@@ -276,6 +283,7 @@ mod tests {
 
         let settings = UserSettings {
             vault_root: "/Users/example/Notes".to_string(),
+            active_path: "knowledge/current.md".to_string(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.example.com/v1".to_string(),
