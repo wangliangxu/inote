@@ -1,4 +1,13 @@
 :root {
+  --font-size-base: 16px;
+  --font-size-24: calc(var(--font-size-base) * 1.5);
+  --font-size-20: calc(var(--font-size-base) * 1.25);
+  --font-size-17: calc(var(--font-size-base) * 1.0625);
+  --font-size-14: calc(var(--font-size-base) * 0.875);
+  --font-size-13: calc(var(--font-size-base) * 0.8125);
+  --font-size-12: calc(var(--font-size-base) * 0.75);
+  --font-size-11: calc(var(--font-size-base) * 0.6875);
+
   color: #1f2428;
   background: #f5f5f2;
   color-scheme: light;
@@ -16,6 +25,10 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-base);
 }
 
 html,
@@ -116,12 +129,12 @@ button {
 
 .window-brand strong {
   color: #1d302c;
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .window-brand span:last-child {
   color: #73756c;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -148,7 +161,7 @@ button {
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 700;
   gap: 6px;
   min-height: 32px;
@@ -176,7 +189,7 @@ button {
   background: #ecece7;
   border-top: 1px solid #d1d1c8;
   color: #666a61;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   gap: 12px;
   min-height: 28px;
   padding: 5px 12px;
@@ -285,7 +298,7 @@ button {
 
 .eyebrow {
   color: #73756c;
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .secondary-action,
@@ -308,7 +321,7 @@ button {
   color: #73756c;
   display: flex;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   letter-spacing: 0;
   margin: 18px 0 8px;
@@ -345,7 +358,7 @@ button {
 }
 
 .workspace-title strong {
-  font-size: 14px;
+  font-size: var(--font-size-14);
   line-height: 1.2;
   max-width: 52vw;
   overflow: hidden;
@@ -377,7 +390,7 @@ button {
   color: inherit;
   cursor: pointer;
   display: flex;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   gap: 6px;
   list-style: none;
@@ -429,7 +442,7 @@ button {
   color: #27332f;
   cursor: pointer;
   display: grid;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   gap: 8px;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   min-height: 30px;
@@ -478,7 +491,7 @@ button {
   color: #73756c;
   display: flex;
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   gap: 10px;
   white-space: nowrap;
 }
@@ -506,7 +519,7 @@ button {
   align-items: center;
   color: #73756c;
   display: flex;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   text-transform: uppercase;
   flex-shrink: 0;
@@ -554,7 +567,7 @@ button {
 
 .note-month-header h3 {
   color: #626960;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   letter-spacing: 0;
   margin: 0;
@@ -562,7 +575,7 @@ button {
 
 .note-month-header small {
   color: #8c9085;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 700;
 }
 
@@ -595,7 +608,7 @@ button {
 }
 
 .note-row strong {
-  font-size: 13px;
+  font-size: var(--font-size-13);
   line-height: 1.25;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -607,7 +620,7 @@ button {
 .result-item span,
 .result-item time {
   color: #73756c;
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .note-row small {
@@ -669,7 +682,7 @@ button {
 .note-card strong {
   color: #23312d;
   display: -webkit-box;
-  font-size: 14px;
+  font-size: var(--font-size-14);
   line-height: 1.25;
   overflow: hidden;
   padding-right: 24px;
@@ -680,7 +693,7 @@ button {
 .note-card small {
   color: #687067;
   display: -webkit-box;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.4;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -689,7 +702,7 @@ button {
 
 .note-card time {
   color: #73756c;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-variant-numeric: tabular-nums;
   margin-top: auto;
   padding: 0 2px;
@@ -770,10 +783,19 @@ button {
 }
 
 .editor-header h2 {
-  font-size: 24px;
+  font-size: var(--font-size-24);
   line-height: 1.18;
   margin: 2px 0 0;
   overflow-wrap: anywhere;
+}
+
+.mdx-editor-wrapper .prose {
+  line-height: 1.8;
+}
+
+.mdx-editor-wrapper .prose p,
+.mdx-editor-wrapper .prose li {
+  line-height: 1.8;
 }
 
 .mdx-editor-wrapper .prose img {
@@ -802,7 +824,7 @@ button {
   color: #73756c;
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   gap: 8px;
 }
 
@@ -959,7 +981,7 @@ button {
 }
 
 .settings-window-header h2 {
-  font-size: 20px;
+  font-size: var(--font-size-20);
   margin: 0;
 }
 
@@ -971,7 +993,7 @@ button {
   color: #263f3b;
   cursor: pointer;
   display: inline-flex;
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 800;
   height: 30px;
   justify-content: center;
@@ -1038,7 +1060,7 @@ button {
 .panel-heading span,
 .month-title span {
   color: #73756c;
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .search-input,
@@ -1083,12 +1105,12 @@ button {
 
 .settings-status {
   color: #73756c;
-  font-size: 13px;
+  font-size: var(--font-size-13);
   margin: 0 0 16px;
 }
 
 .context-section h3 {
-  font-size: 17px;
+  font-size: var(--font-size-17);
   line-height: 1.25;
   margin: 0 0 12px;
   overflow-wrap: anywhere;
@@ -1106,14 +1128,14 @@ button {
 
 .note-facts dt {
   color: #73756c;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   margin-bottom: 2px;
   text-transform: uppercase;
 }
 
 .note-facts dd {
-  font-size: 12px;
+  font-size: var(--font-size-12);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -1133,7 +1155,7 @@ button {
 
 .metadata-editor span {
   color: #73756c;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1173,13 +1195,13 @@ button {
   background: #e4e8df;
   border-radius: 999px;
   color: #31433b;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   padding: 5px 8px;
 }
 
 .summary-text {
   color: #4f554f;
-  font-size: 13px;
+  font-size: var(--font-size-13);
   line-height: 1.5;
   margin: 0;
 }
@@ -1192,7 +1214,7 @@ button {
 
 .link-group h4 {
   color: #73756c;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   margin: 0;
   text-transform: uppercase;
 }
@@ -1221,13 +1243,13 @@ button {
 }
 
 .link-group strong {
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .link-group span,
 .link-group p {
   color: #73756c;
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .link-group p {
@@ -1257,7 +1279,7 @@ button {
   border: 1px solid #d7d7cf;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-12);
   padding: 7px 6px;
 }
 
@@ -1282,7 +1304,7 @@ button {
   border: 1px solid #dfdfd7;
   border-radius: 8px;
   color: #4f554f;
-  font-size: 11px;
+  font-size: var(--font-size-11);
   line-height: 1.4;
   margin: 8px 0 0;
   max-height: 150px;

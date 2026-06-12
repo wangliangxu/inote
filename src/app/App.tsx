@@ -76,6 +76,7 @@ async function safeConfirm(message: string): Promise<boolean> {
 }
 
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
+const BASE_FONT_SIZE_KEY = 'inote.baseFontSize'
 const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
 const defaultLlmSettings: LlmProviderSettings = {
@@ -208,6 +209,11 @@ export function App() {
     if (typeof window === 'undefined') return 'system'
     return readStoredThemePreference(window.localStorage)
   })
+  const [baseFontSize, setBaseFontSize] = useState<number>(() => {
+    if (typeof window === 'undefined') return 16
+    const stored = window.localStorage.getItem(BASE_FONT_SIZE_KEY)
+    return stored ? parseInt(stored, 10) : 16
+  })
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -251,10 +257,12 @@ export function App() {
 
   useLayoutEffect(() => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, themePreference)
+    window.localStorage.setItem(BASE_FONT_SIZE_KEY, baseFontSize.toString())
     document.documentElement.dataset.theme = effectiveTheme
     document.documentElement.dataset.themePreference = themePreference
     document.documentElement.style.colorScheme = effectiveTheme
-  }, [effectiveTheme, themePreference])
+    document.documentElement.style.setProperty('--font-size-base', `${baseFontSize}px`)
+  }, [effectiveTheme, themePreference, baseFontSize])
 
   const loadVaultFromDisk = useCallback(
     async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
@@ -1391,9 +1399,11 @@ export function App() {
                 llmSettings={llmSettings}
                 themePreference={themePreference}
                 effectiveTheme={effectiveTheme}
+                baseFontSize={baseFontSize}
                 onVaultRootChange={setVaultRoot}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}
+                onBaseFontSizeChange={setBaseFontSize}
                 onOpenVault={openVault}
                 onInitializeVault={initVault}
                 onCreateToday={addTodayNote}

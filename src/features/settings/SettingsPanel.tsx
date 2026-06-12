@@ -7,9 +7,11 @@ interface SettingsPanelProps {
   llmSettings: LlmProviderSettings
   themePreference: ThemePreference
   effectiveTheme: EffectiveTheme
+  baseFontSize: number
   onVaultRootChange: (path: string) => void
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onThemePreferenceChange: (preference: ThemePreference) => void
+  onBaseFontSizeChange: (size: number) => void
   onOpenVault: () => void
   onInitializeVault: () => void
   onCreateToday: () => void
@@ -27,9 +29,11 @@ export function SettingsPanel({
   llmSettings,
   themePreference,
   effectiveTheme,
+  baseFontSize,
   onVaultRootChange,
   onLlmSettingsChange,
   onThemePreferenceChange,
+  onBaseFontSizeChange,
   onOpenVault,
   onInitializeVault,
   onCreateToday,
@@ -63,6 +67,19 @@ export function SettingsPanel({
             <option value="system">Follow system ({effectiveTheme})</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label>
+          Font size
+          <select
+            className="setting-input"
+            value={baseFontSize}
+            onChange={(event) => onBaseFontSizeChange(Number(event.target.value))}
+          >
+            <option value={14}>Small</option>
+            <option value={16}>Medium</option>
+            <option value={18}>Large</option>
+            <option value={20}>Extra Large</option>
           </select>
         </label>
         <label>
