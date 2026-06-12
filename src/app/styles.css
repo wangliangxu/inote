@@ -776,6 +776,12 @@ button {
   overflow-wrap: anywhere;
 }
 
+.mdx-editor-wrapper .prose img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
 .secondary-action {
   background: #fff;
   border: 1px solid #c8cec3;

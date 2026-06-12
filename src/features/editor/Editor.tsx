@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from 'react'
 import type { Note, SaveState } from '../../shared/types'
 import { noteToMarkdown } from '../../shared/api'
+import { convertFileSrc } from '@tauri-apps/api/core'
+import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { Eye, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
   MDXEditor,
@@ -32,6 +34,7 @@ import {
 import '@mdxeditor/editor/style.css'
 
 interface EditorProps {
+  vaultRoot?: string
   note: Note
   onChange: (body: string) => void
   onSave?: () => void
@@ -43,6 +46,7 @@ interface EditorProps {
 }
 
 export function Editor({
+  vaultRoot = '',
   note,
   onChange,
   onSave,
@@ -104,6 +108,9 @@ export function Editor({
           reader.onerror = reject
           reader.readAsDataURL(image)
         })
+      },
+      imagePreviewHandler: async (src: string) => {
+        return toMarkdownImagePreviewSrc(vaultRoot, note.path, src, convertFileSrc)
       }
     }),
     codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
@@ -126,7 +133,7 @@ export function Editor({
         </DiffSourceToggleWrapper>
       )
     })
-  ], [note.path, isDark])
+  ], [note.path, vaultRoot, isDark])
 
   return (
     <article className="editor">

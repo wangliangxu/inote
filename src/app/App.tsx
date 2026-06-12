@@ -1249,6 +1249,7 @@ export function App() {
           ) : (
             activeNote ? (
               <Editor
+                vaultRoot={vaultRoot.trim()}
                 note={activeNote}
                 onChange={updateActiveNote}
                 onSave={saveActiveNote}

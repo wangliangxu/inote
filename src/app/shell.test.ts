@@ -30,4 +30,21 @@ describe('startup shell', () => {
     expect(lib).toContain('PageLoadEvent::Finished')
     expect(lib).toContain('webview.window().show()')
   })
+
+  it('keeps markdown images within the editor content width', () => {
+    const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
+
+    expect(styles).toContain('.mdx-editor-wrapper .prose img')
+    expect(styles).toContain('max-width: 100%')
+    expect(styles).toContain('height: auto')
+  })
+
+  it('enables the Tauri asset protocol for local markdown images', () => {
+    const config = JSON.parse(readFileSync(resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'))
+
+    expect(config.app.security.assetProtocol).toMatchObject({
+      enable: true,
+      scope: expect.arrayContaining(['$HOME/**']),
+    })
+  })
 })
