@@ -321,7 +321,7 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -781,6 +781,15 @@ button {
   border: 1px solid #c8cec3;
   color: #244a40;
   padding: 8px 11px;
+}
+
+.secondary-action.icon-action {
+  padding: 8px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .metadata {

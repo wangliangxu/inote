@@ -1,5 +1,6 @@
 import type { Note, SaveState } from '../../shared/types'
 import { renderMarkdownPreview } from '../../shared/markdownPreview'
+import { Eye, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
 
 interface EditorProps {
   note: Note
@@ -36,32 +37,31 @@ export function Editor({
       <header className="editor-header">
         <div className="editor-title-row">
           <div>
-            <span className="eyebrow">{note.category}</span>
             <h2>{note.title}</h2>
           </div>
           <div className="editor-actions">
             {onTogglePreview ? (
-              <button className="secondary-action" type="button" onClick={onTogglePreview}>
-                {previewMode ? 'Edit' : 'Preview'}
+              <button className="secondary-action icon-action" type="button" onClick={onTogglePreview} title={previewMode ? 'Edit' : 'Preview'}>
+                {previewMode ? <Pencil size={16} /> : <Eye size={16} />}
               </button>
             ) : null}
             {onCheckExternal ? (
-              <button className="secondary-action" type="button" onClick={onCheckExternal}>
-                Check file
+              <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title="Check file">
+                <RefreshCw size={16} />
               </button>
             ) : null}
             {onSave ? (
-              <button className="secondary-action" type="button" onClick={onSave}>
-                Save
+              <button className="secondary-action icon-action" type="button" onClick={onSave} title="Save">
+                <Save size={16} />
               </button>
             ) : null}
             {onDelete ? (
-              <button className="secondary-action delete-action" type="button" onClick={(e) => {
+              <button className="secondary-action delete-action icon-action" type="button" onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 onDelete()
-              }}>
-                Delete
+              }} title="Delete">
+                <Trash2 size={16} />
               </button>
             ) : null}
           </div>

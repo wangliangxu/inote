@@ -1042,19 +1042,6 @@ export function App() {
             <FolderPlus size={16} />
           </button>
           <button
-            className={previewMode ? 'icon-action active' : 'icon-action'}
-            type="button"
-            onClick={() => setPreviewMode((current) => !current)}
-            title={previewMode ? 'Edit note' : 'Preview note'}
-            aria-label={previewMode ? 'Edit note' : 'Preview note'}
-          >
-            <Eye size={16} />
-          </button>
-          <button type="button" onClick={checkExternalActiveNote} title="Check disk version">
-            <RefreshCw size={16} />
-            <span>Check</span>
-          </button>
-          <button
             className={activeView === 'category' ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => setActiveView('category')}
@@ -1098,10 +1085,6 @@ export function App() {
             aria-label={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
           >
             <PanelRight size={17} />
-          </button>
-          <button type="button" onClick={saveActiveNote} title="Save note">
-            <Save size={16} />
-            <span>Save</span>
           </button>
         </div>
       </header>
@@ -1242,16 +1225,6 @@ export function App() {
         />
 
         <section className="workspace">
-          <header className="workspace-topbar">
-            <div className="workspace-title">
-              <span className="eyebrow">{activeView}</span>
-              <strong>{activeNote?.title ?? 'No note selected'}</strong>
-            </div>
-            <div className="workspace-stats">
-              <span>{notes.length} notes</span>
-              <span>{totalWords} words</span>
-            </div>
-          </header>
 
           {activeView === 'calendar' ? (
             <Suspense fallback={<div className="empty">Loading calendar…</div>}>
