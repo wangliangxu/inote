@@ -152,3 +152,30 @@ export function noteToMarkdown(note: Note): string {
 function escapeYamlString(value: string): string {
   return value.replace(/"/g, '\\"')
 }
+
+export function parseMarkdownWithFrontmatter(content: string): { body: string, metadata: Partial<Note> } {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  if (!match) return { body: content, metadata: {} }
+
+  const yamlRaw = match[1]
+  const body = match[2].replace(/^\n/, '')
+  
+  const metadata: Partial<Note> = {}
+  
+  const titleMatch = yamlRaw.match(/^title:\s*"(.*?)"/m) || yamlRaw.match(/^title:\s*(.*?)$/m)
+  if (titleMatch) metadata.title = titleMatch[1].replace(/\\"/g, '"').trim()
+  
+  const categoryMatch = yamlRaw.match(/^category:\s*"(.*?)"/m) || yamlRaw.match(/^category:\s*(.*?)$/m)
+  if (categoryMatch) metadata.category = categoryMatch[1].replace(/\\"/g, '"').trim()
+  
+  const tagsMatch = yamlRaw.match(/^tags:\s*\[(.*?)\]/m)
+  if (tagsMatch) {
+    const tagsStr = tagsMatch[1]
+    metadata.tags = tagsStr.split(',').map(t => t.trim().replace(/^"|"$/g, '').replace(/\\"/g, '"')).filter(Boolean)
+  }
+  
+  const summaryMatch = yamlRaw.match(/^summary:\s*"(.*?)"/m) || yamlRaw.match(/^summary:\s*(.*?)$/m)
+  if (summaryMatch) metadata.summary = summaryMatch[1].replace(/\\"/g, '"').trim()
+  
+  return { body, metadata }
+}

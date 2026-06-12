@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import type { Note, SaveState } from '../../shared/types'
+import { noteToMarkdown } from '../../shared/api'
 import { Eye, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
   MDXEditor,
@@ -175,7 +176,7 @@ export function Editor({
         <MDXEditor
           key={note.path} // Force re-mount on note change so internal state resets
           className={isDark ? 'dark-theme dark-editor' : ''}
-          markdown={note.body}
+          markdown={noteToMarkdown(note)}
           onChange={onChange}
           readOnly={previewMode}
           contentEditableClassName="prose"

@@ -59,6 +59,7 @@ import {
   writeNote,
   startVaultWatcher,
   stopVaultWatcher,
+  parseMarkdownWithFrontmatter,
 } from '../shared/api'
 import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 import { createInitialWorkspaceState, LAST_ACTIVE_PATH_KEY, LAST_VAULT_KEY } from './startup'
@@ -561,14 +562,18 @@ export function App() {
     }
   }, [activeNote, linkVersion, vaultRoot])
 
-  function updateActiveNote(body: string) {
+  function updateActiveNote(fullContent: string) {
     if (!activeNote) return
+    
+    const { body, metadata } = parseMarkdownWithFrontmatter(fullContent)
+    
     setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
         note.path === activeNote.path
           ? {
             ...note,
+            ...metadata,
             body,
             updatedAt: localDateString(),
             wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
