@@ -1665,3 +1665,80 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* === MDXEditor Dark Mode Overrides === */
+:root[data-theme="dark"] .mdx-editor-wrapper,
+body.dark-theme .mdxeditor-toolbar {
+  background-color: #060807 !important;
+  color: #e8ece6 !important;
+}
+
+/* Dropdown Trigger Buttons (Toolbar & Code Blocks) */
+body.dark-theme .mdx-editor-wrapper [data-radix-select-trigger],
+body.dark-theme .mdx-editor-wrapper select,
+body.dark-theme .mdx-editor-wrapper button[role="combobox"] {
+  background-color: #101311 !important;
+  color: #e8ece6 !important;
+  border: 1px solid #263944 !important;
+}
+
+body.dark-theme .mdx-editor-wrapper [data-radix-select-trigger]:hover,
+body.dark-theme .mdx-editor-wrapper button[role="combobox"]:hover {
+  background-color: #1e2521 !important;
+}
+
+/* Radix UI popups used by MDXEditor */
+body.dark-theme [data-radix-popper-content-wrapper] > div,
+body.dark-theme [data-radix-select-content],
+body.dark-theme [role="dialog"],
+body.dark-theme [role="menu"],
+body.dark-theme [role="listbox"],
+body.dark-theme [role="tooltip"],
+body.dark-theme .mdxeditor-select-content,
+body.dark-theme .mdxeditor-dropdown-content,
+body.dark-theme .mdxeditor-popup-container {
+  background-color: #101311 !important;
+  color: #e8ece6 !important;
+  border: 1px solid #263944 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+body.dark-theme [data-radix-select-item],
+body.dark-theme [role="menuitem"],
+body.dark-theme [role="option"] {
+  color: #e8ece6 !important;
+}
+
+body.dark-theme [data-radix-select-item]:hover,
+body.dark-theme [data-radix-select-item][data-highlighted],
+body.dark-theme [role="menuitem"]:hover,
+body.dark-theme [role="menuitem"][data-highlighted],
+body.dark-theme [role="option"]:hover,
+body.dark-theme [role="option"][data-highlighted] {
+  background-color: #1a2a32 !important;
+  color: #e8ece6 !important;
+  outline: none !important;
+}
+
+body.dark-theme .cm-editor {
+  background-color: #060807 !important;
+  color: #e8ece6 !important;
+}
+
+body.dark-theme .cm-gutters {
+  background-color: #101311 !important;
+  color: #8c9085 !important;
+  border-right: 1px solid #232925 !important;
+}
+
+body.dark-theme .cm-activeLineGutter {
+  background-color: #1e2521 !important;
+}
+
+body.dark-theme .cm-activeLine {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+body.dark-theme .cm-content {
+  caret-color: #e8ece6 !important;
+}

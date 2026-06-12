@@ -1,6 +1,34 @@
+import { useMemo, useState, useEffect } from 'react'
 import type { Note, SaveState } from '../../shared/types'
-import { renderMarkdownPreview } from '../../shared/markdownPreview'
 import { Eye, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
+import {
+  MDXEditor,
+  headingsPlugin,
+  listsPlugin,
+  quotePlugin,
+  thematicBreakPlugin,
+  markdownShortcutPlugin,
+  frontmatterPlugin,
+  tablePlugin,
+  linkPlugin,
+  linkDialogPlugin,
+  imagePlugin,
+  toolbarPlugin,
+  UndoRedo,
+  BoldItalicUnderlineToggles,
+  BlockTypeSelect,
+  CreateLink,
+  InsertTable,
+  ListsToggle,
+  InsertThematicBreak,
+  diffSourcePlugin,
+  DiffSourceToggleWrapper,
+  InsertImage,
+  codeBlockPlugin,
+  codeMirrorPlugin,
+  InsertCodeBlock
+} from '@mdxeditor/editor'
+import '@mdxeditor/editor/style.css'
 
 interface EditorProps {
   note: Note
@@ -31,6 +59,73 @@ export function Editor({
     saved: 'Saved',
     error: 'Save failed',
   }[saveState]
+
+  // Detect current theme from HTML dataset to pass to MDXEditor
+  const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark')
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    
+    const syncBodyClass = (dark: boolean) => {
+      document.body.classList.toggle('dark-theme', dark)
+      document.body.classList.toggle('dark-editor', dark)
+    }
+
+    const observer = new MutationObserver(() => {
+      const dark = document.documentElement.dataset.theme === 'dark'
+      setIsDark(dark)
+      syncBodyClass(dark)
+    })
+    
+    // Initial sync
+    const initialDark = document.documentElement.dataset.theme === 'dark'
+    syncBodyClass(initialDark)
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  const plugins = useMemo(() => [
+    headingsPlugin(),
+    listsPlugin(),
+    quotePlugin(),
+    thematicBreakPlugin(),
+    markdownShortcutPlugin(),
+    frontmatterPlugin(),
+    tablePlugin(),
+    linkPlugin(),
+    linkDialogPlugin(),
+    imagePlugin({
+      imageUploadHandler: async (image: File) => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(image)
+        })
+      }
+    }),
+    codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
+    codeMirrorPlugin({ 
+      codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript (React)', css: 'CSS', txt: 'Text', markdown: 'Markdown', json: 'JSON', html: 'HTML', python: 'Python', bash: 'Bash' } 
+    }),
+    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: note.body }),
+    toolbarPlugin({
+      toolbarContents: () => (
+        <DiffSourceToggleWrapper>
+          <UndoRedo />
+          <BoldItalicUnderlineToggles />
+          <BlockTypeSelect />
+          <ListsToggle />
+          <CreateLink />
+          <InsertImage />
+          <InsertTable />
+          <InsertThematicBreak />
+          <InsertCodeBlock />
+        </DiffSourceToggleWrapper>
+      )
+    })
+  ], [note.path, isDark])
 
   return (
     <article className="editor">
@@ -76,20 +171,17 @@ export function Editor({
           ))}
         </div>
       </header>
-      {previewMode ? (
-        <section
-          className="markdown-preview"
-          aria-label="Markdown preview"
-          dangerouslySetInnerHTML={{ __html: renderMarkdownPreview(note.body) }}
+      <div className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, overflow: 'auto' }}>
+        <MDXEditor
+          key={note.path} // Force re-mount on note change so internal state resets
+          className={isDark ? 'dark-theme dark-editor' : ''}
+          markdown={note.body}
+          onChange={onChange}
+          readOnly={previewMode}
+          contentEditableClassName="prose"
+          plugins={plugins}
         />
-      ) : (
-        <textarea
-          className="markdown-input"
-          aria-label="Markdown editor"
-          value={note.body}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )}
+      </div>
     </article>
   )
 }
