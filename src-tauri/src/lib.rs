@@ -9,6 +9,7 @@ pub mod watcher;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(watcher::WatcherState::default())
         .menu(menu::build)
         .on_menu_event(menu::handle_event)

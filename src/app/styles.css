@@ -184,14 +184,14 @@ button {
   z-index: 10;
 }
 
-.status-bar > span {
+.status-bar>span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.status-bar > span:nth-child(4) {
+.status-bar>span:nth-child(4) {
   flex: 1 1 auto;
 }
 
@@ -452,7 +452,7 @@ button {
   opacity: 0;
 }
 
-.category-filter-menu input:checked + .category-check {
+.category-filter-menu input:checked+.category-check {
   opacity: 1;
 }
 
@@ -540,7 +540,7 @@ button {
   color: #183f35;
 }
 
-.note-month-group + .note-month-group {
+.note-month-group+.note-month-group {
   margin-top: 16px;
 }
 
@@ -558,16 +558,24 @@ button {
 }
 
 .note-row {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  position: relative;
+  width: 100%;
+}
+
+.note-row-select {
   align-items: flex-start;
   background: transparent;
   border: 0;
   border-radius: 8px;
+  color: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 5px;
   padding: 10px;
-  position: relative;
   text-align: left;
   width: 100%;
 }
@@ -609,43 +617,38 @@ button {
 }
 
 .note-card {
-  align-items: stretch;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0;
-  text-align: left;
+  position: relative;
   width: 180px;
 }
 
-.note-card-surface {
+.note-card-select {
   background: #fbfbf8;
   border: 1px solid #d8ddd3;
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(31, 36, 40, 0.08);
+  color: inherit;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 9px;
-  height: 180px;
+  height: 206px;
   min-height: 0;
   padding: 13px;
-  position: relative;
+  text-align: left;
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
+  width: 100%;
 }
 
-.note-card:hover .note-card-surface,
-.note-card.active .note-card-surface {
+.note-card:hover .note-card-select,
+.note-card.active .note-card-select {
   border-color: #9fb19f;
   box-shadow: 0 8px 18px rgba(31, 36, 40, 0.12);
 }
 
-.note-card.active .note-card-surface {
+.note-card.active .note-card-select {
   background: #f2f7f0;
 }
 
@@ -674,21 +677,8 @@ button {
   color: #73756c;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  margin-top: auto;
   padding: 0 2px;
-}
-
-.note-item-actions {
-  display: flex;
-  justify-content: flex-end;
-  min-height: 18px;
-}
-
-.note-card .note-item-actions {
-  min-height: 0;
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  z-index: 2;
 }
 
 .note-delete-action {
@@ -702,18 +692,17 @@ button {
   height: 24px;
   justify-content: center;
   opacity: 0;
+  padding: 0;
+  position: absolute;
+  right: 8px;
+  top: 8px;
   transition: opacity 120ms ease;
   width: 24px;
+  z-index: 2;
 }
 
 .note-card .note-delete-action {
   box-shadow: 0 2px 8px rgba(31, 36, 40, 0.12);
-}
-
-.note-row .note-item-actions {
-  position: absolute;
-  right: 8px;
-  top: 8px;
 }
 
 .note-card:hover .note-delete-action,
@@ -1517,19 +1506,19 @@ button {
   color: #98a297;
 }
 
-:root[data-theme="dark"] .note-card-surface {
+:root[data-theme="dark"] .note-card-select {
   background: #161a17;
   border-color: #263944;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
 }
 
-:root[data-theme="dark"] .note-card:hover .note-card-surface,
-:root[data-theme="dark"] .note-card.active .note-card-surface {
+:root[data-theme="dark"] .note-card:hover .note-card-select,
+:root[data-theme="dark"] .note-card.active .note-card-select {
   border-color: #3f7d95;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
-:root[data-theme="dark"] .note-card.active .note-card-surface {
+:root[data-theme="dark"] .note-card.active .note-card-select {
   background: #0f2029;
 }
 
@@ -1618,6 +1607,7 @@ button {
 }
 
 @media (max-width: 820px) {
+
   .app-shell,
   .workspace {
     grid-template-columns: 1fr;

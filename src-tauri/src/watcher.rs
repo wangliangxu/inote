@@ -36,7 +36,11 @@ impl WatcherState {
                 }
                 last_emit = Instant::now();
                 let payload = VaultChangedEvent {
-                    paths: event.paths.iter().map(|path| path.to_string_lossy().to_string()).collect(),
+                    paths: event
+                        .paths
+                        .iter()
+                        .map(|path| path.to_string_lossy().to_string())
+                        .collect(),
                 };
                 let _ = app.emit("vault://changed", payload);
             },
@@ -48,13 +52,19 @@ impl WatcherState {
             .watch(&root, RecursiveMode::Recursive)
             .map_err(|error| format!("failed to watch vault: {error}"))?;
 
-        let mut current = self.watcher.lock().map_err(|_| "failed to lock watcher state".to_string())?;
+        let mut current = self
+            .watcher
+            .lock()
+            .map_err(|_| "failed to lock watcher state".to_string())?;
         *current = Some(watcher);
         Ok(())
     }
 
     pub fn stop(&self) -> Result<(), String> {
-        let mut current = self.watcher.lock().map_err(|_| "failed to lock watcher state".to_string())?;
+        let mut current = self
+            .watcher
+            .lock()
+            .map_err(|_| "failed to lock watcher state".to_string())?;
         *current = None;
         Ok(())
     }
@@ -71,20 +81,24 @@ fn is_markdown_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notify::{EventKind, event::ModifyKind};
+    use notify::{event::ModifyKind, EventKind};
 
     #[test]
     fn markdown_events_trigger_refresh() {
-        let event = Event::new(EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)))
-            .add_path(PathBuf::from("knowledge/rust.md"));
+        let event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from("knowledge/rust.md"));
 
         assert!(is_markdown_event(&event));
     }
 
     #[test]
     fn index_database_events_do_not_trigger_refresh() {
-        let event = Event::new(EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)))
-            .add_path(PathBuf::from(".inote/index.sqlite3"));
+        let event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from(".inote/index.sqlite3"));
 
         assert!(!is_markdown_event(&event));
     }

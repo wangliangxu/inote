@@ -412,10 +412,7 @@ mod tests {
         vault.delete_note("knowledge/a.md").unwrap();
         assert!(!dir.path().join("knowledge/a.md").exists());
         assert_eq!(vault.scan().unwrap().len(), 0);
-        assert_eq!(
-            fs::read_dir(dir.path().join(".trash")).unwrap().count(),
-            1
-        );
+        assert_eq!(fs::read_dir(dir.path().join(".trash")).unwrap().count(), 1);
     }
 
     #[test]

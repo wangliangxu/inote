@@ -2,6 +2,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { confirm as tauriConfirm } from '@tauri-apps/plugin-dialog'
 import {
   Archive,
   Bot,
@@ -62,6 +63,17 @@ import {
 import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 import { createInitialWorkspaceState, LAST_ACTIVE_PATH_KEY, LAST_VAULT_KEY } from './startup'
 
+async function safeConfirm(message: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window)) {
+    try {
+      return await tauriConfirm(message)
+    } catch {
+      // Fallback if plugin fails
+    }
+  }
+  return window.confirm(message)
+}
+
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
 const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
@@ -94,73 +106,49 @@ interface NoteItemProps {
 
 const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
   return (
-    <button
-      className={isActive ? 'note-card active' : 'note-card'}
-      onClick={() => onSelect(note.path)}
-    >
-      <span className="note-card-surface">
-        <span className="note-item-actions">
-          <span
-            className="note-delete-action"
-            role="button"
-            tabIndex={0}
-            title="Move note to trash"
-            aria-label="Move note to trash"
-            onClick={(event) => {
-              event.stopPropagation()
-              onDelete(note.path)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                event.stopPropagation()
-                onDelete(note.path)
-              }
-            }}
-          >
-            <Trash2 size={14} />
-          </span>
-        </span>
+    <div className={isActive ? 'note-card active' : 'note-card'}>
+      <button className="note-card-select" type="button" onClick={() => onSelect(note.path)}>
         <strong>{note.title}</strong>
         <small>{noteExcerpt(note)}</small>
-      </span>
-      <time>{note.updatedAt}</time>
-    </button>
+        <time>{note.updatedAt}</time>
+      </button>
+      <button
+        className="note-delete-action"
+        type="button"
+        title="Move note to trash"
+        aria-label="Move note to trash"
+        onClick={(event) => {
+          event.stopPropagation()
+          onDelete(note.path)
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
   )
 })
 
 const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
   return (
-    <button
-      className={isActive ? 'note-row active' : 'note-row'}
-      onClick={() => onSelect(note.path)}
-    >
-      <span className="note-item-actions">
-        <span
-          className="note-delete-action"
-          role="button"
-          tabIndex={0}
-          title="Move note to trash"
-          aria-label="Move note to trash"
-          onClick={(event) => {
-            event.stopPropagation()
-            onDelete(note.path)
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              event.stopPropagation()
-              onDelete(note.path)
-            }
-          }}
-        >
-          <Trash2 size={14} />
-        </span>
-      </span>
-      <strong>{note.title}</strong>
-      <small>{noteExcerpt(note)}</small>
-      <time>{note.updatedAt}</time>
-    </button>
+    <div className={isActive ? 'note-row active' : 'note-row'}>
+      <button className="note-row-select" type="button" onClick={() => onSelect(note.path)}>
+        <strong>{note.title}</strong>
+        <small>{noteExcerpt(note)}</small>
+        <time>{note.updatedAt}</time>
+      </button>
+      <button
+        className="note-delete-action"
+        type="button"
+        title="Move note to trash"
+        aria-label="Move note to trash"
+        onClick={(event) => {
+          event.stopPropagation()
+          onDelete(note.path)
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
   )
 })
 
@@ -580,11 +568,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              body,
-              updatedAt: localDateString(),
-              wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
-            }
+            ...note,
+            body,
+            updatedAt: localDateString(),
+            wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+          }
           : note,
       ),
     )
@@ -597,10 +585,10 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              title,
-              updatedAt: localDateString(),
-            }
+            ...note,
+            title,
+            updatedAt: localDateString(),
+          }
           : note,
       ),
     )
@@ -613,10 +601,10 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              createdAt,
-              updatedAt: localDateString(),
-            }
+            ...note,
+            createdAt,
+            updatedAt: localDateString(),
+          }
           : note,
       ),
     )
@@ -634,10 +622,10 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              tags,
-              updatedAt: localDateString(),
-            }
+            ...note,
+            tags,
+            updatedAt: localDateString(),
+          }
           : note,
       ),
     )
@@ -717,7 +705,7 @@ export function App() {
         return
       }
 
-      const reload = window.confirm(`${activeNote.path} changed on disk. Reload the disk version?`)
+      const reload = await safeConfirm(`${activeNote.path} changed on disk. Reload the disk version?`)
       if (!reload) {
         setStatus('Kept editor version. Save to overwrite disk when ready.')
         setSaveState('dirty')
@@ -920,13 +908,15 @@ export function App() {
     }
     try {
       const moved = await moveNote({ vaultRoot: vaultRoot.trim(), from: activeNote.path, to })
-      await rebuildSearchIndex(vaultRoot.trim())
-      setLinkVersion((current) => current + 1)
       setNotes((current) => current.map((note) => (note.path === activeNote.path ? moved : note)))
       setActivePath(moved.path)
       setActiveCategory(moved.category)
       setSaveState('saved')
       setStatus(`Moved to ${moved.path}.`)
+
+      rebuildSearchIndex(vaultRoot.trim())
+        .then(() => setLinkVersion((current) => current + 1))
+        .catch(console.error)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -937,25 +927,27 @@ export function App() {
       setStatus('Open a real vault before deleting notes.')
       return
     }
-    const confirmed = window.confirm(`Move ${path} to trash?`)
+    const confirmed = await safeConfirm(`Move ${path} to trash?`)
     if (!confirmed) return
     try {
       await deleteNote(vaultRoot.trim(), path)
-      await rebuildSearchIndex(vaultRoot.trim())
-      setLinkVersion((current) => current + 1)
       const remaining = notes.filter((note) => note.path !== path)
       setNotes(remaining)
       setActivePath((current) => (current === path ? (remaining[0]?.path ?? '') : current))
       setSaveState('saved')
       setStatus(`Moved ${path} to trash.`)
+
+      rebuildSearchIndex(vaultRoot.trim())
+        .then(() => setLinkVersion((current) => current + 1))
+        .catch(console.error)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
 
-  async function deleteActiveNote() {
+  function deleteActiveNote() {
     if (!activeNote) return
-    await deleteNoteByPath(activeNote.path)
+    void deleteNoteByPath(activeNote.path)
   }
 
   function startSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1005,7 +997,7 @@ export function App() {
           if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return
           if (e.button !== 0) return
           e.preventDefault()
-          getCurrentWindow().startDragging().catch(() => {})
+          getCurrentWindow().startDragging().catch(() => { })
         }}
       >
         <button
@@ -1169,9 +1161,8 @@ export function App() {
       <div
         className="app-shell"
         style={{
-          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : '0 0'} minmax(0, 1fr) ${
-            rightSidebarVisible ? '336px' : '0'
-          }`,
+          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : '0 0'} minmax(0, 1fr) ${rightSidebarVisible ? '336px' : '0'
+            }`,
         }}
       >
         <aside className={leftSidebarVisible ? 'sidebar' : 'sidebar hidden'}>
@@ -1248,156 +1239,157 @@ export function App() {
         />
 
         <section className="workspace">
-        <header className="workspace-topbar">
-          <div className="workspace-title">
-            <span className="eyebrow">{activeView}</span>
-            <strong>{activeNote?.title ?? 'No note selected'}</strong>
-          </div>
-          <div className="workspace-stats">
-            <span>{notes.length} notes</span>
-            <span>{totalWords} words</span>
-          </div>
-        </header>
+          <header className="workspace-topbar">
+            <div className="workspace-title">
+              <span className="eyebrow">{activeView}</span>
+              <strong>{activeNote?.title ?? 'No note selected'}</strong>
+            </div>
+            <div className="workspace-stats">
+              <span>{notes.length} notes</span>
+              <span>{totalWords} words</span>
+            </div>
+          </header>
 
-        {activeView === 'calendar' ? (
-          <Suspense fallback={<div className="empty">Loading calendar…</div>}>
-            <CalendarView notes={notes} onSelectNote={setActivePath} />
-          </Suspense>
-        ) : activeView === 'tags' ? (
-          <Suspense fallback={<div className="empty">Loading tags…</div>}>
-            <TagsPanel
-              notes={notes}
-              activeTag={activeTag}
-              onSelectTag={setActiveTag}
-              onSelectNote={(path) => {
-                setActivePath(path)
-              }}
-            />
-          </Suspense>
-        ) : (
-          activeNote ? (
-            <Editor
-              note={activeNote}
-              onChange={updateActiveNote}
-              onSave={saveActiveNote}
-              onCheckExternal={checkExternalActiveNote}
-              previewMode={previewMode}
-              onTogglePreview={() => setPreviewMode((current) => !current)}
-              saveState={saveState}
-            />
+          {activeView === 'calendar' ? (
+            <Suspense fallback={<div className="empty">Loading calendar…</div>}>
+              <CalendarView notes={notes} onSelectNote={setActivePath} />
+            </Suspense>
+          ) : activeView === 'tags' ? (
+            <Suspense fallback={<div className="empty">Loading tags…</div>}>
+              <TagsPanel
+                notes={notes}
+                activeTag={activeTag}
+                onSelectTag={setActiveTag}
+                onSelectNote={(path) => {
+                  setActivePath(path)
+                }}
+              />
+            </Suspense>
           ) : (
-            <div className="empty">No note selected.</div>
-          )
-        )}
+            activeNote ? (
+              <Editor
+                note={activeNote}
+                onChange={updateActiveNote}
+                onSave={saveActiveNote}
+                onCheckExternal={checkExternalActiveNote}
+                onDelete={deleteActiveNote}
+                previewMode={previewMode}
+                onTogglePreview={() => setPreviewMode((current) => !current)}
+                saveState={saveState}
+              />
+            ) : (
+              <div className="empty">No note selected.</div>
+            )
+          )}
         </section>
 
         <aside className={rightSidebarVisible ? 'context-panel' : 'context-panel hidden'}>
-        {activeNote ? (
-          <>
-            <section className="context-section">
-              <p className="panel-title">
-                <PanelRight size={14} /> Context
-              </p>
-              <h3>{activeNote.title}</h3>
-              <dl className="note-facts">
-                <div>
-                  <dt>Path</dt>
-                  <dd>{activeNote.path}</dd>
+          {activeNote ? (
+            <>
+              <section className="context-section">
+                <p className="panel-title">
+                  <PanelRight size={14} /> Context
+                </p>
+                <h3>{activeNote.title}</h3>
+                <dl className="note-facts">
+                  <div>
+                    <dt>Path</dt>
+                    <dd>{activeNote.path}</dd>
+                  </div>
+                  <div>
+                    <dt>Category</dt>
+                    <dd>{activeNote.category}</dd>
+                  </div>
+                  <div>
+                    <dt>Created</dt>
+                    <dd>{activeNote.createdAt}</dd>
+                  </div>
+                  <div>
+                    <dt>Updated</dt>
+                    <dd>{activeNote.updatedAt}</dd>
+                  </div>
+                </dl>
+                <div className="tag-strip">
+                  {activeNote.tags.map((tag) => (
+                    <span key={tag}>#{tag}</span>
+                  ))}
                 </div>
-                <div>
-                  <dt>Category</dt>
-                  <dd>{activeNote.category}</dd>
-                </div>
-                <div>
-                  <dt>Created</dt>
-                  <dd>{activeNote.createdAt}</dd>
-                </div>
-                <div>
-                  <dt>Updated</dt>
-                  <dd>{activeNote.updatedAt}</dd>
-                </div>
-              </dl>
-              <div className="tag-strip">
-                {activeNote.tags.map((tag) => (
-                  <span key={tag}>#{tag}</span>
-                ))}
-              </div>
-              <label className="metadata-editor">
-                <span>Title</span>
-                <input value={activeNote.title} onChange={(event) => updateActiveNoteTitle(event.target.value)} />
-              </label>
-              <label className="metadata-editor">
-                <span>Created</span>
-                <input type="date" value={activeNote.createdAt} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
-              </label>
-              <label className="metadata-editor">
-                <span>Tags</span>
-                <input value={activeNote.tags.join(', ')} onChange={(event) => updateActiveNoteTags(event.target.value)} />
-              </label>
-              <div className="context-actions">
-                {activeNote.path.startsWith('00-inbox/') ? (
-                  <button type="button" onClick={archiveActiveInboxNote} title="Archive inbox note">
-                    <Archive size={15} />
+                <label className="metadata-editor">
+                  <span>Title</span>
+                  <input value={activeNote.title} onChange={(event) => updateActiveNoteTitle(event.target.value)} />
+                </label>
+                <label className="metadata-editor">
+                  <span>Created</span>
+                  <input type="date" value={activeNote.createdAt} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
+                </label>
+                <label className="metadata-editor">
+                  <span>Tags</span>
+                  <input value={activeNote.tags.join(', ')} onChange={(event) => updateActiveNoteTags(event.target.value)} />
+                </label>
+                <div className="context-actions">
+                  {activeNote.path.startsWith('00-inbox/') ? (
+                    <button type="button" onClick={archiveActiveInboxNote} title="Archive inbox note">
+                      <Archive size={15} />
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={renameActiveNote} title="Rename note">
+                    <Pencil size={15} />
                   </button>
-                ) : null}
-                <button type="button" onClick={renameActiveNote} title="Rename note">
-                  <Pencil size={15} />
-                </button>
-                <button type="button" onClick={moveActiveNotePrompt} title="Move note">
-                  <MoveRight size={15} />
-                </button>
-                <button type="button" onClick={deleteActiveNote} title="Delete note">
-                  <FileMinus2 size={15} />
-                </button>
-              </div>
-            </section>
-            <section className="context-section">
-              <p className="panel-title">
-                <Sparkles size={14} /> Summary
-              </p>
-              <p className="summary-text">{activeNote.summary ?? activeNote.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
-            </section>
-            <section className="context-section">
-              <p className="panel-title">
-                <Link2 size={14} /> Links
-              </p>
-              <div className="link-group">
-                <h4>Backlinks</h4>
-                {noteLinks.backlinks.length ? (
-                  noteLinks.backlinks.map((link) => (
-                    <button key={`${link.sourcePath}-${link.label}`} type="button" onClick={() => setActivePath(link.sourcePath)}>
-                      <strong>{link.sourceTitle}</strong>
-                      <span>{link.sourcePath}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p>No backlinks.</p>
-                )}
-              </div>
-              <div className="link-group">
-                <h4>Outgoing</h4>
-                {noteLinks.outgoing.length ? (
-                  noteLinks.outgoing.map((link) => (
-                    <button key={`${link.targetPath}-${link.label}`} type="button" onClick={() => setActivePath(link.targetPath)}>
-                      <strong>{link.targetTitle}</strong>
-                      <span>{link.targetPath}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p>No outgoing links.</p>
-                )}
-              </div>
-            </section>
-            <section className="context-section">
-              <p className="panel-title">
-                <Bot size={14} /> Assistant
-              </p>
-              <Suspense fallback={<div className="empty">Loading assistant…</div>}>
-                <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
-              </Suspense>
-            </section>
-          </>
-        ) : null}
+                  <button type="button" onClick={moveActiveNotePrompt} title="Move note">
+                    <MoveRight size={15} />
+                  </button>
+                  <button type="button" onClick={deleteActiveNote} title="Delete note">
+                    <FileMinus2 size={15} />
+                  </button>
+                </div>
+              </section>
+              <section className="context-section">
+                <p className="panel-title">
+                  <Sparkles size={14} /> Summary
+                </p>
+                <p className="summary-text">{activeNote.summary ?? activeNote.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
+              </section>
+              <section className="context-section">
+                <p className="panel-title">
+                  <Link2 size={14} /> Links
+                </p>
+                <div className="link-group">
+                  <h4>Backlinks</h4>
+                  {noteLinks.backlinks.length ? (
+                    noteLinks.backlinks.map((link) => (
+                      <button key={`${link.sourcePath}-${link.label}`} type="button" onClick={() => setActivePath(link.sourcePath)}>
+                        <strong>{link.sourceTitle}</strong>
+                        <span>{link.sourcePath}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p>No backlinks.</p>
+                  )}
+                </div>
+                <div className="link-group">
+                  <h4>Outgoing</h4>
+                  {noteLinks.outgoing.length ? (
+                    noteLinks.outgoing.map((link) => (
+                      <button key={`${link.targetPath}-${link.label}`} type="button" onClick={() => setActivePath(link.targetPath)}>
+                        <strong>{link.targetTitle}</strong>
+                        <span>{link.targetPath}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p>No outgoing links.</p>
+                  )}
+                </div>
+              </section>
+              <section className="context-section">
+                <p className="panel-title">
+                  <Bot size={14} /> Assistant
+                </p>
+                <Suspense fallback={<div className="empty">Loading assistant…</div>}>
+                  <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
+                </Suspense>
+              </section>
+            </>
+          ) : null}
         </aside>
       </div>
 

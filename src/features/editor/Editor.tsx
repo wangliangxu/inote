@@ -8,6 +8,7 @@ interface EditorProps {
   onCheckExternal?: () => void
   previewMode?: boolean
   onTogglePreview?: () => void
+  onDelete?: () => void
   saveState?: SaveState
 }
 
@@ -18,6 +19,7 @@ export function Editor({
   onCheckExternal,
   previewMode = false,
   onTogglePreview,
+  onDelete,
   saveState = 'demo',
 }: EditorProps) {
   const saveLabel = {
@@ -51,6 +53,15 @@ export function Editor({
             {onSave ? (
               <button className="secondary-action" type="button" onClick={onSave}>
                 Save
+              </button>
+            ) : null}
+            {onDelete ? (
+              <button className="secondary-action delete-action" type="button" onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onDelete()
+              }}>
+                Delete
               </button>
             ) : null}
           </div>

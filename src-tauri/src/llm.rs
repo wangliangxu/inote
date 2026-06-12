@@ -123,7 +123,10 @@ mod tests {
         assert_eq!(preview.url, "https://api.example.com/v1/chat/completions");
         assert_eq!(preview.redacted_authorization, "Bearer ****");
         assert_eq!(preview.body["model"], "model-a");
-        assert!(preview.body["messages"][1]["content"].as_str().unwrap().contains("Note body"));
+        assert!(preview.body["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Note body"));
     }
 
     #[test]

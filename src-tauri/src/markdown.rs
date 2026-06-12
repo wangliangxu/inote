@@ -144,7 +144,9 @@ fn first_heading(body: &str) -> Option<String> {
 }
 
 fn count_words(body: &str) -> usize {
-    body.split_whitespace().filter(|word| !word.trim().is_empty()).count()
+    body.split_whitespace()
+        .filter(|word| !word.trim().is_empty())
+        .count()
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String, String> {
@@ -283,7 +285,10 @@ mod tests {
 
     #[test]
     fn extracts_category_from_parent_path() {
-        assert_eq!(category_from_path("knowledge/rust/tauri.md"), "knowledge/rust");
+        assert_eq!(
+            category_from_path("knowledge/rust/tauri.md"),
+            "knowledge/rust"
+        );
         assert_eq!(category_from_path("loose.md"), "uncategorized");
     }
 }
