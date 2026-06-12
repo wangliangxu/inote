@@ -1014,59 +1014,7 @@ export function App() {
           <span>{vaultRoot.trim() ? vaultRoot.split('/').filter(Boolean).pop() : 'Demo workspace'}</span>
         </div>
         <div className="command-box window-command">
-          <details
-            ref={categoryFilterRef}
-            className="category-filter"
-            data-no-drag
-            open={categoryFilterOpen}
-            onBlur={(event) => {
-              if (categoryFilterPointerInsideRef.current) return
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                setCategoryFilterOpen(false)
-              }
-            }}
-            onPointerDownCapture={() => {
-              categoryFilterPointerInsideRef.current = true
-              window.setTimeout(() => {
-                categoryFilterPointerInsideRef.current = false
-              }, 0)
-            }}
-            onToggle={(event) => setCategoryFilterOpen(event.currentTarget.open)}
-          >
-            <summary title={searchScopeLabel}>{searchScopeLabel}</summary>
-            <div className="category-filter-menu">
-              <label>
-                <input
-                  checked={selectedSearchCategories.length === 0}
-                  type="checkbox"
-                  onChange={() => {
-                    setSelectedSearchCategories([])
-                    setActiveView('search')
-                  }}
-                />
-                <Check className="category-check" size={14} />
-                <span>All categories</span>
-              </label>
-              {categoryOptions.map((category) => (
-                <label key={category.name}>
-                  <input
-                    checked={searchCategorySet.has(category.name)}
-                    type="checkbox"
-                    onChange={(event) => {
-                      setActiveView('search')
-                      setSelectedSearchCategories((current) => {
-                        if (event.target.checked) return [...current, category.name].sort((a, b) => a.localeCompare(b))
-                        return current.filter((name) => name !== category.name)
-                      })
-                    }}
-                  />
-                  <Check className="category-check" size={14} />
-                  <span>{category.name}</span>
-                  <small>{category.count}</small>
-                </label>
-              ))}
-            </div>
-          </details>
+
           <Search size={17} />
           <input
             aria-label="Search notes"
@@ -1166,42 +1114,97 @@ export function App() {
         }}
       >
         <aside className={leftSidebarVisible ? 'sidebar' : 'sidebar hidden'}>
-          <div className={`note-list ${noteListMode}`}>
-            <div className="list-header">
-              <span>
+          <div className="list-header">
+            <details
+              ref={categoryFilterRef}
+              className="category-filter"
+              data-no-drag
+              open={categoryFilterOpen}
+              onBlur={(event) => {
+                if (categoryFilterPointerInsideRef.current) return
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setCategoryFilterOpen(false)
+                }
+              }}
+              onPointerDownCapture={() => {
+                categoryFilterPointerInsideRef.current = true
+                window.setTimeout(() => {
+                  categoryFilterPointerInsideRef.current = false
+                }, 0)
+              }}
+              onToggle={(event) => setCategoryFilterOpen(event.currentTarget.open)}
+            >
+              <summary title={searchScopeLabel}>
                 {activeView === 'today'
                   ? 'Today'
                   : activeView === 'search'
-                    ? 'Search results'
+                    ? searchScopeLabel
                     : activeView === 'category'
                       ? activeCategory
                       : 'All notes'}
-              </span>
-              <div className="note-list-tools" aria-label="Note list display mode">
-                <small>{visibleNotes.length}</small>
-                <button
-                  className={noteListMode === 'cards' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setNoteListMode('cards')}
-                  title="Card view"
-                  aria-label="Card view"
-                >
-                  <LayoutGrid size={14} />
-                </button>
-                <button
-                  className={noteListMode === 'summary' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setNoteListMode('summary')}
-                  title="Summary view"
-                  aria-label="Summary view"
-                >
-                  <List size={14} />
-                </button>
+              </summary>
+              <div className="category-filter-menu">
+                <label>
+                  <input
+                    checked={selectedSearchCategories.length === 0}
+                    type="checkbox"
+                    onChange={() => {
+                      setSelectedSearchCategories([])
+                      setActiveView('search')
+                    }}
+                  />
+                  <Check className="category-check" size={14} />
+                  <span>All categories</span>
+                </label>
+                {categoryOptions.map((category) => (
+                  <label key={category.name}>
+                    <input
+                      checked={searchCategorySet.has(category.name)}
+                      type="checkbox"
+                      onChange={(event) => {
+                        setActiveView('search')
+                        setSelectedSearchCategories((current) => {
+                          if (event.target.checked) return [...current, category.name].sort((a, b) => a.localeCompare(b))
+                          return current.filter((name) => name !== category.name)
+                        })
+                      }}
+                    />
+                    <Check className="category-check" size={14} />
+                    <span>{category.name}</span>
+                    <small>{category.count}</small>
+                  </label>
+                ))}
               </div>
+            </details>
+            <div className="note-list-tools" aria-label="Note list display mode">
+              <small>{visibleNotes.length}</small>
+              <button
+                className={noteListMode === 'cards' ? 'active' : ''}
+                type="button"
+                onClick={() => setNoteListMode('cards')}
+                title="Card view"
+                aria-label="Card view"
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                className={noteListMode === 'summary' ? 'active' : ''}
+                type="button"
+                onClick={() => setNoteListMode('summary')}
+                title="Summary view"
+                aria-label="Summary view"
+              >
+                <List size={14} />
+              </button>
             </div>
+          </div>
+          <div className={`note-list ${noteListMode}`}>
             {visibleNoteGroups.map((group) => (
               <section className="note-month-group" key={group.month}>
-                <h3>{group.month}</h3>
+                <div className="note-month-header">
+                  <h3>{group.month}</h3>
+                  <small>{group.notes.length}</small>
+                </div>
                 <div className={noteListMode === 'cards' ? 'note-card-grid' : 'note-summary-stack'}>
                   {group.notes.map((note) =>
                     noteListMode === 'cards' ? (
