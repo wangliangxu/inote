@@ -3,7 +3,7 @@ import type { Note, SaveState } from '../../shared/types'
 import { noteToMarkdown } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
-import { Eye, Pencil, RefreshCw, Save, Trash2, MoveRight } from 'lucide-react'
+import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight } from 'lucide-react'
 import {
   MDXEditor,
   headingsPlugin,
@@ -149,7 +149,7 @@ export function Editor({
           <div className="editor-actions">
             {onRename ? (
               <button className="secondary-action icon-action" type="button" onClick={onRename} title="Rename note">
-                <Pencil size={16} />
+                <TextCursorInput size={16} />
               </button>
             ) : null}
             {onMove ? (
