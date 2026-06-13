@@ -945,7 +945,7 @@ export function App() {
     }
     const title = '无标题'
     const fallbackCategory = categoryOptions.length > 0 ? categoryOptions[0].name : 'knowledge'
-    const category = activeCategory || defaultCategory || fallbackCategory
+    const category = defaultCategory || fallbackCategory
     try {
       const note = await createNote({ vaultRoot: vaultRoot.trim(), title, category })
       setLinkVersion((current) => current + 1)

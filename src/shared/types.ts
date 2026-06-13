@@ -65,6 +65,7 @@ export interface UserSettings {
   vaultRoot: string
   activePath: string
   llmSettings: LlmProviderSettings
+  defaultCategory?: string
 }
 
 export interface LlmChatResponse {

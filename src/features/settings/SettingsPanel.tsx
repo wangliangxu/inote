@@ -1,4 +1,4 @@
-import type { LlmProviderSettings } from '../../shared/types'
+import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
 import type { EffectiveTheme, ThemePreference } from '../../shared/theme'
 
 interface SettingsPanelProps {
@@ -8,10 +8,13 @@ interface SettingsPanelProps {
   themePreference: ThemePreference
   effectiveTheme: EffectiveTheme
   baseFontSize: number
+  defaultCategory: string
+  categories: CategoryGroup[]
   onVaultRootChange: (path: string) => void
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onThemePreferenceChange: (preference: ThemePreference) => void
   onBaseFontSizeChange: (size: number) => void
+  onDefaultCategoryChange: (category: string) => void
   onOpenVault: () => void
   onInitializeVault: () => void
   onCreateToday: () => void
@@ -30,10 +33,13 @@ export function SettingsPanel({
   themePreference,
   effectiveTheme,
   baseFontSize,
+  defaultCategory,
+  categories,
   onVaultRootChange,
   onLlmSettingsChange,
   onThemePreferenceChange,
   onBaseFontSizeChange,
+  onDefaultCategoryChange,
   onOpenVault,
   onInitializeVault,
   onCreateToday,
@@ -90,6 +96,21 @@ export function SettingsPanel({
             value={vaultRoot}
             onChange={(event) => onVaultRootChange(event.target.value)}
           />
+        </label>
+        <label>
+          Default Category
+          <select
+            className="setting-input"
+            value={defaultCategory || (categories.length > 0 ? categories[0].name : '')}
+            onChange={(event) => onDefaultCategoryChange(event.target.value)}
+          >
+            {defaultCategory && !categories.some(c => c.name === defaultCategory) && (
+              <option value={defaultCategory}>{defaultCategory}</option>
+            )}
+            {categories.map((cat) => (
+              <option key={cat.name} value={cat.name}>{cat.name}</option>
+            ))}
+          </select>
         </label>
         <div className="action-row">
           <button className="secondary-action" type="button" onClick={onOpenVault}>
