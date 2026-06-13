@@ -249,6 +249,15 @@ pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn empty_trash(vault_root: String) -> Result<(), String> {
+    let vault = Vault::new(&vault_root)?;
+    vault.empty_trash()?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let notes = vault.scan()?;
+    index.rebuild(&notes)
+}
+
+#[tauri::command]
 pub fn build_llm_request_preview(input: LlmPreviewInput) -> Result<LlmRequestPreview, String> {
     build_chat_request_preview(&input.settings, &input.prompt, &input.context)
 }
@@ -334,7 +343,9 @@ mod tests {
         assert_eq!(moved.path, "knowledge/a.md");
 
         delete_note(root.clone(), "knowledge/a.md".to_string()).unwrap();
-        assert!(scan_vault(root).unwrap().is_empty());
+        let notes = scan_vault(root).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].path.starts_with(".trash/"));
     }
 
     #[test]

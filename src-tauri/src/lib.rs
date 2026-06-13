@@ -38,6 +38,7 @@ pub fn run() {
             commands::move_note,
             commands::archive_note,
             commands::delete_note,
+            commands::empty_trash,
             commands::load_user_settings,
             commands::save_user_settings,
             commands::build_llm_request_preview,

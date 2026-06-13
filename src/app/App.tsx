@@ -45,6 +45,8 @@ import {
   createTodayNote,
   createWeeklyReview,
   deleteNote,
+  emptyTrash,
+  executeLlmChat,
   getNoteLinks,
   initializeVault,
   moveNote,
@@ -247,6 +249,22 @@ export function App() {
   const categoryFilterPointerInsideRef = useRef(false)
   const skipNextSettingsSaveRef = useRef(true)
   const skipNextVaultChangeUntilRef = useRef(0)
+  const previousViewRef = useRef<{ view: WorkspaceView, category: string, path: string }>({ view: 'today', category: 'journal', path: '' })
+
+  const toggleSpecialView = useCallback((view: 'archive' | 'trash' | 'tags') => {
+    if (activeView === view) {
+      setActiveView(previousViewRef.current.view)
+      setActiveCategory(previousViewRef.current.category)
+      if (previousViewRef.current.path) {
+        setActivePath(previousViewRef.current.path)
+      }
+    } else {
+      if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'tags') {
+        previousViewRef.current = { view: activeView, category: activeCategory, path: activePath }
+      }
+      setActiveView(view)
+    }
+  }, [activeView, activeCategory, activePath])
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const effectiveTheme = useMemo(() => getEffectiveTheme(themePreference, systemPrefersDark), [systemPrefersDark, themePreference])
@@ -436,13 +454,12 @@ export function App() {
   useEffect(() => {
     if (!vaultRoot.trim()) return
     let disposed = false
-    let unlisten: undefined | (() => void)
 
     startVaultWatcher(vaultRoot.trim()).catch(() => {
       // Browser-only dev mode has no Tauri backend; keep the UI usable.
     })
 
-    listen('vault://changed', () => {
+    const unlistenPromise = listen('vault://changed', () => {
       if (!disposed) {
         if (Date.now() < skipNextVaultChangeUntilRef.current) {
           skipNextVaultChangeUntilRef.current = 0
@@ -451,16 +468,10 @@ export function App() {
         refreshVaultFromDisk('Markdown files changed on disk. Vault refreshed.')
       }
     })
-      .then((dispose) => {
-        unlisten = dispose
-      })
-      .catch(() => {
-        // Browser-only dev mode has no event bridge.
-      })
 
     return () => {
       disposed = true
-      unlisten?.()
+      unlistenPromise.then((dispose) => dispose()).catch(() => {})
       stopVaultWatcher().catch(() => {
         // Ignore when not running inside Tauri.
       })
@@ -498,34 +509,70 @@ export function App() {
   }, [settingsOpen])
 
   useEffect(() => {
-    let unlisten: undefined | (() => void)
-    listen(OPEN_SETTINGS_EVENT, () => {
+    const unlistenPromise = listen('inote://empty-trash', async () => {
+      if (!vaultRoot.trim()) return
+      
+      // Yield to event loop to allow menu interaction to finish
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      
+      const confirmed = await safeConfirm('Are you sure you want to permanently empty the trash? This action cannot be undone.')
+      if (!confirmed) return
+      
+      // Yield to event loop to allow macOS NSAlert dialog to close completely
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      
+      try {
+        await emptyTrash(vaultRoot.trim())
+        setNotes((current) => current.filter((n) => !n.path.startsWith('.trash/')))
+        setIndexedResults((current) => current.filter((n) => !n.path.startsWith('.trash/')))
+        setStatus('Trash emptied.')
+        setActivePath((current) => current.startsWith('.trash/') ? '' : current)
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error))
+      }
+    })
+    
+    return () => {
+      unlistenPromise.then((dispose) => dispose()).catch(() => {})
+    }
+  }, [vaultRoot, safeConfirm])
+
+  useEffect(() => {
+    const unlistenPromise = listen(OPEN_SETTINGS_EVENT, () => {
       setSettingsOpen(true)
     })
-      .then((dispose) => {
-        unlisten = dispose
-      })
-      .catch(() => {
-        // Browser-only dev mode has no native application menu.
-      })
 
     return () => {
-      unlisten?.()
+      unlistenPromise.then((dispose) => dispose()).catch(() => {})
     }
   }, [])
 
   const visibleNotes = useMemo(() => {
+    const isSpecialCategory = (note: Pick<Note, 'category' | 'path'>) =>
+      note.category === 'archive' || note.category.startsWith('archive/') ||
+      note.path.startsWith('.trash/')
+
+    if (activeView === 'archive') {
+      return sortByUpdatedDesc(notes.filter(note => note.category === 'archive' || note.category.startsWith('archive/')))
+    }
+    if (activeView === 'trash') {
+      return sortByUpdatedDesc(notes.filter(note => note.path.startsWith('.trash/')))
+    }
+
     if (activeView === 'search') {
-      const matchesSearchScope = (note: Pick<Note, 'category'>) =>
-        searchCategorySet.size === 0 ||
-        searchCategorySet.has(note.category) ||
-        Array.from(searchCategorySet).some((category) => note.category.startsWith(`${category}/`))
+      const matchesSearchScope = (note: Pick<Note, 'category' | 'path'>) => {
+        if (searchCategorySet.size === 0) {
+          return !isSpecialCategory(note)
+        }
+        return searchCategorySet.has(note.category) ||
+               Array.from(searchCategorySet).some((category) => note.category.startsWith(`${category}/`))
+      }
       const searchResults = vaultRoot.trim() && query.trim() ? indexedResults : searchNotes(notes, query)
       return searchResults.filter(matchesSearchScope)
     }
-    if (activeView === 'today') return getTodayNote(notes) ? [getTodayNote(notes)!] : sortByUpdatedDesc(notes).slice(0, 5)
+    if (activeView === 'today') return getTodayNote(notes) ? [getTodayNote(notes)!] : sortByUpdatedDesc(notes.filter(n => !isSpecialCategory(n))).slice(0, 5)
     if (activeView === 'category') return filterNotesByCategory(notes, activeCategory)
-    return sortByUpdatedDesc(notes)
+    return sortByUpdatedDesc(notes.filter(n => !isSpecialCategory(n)))
   }, [activeCategory, activeView, indexedResults, notes, query, searchCategorySet, vaultRoot])
 
   const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE)
@@ -1028,7 +1075,8 @@ export function App() {
       setStatus('Open a real vault before deleting notes.')
       return
     }
-    const confirmed = await safeConfirm(`Move ${path} to trash?`)
+    const isTrash = path.startsWith('.trash/')
+    const confirmed = await safeConfirm(isTrash ? `Permanently delete ${path}?` : `Move ${path} to trash?`)
     if (!confirmed) return
     try {
       skipNextVaultChangeUntilRef.current = Date.now() + 1500
@@ -1039,7 +1087,7 @@ export function App() {
       setLinkVersion((current) => current + 1)
       setActivePath((current) => (current === path ? (remaining[0]?.path ?? '') : current))
       setSaveState('saved')
-      setStatus(`Moved ${path} to trash.`)
+      setStatus(isTrash ? `Permanently deleted ${path}.` : `Moved ${path} to trash.`)
     } catch (error) {
       skipNextVaultChangeUntilRef.current = 0
       setStatus(error instanceof Error ? error.message : String(error))
@@ -1137,7 +1185,7 @@ export function App() {
           <button
             className={activeView === 'tags' ? 'icon-action active' : 'icon-action'}
             type="button"
-            onClick={() => setActiveView('tags')}
+            onClick={() => toggleSpecialView('tags')}
             title="Tags"
             aria-label="Open tags"
           >
@@ -1151,6 +1199,24 @@ export function App() {
             aria-label="Open calendar"
           >
             <CalendarDays size={17} />
+          </button>
+          <button
+            className={activeView === 'archive' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => toggleSpecialView('archive')}
+            title="Archive"
+            aria-label="Open archive"
+          >
+            <Archive size={17} />
+          </button>
+          <button
+            className={activeView === 'trash' ? 'icon-action active' : 'icon-action'}
+            type="button"
+            onClick={() => toggleSpecialView('trash')}
+            title="Trash"
+            aria-label="Open trash"
+          >
+            <Trash2 size={17} />
           </button>
           <button
             className={settingsOpen ? 'icon-action active' : 'icon-action'}
@@ -1208,7 +1274,11 @@ export function App() {
                     ? searchScopeLabel
                     : activeView === 'category'
                       ? activeCategory
-                      : 'All notes'}
+                      : activeView === 'archive'
+                        ? 'Archive'
+                        : activeView === 'trash'
+                          ? 'Trash'
+                          : 'All notes'}
               </summary>
               <div className="category-filter-menu">
                 <label>

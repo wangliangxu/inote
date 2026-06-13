@@ -13,6 +13,9 @@ export function titleFromPath(path: string): string {
 export function groupByCategory(notes: Note[]): CategoryGroup[] {
   const counts = new Map<string, number>()
   for (const note of notes) {
+    if (note.category === 'archive' || note.category.startsWith('archive/') || note.path.startsWith('.trash/')) {
+      continue
+    }
     counts.set(note.category, (counts.get(note.category) ?? 0) + 1)
   }
   return Array.from(counts.entries())

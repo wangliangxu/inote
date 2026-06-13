@@ -131,6 +131,10 @@ export async function deleteNote(vaultRoot: string, path: string): Promise<void>
   return invoke<void>('delete_note', { vaultRoot, path })
 }
 
+export async function emptyTrash(vaultRoot: string): Promise<void> {
+  return invoke<void>('empty_trash', { vaultRoot })
+}
+
 export async function executeLlmChat(input: LlmChatInput): Promise<LlmChatResponse> {
   return invoke<LlmChatResponse>('execute_llm_chat', { input })
 }

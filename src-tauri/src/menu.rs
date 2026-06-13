@@ -1,10 +1,12 @@
 use tauri::{
-    menu::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, IconMenuItem, NativeIcon},
     AppHandle, Emitter, Runtime,
 };
 
 const OPEN_SETTINGS_MENU_ID: &str = "open-settings";
 const OPEN_SETTINGS_EVENT: &str = "inote://open-settings";
+const EMPTY_TRASH_MENU_ID: &str = "empty-trash";
+const EMPTY_TRASH_EVENT: &str = "inote://empty-trash";
 
 pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app_handle.package_info();
@@ -95,6 +97,15 @@ pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     )?,
                     #[cfg(not(target_os = "macos"))]
                     &PredefinedMenuItem::separator(app_handle)?,
+                    &IconMenuItem::with_id_and_native_icon(
+                        app_handle,
+                        EMPTY_TRASH_MENU_ID,
+                        "Empty Trash",
+                        true,
+                        Some(NativeIcon::TrashEmpty),
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app_handle)?,
                     &PredefinedMenuItem::close_window(app_handle, None)?,
                     #[cfg(not(target_os = "macos"))]
                     &PredefinedMenuItem::quit(app_handle, None)?,
@@ -130,5 +141,7 @@ pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 pub fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     if event.id() == OPEN_SETTINGS_MENU_ID {
         let _ = app.emit(OPEN_SETTINGS_EVENT, ());
+    } else if event.id() == EMPTY_TRASH_MENU_ID {
+        let _ = app.emit(EMPTY_TRASH_EVENT, ());
     }
 }

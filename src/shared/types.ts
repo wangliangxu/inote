@@ -1,4 +1,4 @@
-export type WorkspaceView = 'today' | 'category' | 'tags' | 'calendar' | 'search' | 'settings'
+export type WorkspaceView = 'today' | 'category' | 'tags' | 'calendar' | 'search' | 'settings' | 'archive' | 'trash'
 
 export type SaveState = 'loading' | 'demo' | 'dirty' | 'saving' | 'saved' | 'error'
 

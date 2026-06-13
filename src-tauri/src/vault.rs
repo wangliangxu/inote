@@ -60,14 +60,6 @@ impl Vault {
         let mut notes = Vec::new();
         for entry in WalkDir::new(&self.root).into_iter().filter_map(Result::ok) {
             let path = entry.path();
-            if path
-                .strip_prefix(&self.root)
-                .ok()
-                .and_then(|relative| relative.components().next())
-                .is_some_and(|component| component.as_os_str() == ".trash")
-            {
-                continue;
-            }
             if path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("md") {
                 notes.push(parse_note(&self.root, path)?);
             }
@@ -237,6 +229,10 @@ impl Vault {
         if !path.exists() {
             return Err("note does not exist".to_string());
         }
+        if relative_path.starts_with(".trash/") {
+            return fs::remove_file(path)
+                .map_err(|error| format!("failed to permanently delete note: {error}"));
+        }
         let trash_root = self.root.join(".trash");
         fs::create_dir_all(&trash_root)
             .map_err(|error| format!("failed to create trash folder: {error}"))?;
@@ -255,6 +251,17 @@ impl Vault {
         }
         fs::rename(path, destination)
             .map_err(|error| format!("failed to move note to trash: {error}"))
+    }
+
+    pub fn empty_trash(&self) -> Result<(), String> {
+        let trash_root = self.root.join(".trash");
+        if trash_root.exists() {
+            fs::remove_dir_all(&trash_root)
+                .map_err(|error| format!("failed to empty trash: {error}"))?;
+            fs::create_dir_all(&trash_root)
+                .map_err(|error| format!("failed to recreate trash folder: {error}"))?;
+        }
+        Ok(())
     }
 
     fn review_notes(
@@ -411,7 +418,9 @@ mod tests {
 
         vault.delete_note("knowledge/a.md").unwrap();
         assert!(!dir.path().join("knowledge/a.md").exists());
-        assert_eq!(vault.scan().unwrap().len(), 0);
+        let scanned = vault.scan().unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert!(scanned[0].path.starts_with(".trash/"));
         assert_eq!(fs::read_dir(dir.path().join(".trash")).unwrap().count(), 1);
     }
 
