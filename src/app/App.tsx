@@ -580,8 +580,24 @@ export function App() {
     
     const { body, metadata } = parseMarkdownWithFrontmatter(fullContent)
     
+    // MDXEditor normalizes table spacing and delimiter rows (e.g., adding spaces or converting |-| to |---|).
+    // We normalize both bodies for comparison to avoid marking the note dirty just from toggling modes.
+    const normalizeTableFormatting = (md: string) => {
+      return md.split('\n').map(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+          let row = trimmed.replace(/\s*\|\s*/g, '|');
+          if (/^\|[\-\|]+\|$/.test(row)) {
+            row = row.replace(/\-+/g, '-');
+          }
+          return row;
+        }
+        return line;
+      }).join('\n');
+    }
+
     const hasChanges =
-      body !== activeNote.body ||
+      normalizeTableFormatting(body) !== normalizeTableFormatting(activeNote.body) ||
       (metadata.title !== undefined && metadata.title !== activeNote.title) ||
       (metadata.category !== undefined && metadata.category !== activeNote.category) ||
       (metadata.tags !== undefined && metadata.tags.join(',') !== activeNote.tags.join(',')) ||
