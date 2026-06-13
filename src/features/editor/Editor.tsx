@@ -1,11 +1,12 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import type { Note, SaveState } from '../../shared/types'
-import { noteToMarkdown } from '../../shared/api'
+import { noteToMarkdown, parseMarkdownWithFrontmatter } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight } from 'lucide-react'
 import {
   MDXEditor,
+  type MDXEditorMethods,
   headingsPlugin,
   listsPlugin,
   quotePlugin,
@@ -60,6 +61,27 @@ export function Editor({
   onDelete,
   saveState = 'demo',
 }: EditorProps) {
+  const editorRef = useRef<MDXEditorMethods>(null)
+
+  useEffect(() => {
+    if (editorRef.current) {
+      const currentMd = editorRef.current.getMarkdown()
+      const { metadata: currentMeta } = parseMarkdownWithFrontmatter(currentMd)
+      const newMd = noteToMarkdown(note)
+      const { metadata: newMeta } = parseMarkdownWithFrontmatter(newMd)
+      
+      const changed = 
+        currentMeta.title !== newMeta.title ||
+        currentMeta.category !== newMeta.category ||
+        (currentMeta.tags || []).join(',') !== (newMeta.tags || []).join(',') ||
+        currentMeta.summary !== newMeta.summary
+
+      if (changed) {
+        editorRef.current.setMarkdown(newMd)
+      }
+    }
+  }, [note.title, note.category, note.tags, note.summary])
+
   const saveLabel = {
     loading: 'Loading',
     demo: 'Demo only',
@@ -191,6 +213,7 @@ export function Editor({
       </header>
       <div className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <MDXEditor
+          ref={editorRef}
           key={note.path} // Force re-mount on note change so internal state resets
           className={`mdx-editor-main ${isDark ? 'dark-theme dark-editor' : ''}`}
           markdown={noteToMarkdown(note)}
