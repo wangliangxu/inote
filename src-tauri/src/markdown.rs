@@ -144,9 +144,36 @@ fn first_heading(body: &str) -> Option<String> {
 }
 
 fn count_words(body: &str) -> usize {
-    body.split_whitespace()
-        .filter(|word| !word.trim().is_empty())
-        .count()
+    let mut count = 0;
+    let mut in_word = false;
+
+    for c in body.chars() {
+        if is_cjk(c) {
+            count += 1;
+            in_word = false;
+        } else if c.is_whitespace() || is_punctuation(c) {
+            in_word = false;
+        } else {
+            if !in_word {
+                count += 1;
+                in_word = true;
+            }
+        }
+    }
+    count
+}
+
+fn is_cjk(c: char) -> bool {
+    let u = c as u32;
+    (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u) || (0xF900..=0xFAFF).contains(&u)
+}
+
+fn is_punctuation(c: char) -> bool {
+    c.is_ascii_punctuation()
+        || matches!(
+            c,
+            '，' | '。' | '！' | '？' | '；' | '：' | '“' | '”' | '‘' | '’' | '（' | '）' | '【' | '】' | '《' | '》' | '、' | '—' | '…'
+        )
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String, String> {
