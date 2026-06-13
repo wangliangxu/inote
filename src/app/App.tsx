@@ -221,6 +221,7 @@ export function App() {
   const categoryFilterRef = useRef<HTMLDetailsElement>(null)
   const categoryFilterPointerInsideRef = useRef(false)
   const skipNextSettingsSaveRef = useRef(true)
+  const skipNextVaultChangeUntilRef = useRef(0)
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
   const effectiveTheme = useMemo(() => getEffectiveTheme(themePreference, systemPrefersDark), [systemPrefersDark, themePreference])
@@ -415,6 +416,10 @@ export function App() {
 
     listen('vault://changed', () => {
       if (!disposed) {
+        if (Date.now() < skipNextVaultChangeUntilRef.current) {
+          skipNextVaultChangeUntilRef.current = 0
+          return
+        }
         refreshVaultFromDisk('Markdown files changed on disk. Vault refreshed.')
       }
     })
@@ -943,17 +948,17 @@ export function App() {
     const confirmed = await safeConfirm(`Move ${path} to trash?`)
     if (!confirmed) return
     try {
+      skipNextVaultChangeUntilRef.current = Date.now() + 1500
       await deleteNote(vaultRoot.trim(), path)
       const remaining = notes.filter((note) => note.path !== path)
       setNotes(remaining)
+      setIndexedResults((current) => current.filter((note) => note.path !== path))
+      setLinkVersion((current) => current + 1)
       setActivePath((current) => (current === path ? (remaining[0]?.path ?? '') : current))
       setSaveState('saved')
       setStatus(`Moved ${path} to trash.`)
-
-      rebuildSearchIndex(vaultRoot.trim())
-        .then(() => setLinkVersion((current) => current + 1))
-        .catch(console.error)
     } catch (error) {
+      skipNextVaultChangeUntilRef.current = 0
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }

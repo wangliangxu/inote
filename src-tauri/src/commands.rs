@@ -217,7 +217,10 @@ pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
 
 #[tauri::command]
 pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
-    Vault::new(vault_root)?.delete_note(&path)
+    let vault = Vault::new(&vault_root)?;
+    vault.delete_note(&path)?;
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    index.delete_note(&path)
 }
 
 #[tauri::command]

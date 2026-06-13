@@ -119,6 +119,25 @@ impl NoteIndex {
         Ok(())
     }
 
+    pub fn delete_note(&self, path: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM links WHERE source_path = ?1 OR target_path = ?1",
+                params![path],
+            )
+            .map_err(|error| format!("failed to remove note links from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM tags WHERE note_path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note tags from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM search_index WHERE path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note text from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM notes WHERE path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note metadata from index: {error}"))?;
+        Ok(())
+    }
+
     pub fn search(&self, query: &str) -> Result<Vec<SearchResult>, String> {
         let query = query.trim();
         if query.is_empty() {
@@ -498,6 +517,35 @@ mod tests {
         index.rebuild(&vault.scan().unwrap()).unwrap();
 
         assert!(index.search("stale").unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_note_removes_search_tags_and_links_without_rebuild() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note(
+                "knowledge/source.md",
+                "---\ntitle: Source Note\ntags: [source]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nLinks to [[Target Note]].",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "knowledge/target.md",
+                "---\ntitle: Target Note\ntags: [target]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\ntargetonly body.",
+            )
+            .unwrap();
+
+        let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
+        index.rebuild(&vault.scan().unwrap()).unwrap();
+        assert_eq!(index.search("targetonly").unwrap().len(), 1);
+        assert_eq!(index.backlinks("knowledge/target.md").unwrap().len(), 1);
+
+        index.delete_note("knowledge/target.md").unwrap();
+
+        assert!(index.search("targetonly").unwrap().is_empty());
+        assert!(index.backlinks("knowledge/target.md").unwrap().is_empty());
+        assert!(index.outgoing_links("knowledge/source.md").unwrap().is_empty());
     }
 
     #[test]
