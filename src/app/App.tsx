@@ -580,6 +580,17 @@ export function App() {
     
     const { body, metadata } = parseMarkdownWithFrontmatter(fullContent)
     
+    const hasChanges =
+      body !== activeNote.body ||
+      (metadata.title !== undefined && metadata.title !== activeNote.title) ||
+      (metadata.category !== undefined && metadata.category !== activeNote.category) ||
+      (metadata.tags !== undefined && metadata.tags.join(',') !== activeNote.tags.join(',')) ||
+      (metadata.summary !== undefined && metadata.summary !== activeNote.summary)
+
+    if (!hasChanges) {
+      return
+    }
+
     setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
