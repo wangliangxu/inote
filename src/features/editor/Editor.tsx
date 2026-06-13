@@ -179,10 +179,10 @@ export function Editor({
           ))}
         </div>
       </header>
-      <div className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, overflow: 'auto' }}>
+      <div className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <MDXEditor
           key={note.path} // Force re-mount on note change so internal state resets
-          className={isDark ? 'dark-theme dark-editor' : ''}
+          className={`mdx-editor-main ${isDark ? 'dark-theme dark-editor' : ''}`}
           markdown={noteToMarkdown(note)}
           onChange={onChange}
           readOnly={previewMode}
