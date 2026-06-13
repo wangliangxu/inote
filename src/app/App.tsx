@@ -103,10 +103,9 @@ interface NoteItemProps {
   note: Note | SearchResult
   isActive: boolean
   onSelect: (path: string) => void
-  onDelete: (path: string) => void
 }
 
-const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
+const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect }: NoteItemProps) {
   return (
     <div className={isActive ? 'note-card active' : 'note-card'}>
       <button className="note-card-select" type="button" onClick={() => onSelect(note.path)}>
@@ -114,41 +113,17 @@ const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect, onDe
         <small>{noteExcerpt(note)}</small>
         <time>{note.updatedAt}</time>
       </button>
-      <button
-        className="note-delete-action"
-        type="button"
-        title="Move note to trash"
-        aria-label="Move note to trash"
-        onClick={(event) => {
-          event.stopPropagation()
-          onDelete(note.path)
-        }}
-      >
-        <Trash2 size={14} />
-      </button>
     </div>
   )
 })
 
-const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect, onDelete }: NoteItemProps) {
+const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect }: NoteItemProps) {
   return (
     <div className={isActive ? 'note-row active' : 'note-row'}>
       <button className="note-row-select" type="button" onClick={() => onSelect(note.path)}>
         <strong>{note.title}</strong>
         <small>{noteExcerpt(note)}</small>
         <time>{note.updatedAt}</time>
-      </button>
-      <button
-        className="note-delete-action"
-        type="button"
-        title="Move note to trash"
-        aria-label="Move note to trash"
-        onClick={(event) => {
-          event.stopPropagation()
-          onDelete(note.path)
-        }}
-      >
-        <Trash2 size={14} />
       </button>
     </div>
   )
@@ -1274,19 +1249,17 @@ export function App() {
                       <NoteCardItem
                         key={note.path}
                         note={note}
-                        isActive={note.path === activeNote?.path}
+                        isActive={note.path === activePath}
                         onSelect={setActivePath}
-                        onDelete={deleteNoteByPath}
                       />
                     ) : (
                       <NoteRowItem
                         key={note.path}
                         note={note}
-                        isActive={note.path === activeNote?.path}
+                        isActive={note.path === activePath}
                         onSelect={setActivePath}
-                        onDelete={deleteNoteByPath}
                       />
-                    ),
+                    )
                   )}
                 </div>
               </section>
@@ -1328,6 +1301,8 @@ export function App() {
                 note={activeNote}
                 onChange={updateActiveNote}
                 onSave={saveActiveNote}
+                onRename={renameActiveNote}
+                onMove={moveActiveNotePrompt}
                 onCheckExternal={checkExternalActiveNote}
                 onDelete={deleteActiveNote}
                 previewMode={previewMode}
@@ -1389,15 +1364,6 @@ export function App() {
                       <Archive size={15} />
                     </button>
                   ) : null}
-                  <button type="button" onClick={renameActiveNote} title="Rename note">
-                    <Pencil size={15} />
-                  </button>
-                  <button type="button" onClick={moveActiveNotePrompt} title="Move note">
-                    <MoveRight size={15} />
-                  </button>
-                  <button type="button" onClick={deleteActiveNote} title="Delete note">
-                    <FileMinus2 size={15} />
-                  </button>
                 </div>
               </section>
               <section className="context-section">

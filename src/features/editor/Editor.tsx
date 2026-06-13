@@ -3,7 +3,7 @@ import type { Note, SaveState } from '../../shared/types'
 import { noteToMarkdown } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
-import { Eye, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { Eye, Pencil, RefreshCw, Save, Trash2, MoveRight } from 'lucide-react'
 import {
   MDXEditor,
   headingsPlugin,
@@ -41,6 +41,8 @@ interface EditorProps {
   onCheckExternal?: () => void
   previewMode?: boolean
   onTogglePreview?: () => void
+  onRename?: () => void
+  onMove?: () => void
   onDelete?: () => void
   saveState?: SaveState
 }
@@ -53,6 +55,8 @@ export function Editor({
   onCheckExternal,
   previewMode = false,
   onTogglePreview,
+  onRename,
+  onMove,
   onDelete,
   saveState = 'demo',
 }: EditorProps) {
@@ -143,6 +147,16 @@ export function Editor({
             <h2>{note.title}</h2>
           </div>
           <div className="editor-actions">
+            {onRename ? (
+              <button className="secondary-action icon-action" type="button" onClick={onRename} title="Rename note">
+                <Pencil size={16} />
+              </button>
+            ) : null}
+            {onMove ? (
+              <button className="secondary-action icon-action" type="button" onClick={onMove} title="Move note">
+                <MoveRight size={16} />
+              </button>
+            ) : null}
 
             {onCheckExternal ? (
               <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title="Check file">

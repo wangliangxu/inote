@@ -10,7 +10,7 @@ describe('startup shell', () => {
 
     expect(styleIndex).toBeGreaterThan(-1)
     expect(moduleIndex).toBeGreaterThan(styleIndex)
-    expect(html).toContain('background: #050606')
+    expect(html).toContain('background: #1c1e1a')
     expect(html).toContain('document.documentElement.dataset.theme')
   })
 
