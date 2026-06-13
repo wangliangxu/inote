@@ -1045,28 +1045,11 @@ export function App() {
           />
         </div>
         <div className="window-actions" aria-label="Window actions">
-          <button type="button" onClick={addInboxNote} title="New inbox note">
-            <FilePlus2 size={16} />
-            <span>Inbox</span>
-          </button>
-          <button type="button" onClick={addTodayNote} title="Open today note">
-            <CalendarDays size={16} />
-            <span>Today</span>
-          </button>
           <button className="icon-action" type="button" onClick={addCategoryNote} title="Create note" aria-label="Create note">
             <Pencil size={16} />
           </button>
           <button className="icon-action" type="button" onClick={addFolder} title="Create folder" aria-label="Create folder">
             <FolderPlus size={16} />
-          </button>
-          <button
-            className={activeView === 'category' ? 'icon-action active' : 'icon-action'}
-            type="button"
-            onClick={() => setActiveView('category')}
-            title="Categories"
-            aria-label="Open categories"
-          >
-            <FolderTree size={17} />
           </button>
           <button
             className={activeView === 'tags' ? 'icon-action active' : 'icon-action'}

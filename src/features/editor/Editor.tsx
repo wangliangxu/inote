@@ -143,11 +143,7 @@ export function Editor({
             <h2>{note.title}</h2>
           </div>
           <div className="editor-actions">
-            {onTogglePreview ? (
-              <button className="secondary-action icon-action" type="button" onClick={onTogglePreview} title={previewMode ? 'Edit' : 'Preview'}>
-                {previewMode ? <Pencil size={16} /> : <Eye size={16} />}
-              </button>
-            ) : null}
+
             {onCheckExternal ? (
               <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title="Check file">
                 <RefreshCw size={16} />
