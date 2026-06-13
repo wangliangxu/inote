@@ -1496,7 +1496,7 @@ export function App() {
                 </label>
                 <label className="metadata-editor">
                   <span>Created</span>
-                  <input type="date" value={activeNote.createdAt} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
+                  <input type="date" value={activeNote.createdAt.slice(0, 10)} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
                 </label>
                 <label className="metadata-editor">
                   <span>Tags</span>
