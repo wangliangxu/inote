@@ -117,7 +117,7 @@ export function Editor({
     codeMirrorPlugin({ 
       codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript (React)', css: 'CSS', txt: 'Text', markdown: 'Markdown', json: 'JSON', html: 'HTML', python: 'Python', bash: 'Bash' } 
     }),
-    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: note.body }),
+    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: noteToMarkdown(note) }),
     toolbarPlugin({
       toolbarContents: () => (
         <DiffSourceToggleWrapper>
