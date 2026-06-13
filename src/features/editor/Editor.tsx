@@ -62,6 +62,13 @@ export function Editor({
   saveState = 'demo',
 }: EditorProps) {
   const editorRef = useRef<MDXEditorMethods>(null)
+  const [diffBaseline, setDiffBaseline] = useState(() => noteToMarkdown(note))
+
+  useEffect(() => {
+    if (saveState === 'saved' || saveState === 'demo') {
+      setDiffBaseline(noteToMarkdown(note))
+    }
+  }, [saveState, note])
 
   useEffect(() => {
     if (editorRef.current) {
@@ -143,7 +150,7 @@ export function Editor({
     codeMirrorPlugin({ 
       codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript (React)', css: 'CSS', txt: 'Text', markdown: 'Markdown', json: 'JSON', html: 'HTML', python: 'Python', bash: 'Bash' } 
     }),
-    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: noteToMarkdown(note) }),
+    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: diffBaseline }),
     toolbarPlugin({
       toolbarContents: () => (
         <DiffSourceToggleWrapper>
@@ -159,7 +166,7 @@ export function Editor({
         </DiffSourceToggleWrapper>
       )
     })
-  ], [note.path, vaultRoot, isDark])
+  ], [note.path, vaultRoot, isDark, diffBaseline])
 
   return (
     <article className="editor">

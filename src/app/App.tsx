@@ -217,7 +217,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot)
   const [status, setStatus] = useState(initialWorkspace.status)
-  const [saveState, setSaveState] = useState<SaveState>(initialWorkspace.saveState)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
   const [indexedResults, setIndexedResults] = useState<SearchResult[]>([])
   const [noteLinks, setNoteLinks] = useState<NoteLinks>({ outgoing: [], backlinks: [] })
@@ -267,6 +268,16 @@ export function App() {
   }, [activeView, activeCategory, activePath])
 
   const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
+  
+  const saveState: SaveState = !vaultRoot.trim() ? 'demo' :
+    saveError ? 'error' :
+    isSaving ? 'saving' :
+    (activeNote?.isDirty ? 'dirty' : 'saved')
+    
+  useEffect(() => {
+    setSaveError(false)
+  }, [activePath])
+    
   const effectiveTheme = useMemo(() => getEffectiveTheme(themePreference, systemPrefersDark), [systemPrefersDark, themePreference])
   const categoryOptions = useMemo(() => groupByCategory(notes), [notes])
   const searchCategorySet = useMemo(() => new Set(selectedSearchCategories), [selectedSearchCategories])
@@ -320,7 +331,7 @@ export function App() {
         if (loadedNotes.some((note) => note.path === current)) return current
         return loadedNotes[0]?.path ?? ''
       })
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(reason)
     },
     [],
@@ -330,7 +341,7 @@ export function App() {
     setNotes(demoNotes)
     setActivePath(demoNotes[0]?.path ?? '')
     setVaultRoot('')
-    setSaveState('demo')
+    setSaveError(false)
     setStatus('Demo vault loaded. Enter a local path in Settings to open real notes.')
   }, [])
 
@@ -382,7 +393,7 @@ export function App() {
               savedSettings.activePath || legacyActivePath,
             )
           } catch (error) {
-            setSaveState('error')
+            setSaveError(true)
             setStatus(error instanceof Error ? error.message : String(error))
           }
         } else {
@@ -401,7 +412,7 @@ export function App() {
               window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? '',
             )
           } catch (error) {
-            setSaveState('error')
+            setSaveError(true)
             setStatus(error instanceof Error ? error.message : String(error))
           }
         } else {
@@ -658,17 +669,31 @@ export function App() {
     // MDXEditor normalizes table spacing and delimiter rows (e.g., adding spaces or converting |-| to |---|).
     // We normalize both bodies for comparison to avoid marking the note dirty just from toggling modes.
     const normalizeTableFormatting = (md: string) => {
-      return md.split('\n').map(line => {
-        const trimmed = line.trim();
+      // Remove carriage returns and collapse 3+ consecutive newlines to 2
+      let normalized = md.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n');
+      return normalized.split('\n').map(line => {
+        let row = line.replace(/[ \t]+$/, ''); // Remove trailing spaces from all lines
+        const trimmed = row.trim();
         if (trimmed.includes('|')) {
-          let row = trimmed.replace(/(^\||\|$)/g, '');
-          row = row.replace(/\s*\|\s*/g, '|').trim();
-          if (/^[\-\|]+$/.test(row)) {
-            row = '-';
+          let tableRow = trimmed.replace(/(^\||\|$)/g, '');
+          tableRow = tableRow.replace(/\s*\|\s*/g, '|').trim();
+          // Normalize multiple spaces/tabs to a single space to ignore internal text spacing changes
+          tableRow = tableRow.replace(/\s+/g, ' ');
+          // Handle delimiter rows, including those with colons for alignment
+          if (/^[:\-\| ]+$/.test(tableRow)) {
+            tableRow = tableRow.split('|').map(cell => {
+              const c = cell.trim();
+              const left = c.startsWith(':');
+              const right = c.endsWith(':');
+              if (left && right) return ':C:';
+              if (left) return ':L';
+              if (right) return 'R:';
+              return '-';
+            }).join('|');
           }
-          return row;
+          return tableRow;
         }
-        return line;
+        return row;
       }).join('\n').trim();
     }
 
@@ -680,10 +705,28 @@ export function App() {
       (metadata.summary !== undefined && metadata.summary !== activeNote.summary)
 
     if (!hasChanges) {
+      const hasFormattingChanges = body !== activeNote.body
+      if (hasFormattingChanges && vaultRoot.trim()) {
+        const updatedNote = {
+          ...activeNote,
+          ...metadata,
+          body,
+          wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+        }
+        // Update state without changing saveState to 'dirty'
+        setNotes((current) => current.map((n) => (n.path === activeNote.path ? updatedNote : n)))
+        // Silently write to disk
+        writeNote({
+          vaultRoot: vaultRoot.trim(),
+          path: activeNote.path,
+          content: noteToMarkdown(updatedNote),
+        }).catch((err) => {
+          console.error('Silent save failed:', err)
+        })
+      }
       return
     }
 
-    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
         note.path === activeNote.path
@@ -693,6 +736,7 @@ export function App() {
             body,
             updatedAt: localDateString(),
             wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+            isDirty: true,
           }
           : note,
       ),
@@ -701,7 +745,6 @@ export function App() {
 
   function updateActiveNoteTitle(title: string) {
     if (!activeNote) return
-    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
         note.path === activeNote.path
@@ -709,6 +752,7 @@ export function App() {
             ...note,
             title,
             updatedAt: localDateString(),
+            isDirty: true,
           }
           : note,
       ),
@@ -717,7 +761,6 @@ export function App() {
 
   function updateActiveNoteCreatedAt(createdAt: string) {
     if (!activeNote) return
-    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
         note.path === activeNote.path
@@ -725,6 +768,7 @@ export function App() {
             ...note,
             createdAt,
             updatedAt: localDateString(),
+            isDirty: true,
           }
           : note,
       ),
@@ -738,7 +782,6 @@ export function App() {
       .map((tag) => tag.trim().replace(/^#/, ''))
       .filter(Boolean)
       .filter((tag, index, all) => all.indexOf(tag) === index)
-    setSaveState(vaultRoot.trim() ? 'dirty' : 'demo')
     setNotes((current) =>
       current.map((note) =>
         note.path === activeNote.path
@@ -746,6 +789,7 @@ export function App() {
             ...note,
             tags,
             updatedAt: localDateString(),
+            isDirty: true,
           }
           : note,
       ),
@@ -760,7 +804,7 @@ export function App() {
     try {
       await refreshVaultFromDisk('Vault opened. Markdown notes indexed.')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
-      setSaveState('saved')
+      setSaveError(false)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -777,10 +821,10 @@ export function App() {
       setNotes(loadedNotes.length ? loadedNotes : [])
       setActivePath(loadedNotes[0]?.path ?? '')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
-      setSaveState('saved')
+      setSaveError(false)
       setStatus('Starter vault folders are ready.')
     } catch (error) {
-      setSaveState('error')
+      setSaveError(true)
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
@@ -791,7 +835,7 @@ export function App() {
       return
     }
     try {
-      setSaveState('saving')
+      setIsSaving(true)
       
       let noteToSave = { ...activeNote }
       
@@ -837,10 +881,10 @@ export function App() {
         setActivePath(saved.path)
       }
       setActiveCategory(saved.category)
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Saved ${saved.path}.`)
     } catch (error) {
-      setSaveState('error')
+      setSaveError(true)
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
@@ -866,15 +910,15 @@ export function App() {
       const reload = await safeConfirm(`${activeNote.path} changed on disk. Reload the disk version?`)
       if (!reload) {
         setStatus('Kept editor version. Save to overwrite disk when ready.')
-        setSaveState('dirty')
+        setNotes((current) => current.map((note) => (note.path === diskNote.path ? { ...note, isDirty: true } : note)))
         return
       }
 
       setNotes((current) => current.map((note) => (note.path === diskNote.path ? diskNote : note)))
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Reloaded ${diskNote.path} from disk.`)
     } catch (error) {
-      setSaveState('error')
+      setSaveError(true)
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
@@ -907,10 +951,10 @@ export function App() {
       setActivePath(archived.path)
       setActiveCategory(archived.category)
       setActiveView('category')
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Archived to ${archived.path}.`)
     } catch (error) {
-      setSaveState('error')
+      setSaveError(true)
       setStatus(error instanceof Error ? error.message : String(error))
     }
   }
@@ -925,7 +969,7 @@ export function App() {
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Opened ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -945,7 +989,7 @@ export function App() {
       setActivePath(note.path)
       setActiveCategory(note.category)
       setActiveView('category')
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -965,7 +1009,7 @@ export function App() {
       setActivePath(note.path)
       setActiveCategory(note.category)
       setActiveView('category')
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -982,7 +1026,7 @@ export function App() {
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -1004,7 +1048,7 @@ export function App() {
       setActivePath(note.path)
       setActiveCategory(note.category)
       setActiveView('category')
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -1061,7 +1105,7 @@ export function App() {
       setNotes((current) => current.map((note) => (note.path === activeNote.path ? moved : note)))
       setActivePath(moved.path)
       setActiveCategory(moved.category)
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(`Moved to ${moved.path}.`)
 
       setLinkVersion((current) => current + 1)
@@ -1086,7 +1130,7 @@ export function App() {
       setIndexedResults((current) => current.filter((note) => note.path !== path))
       setLinkVersion((current) => current + 1)
       setActivePath((current) => (current === path ? (remaining[0]?.path ?? '') : current))
-      setSaveState('saved')
+      setSaveError(false)
       setStatus(isTrash ? `Permanently deleted ${path}.` : `Moved ${path} to trash.`)
     } catch (error) {
       skipNextVaultChangeUntilRef.current = 0
@@ -1396,6 +1440,7 @@ export function App() {
           ) : (
             activeNote ? (
               <Editor
+                key={activeNote.path}
                 vaultRoot={vaultRoot.trim()}
                 note={activeNote}
                 onChange={updateActiveNote}

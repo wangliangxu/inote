@@ -12,6 +12,7 @@ export interface Note {
   summary?: string
   body: string
   wordCount: number
+  isDirty?: boolean
 }
 
 export interface CategoryGroup {
