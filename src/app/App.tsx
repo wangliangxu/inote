@@ -585,15 +585,16 @@ export function App() {
     const normalizeTableFormatting = (md: string) => {
       return md.split('\n').map(line => {
         const trimmed = line.trim();
-        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
-          let row = trimmed.replace(/\s*\|\s*/g, '|');
-          if (/^\|[\-\|]+\|$/.test(row)) {
-            row = row.replace(/\-+/g, '-');
+        if (trimmed.includes('|')) {
+          let row = trimmed.replace(/(^\||\|$)/g, '');
+          row = row.replace(/\s*\|\s*/g, '|').trim();
+          if (/^[\-\|]+$/.test(row)) {
+            row = '-';
           }
           return row;
         }
         return line;
-      }).join('\n');
+      }).join('\n').trim();
     }
 
     const hasChanges =
