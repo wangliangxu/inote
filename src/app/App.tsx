@@ -166,6 +166,35 @@ function getFilenameForTitle(title: string) {
   }
 }
 
+const TagsInput = memo(function TagsInput({ tags, onChange }: { tags: string[], onChange: (value: string) => void }) {
+  const [value, setValue] = useState(tags.join(', '))
+
+  useEffect(() => {
+    const currentTags = value
+      .split(',')
+      .map(t => t.trim().replace(/^#/, ''))
+      .filter(Boolean)
+      .filter((tag, index, all) => all.indexOf(tag) === index)
+      .join(',')
+    
+    const newTags = tags.join(',')
+    
+    if (currentTags !== newTags) {
+      setValue(tags.join(', '))
+    }
+  }, [tags, value])
+
+  return (
+    <input 
+      value={value} 
+      onChange={(e) => {
+        setValue(e.target.value)
+        onChange(e.target.value)
+      }} 
+    />
+  )
+})
+
 export function App() {
   const initialWorkspace = useMemo(
     () => createInitialWorkspaceState(typeof window === 'undefined' ? undefined : window.localStorage),
@@ -1356,7 +1385,7 @@ export function App() {
                 </label>
                 <label className="metadata-editor">
                   <span>Tags</span>
-                  <input value={activeNote.tags.join(', ')} onChange={(event) => updateActiveNoteTags(event.target.value)} />
+                  <TagsInput tags={activeNote.tags} onChange={updateActiveNoteTags} />
                 </label>
                 <div className="context-actions">
                   {activeNote.path.startsWith('00-inbox/') ? (
