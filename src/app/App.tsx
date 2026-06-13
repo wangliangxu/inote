@@ -178,6 +178,19 @@ function localDateString(date = new Date()): string {
   return localDate.toISOString().slice(0, 10)
 }
 
+function getFilenameForTitle(title: string) {
+  const trimmed = title.trim()
+  if (/[^\x00-\x7F]/.test(trimmed)) {
+    let sanitized = trimmed.replace(/[\\/:\*\?"<>\|]/g, '-')
+    sanitized = sanitized.replace(/^[ -]+|[ -]+$/g, '')
+    return sanitized || 'note'
+  } else {
+    let slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    slug = slug.replace(/^-|-$/g, '')
+    return slug || 'note'
+  }
+}
+
 export function App() {
   const initialWorkspace = useMemo(
     () => createInitialWorkspaceState(typeof window === 'undefined' ? undefined : window.localStorage),
@@ -209,6 +222,7 @@ export function App() {
     if (typeof window === 'undefined') return 'system'
     return readStoredThemePreference(window.localStorage)
   })
+  const [defaultCategory, setDefaultCategory] = useState('knowledge')
   const [baseFontSize, setBaseFontSize] = useState<number>(() => {
     if (typeof window === 'undefined') return 16
     const stored = window.localStorage.getItem(BASE_FONT_SIZE_KEY)
@@ -218,6 +232,13 @@ export function App() {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
+  const [promptConfig, setPromptConfig] = useState<{ message: string, defaultValue: string, resolve: (val: string | null) => void } | null>(null)
+  
+  const safePrompt = useCallback((message: string, defaultValue = '') => {
+    return new Promise<string | null>((resolve) => {
+      setPromptConfig({ message, defaultValue, resolve })
+    })
+  }, [])
   const categoryFilterRef = useRef<HTMLDetailsElement>(null)
   const categoryFilterPointerInsideRef = useRef(false)
   const skipNextSettingsSaveRef = useRef(true)
@@ -312,6 +333,9 @@ export function App() {
         }
 
         let llmSettingsFromStorage = savedSettings.llmSettings
+        if (savedSettings.defaultCategory) {
+          setDefaultCategory(savedSettings.defaultCategory)
+        }
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
@@ -387,7 +411,7 @@ export function App() {
     }
     const timeout = window.setTimeout(() => {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
-      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, llmSettings })
+      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, llmSettings, defaultCategory })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
           window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
@@ -403,7 +427,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [activePath, llmSettings, settingsLoaded, vaultRoot])
+  }, [activePath, llmSettings, settingsLoaded, vaultRoot, defaultCategory])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return
@@ -717,14 +741,51 @@ export function App() {
     }
     try {
       setSaveState('saving')
+      
+      let noteToSave = { ...activeNote }
+      
+      if (noteToSave.title === '无标题') {
+        const now = new Date()
+        const timestamp = now.getFullYear().toString() + 
+          String(now.getMonth() + 1).padStart(2, '0') + 
+          String(now.getDate()).padStart(2, '0') + 
+          String(now.getHours()).padStart(2, '0') + 
+          String(now.getMinutes()).padStart(2, '0') + 
+          String(now.getSeconds()).padStart(2, '0')
+        const randomDigits = Math.floor(1000 + Math.random() * 9000)
+        noteToSave.title = `${timestamp}-${randomDigits}`
+      }
+
+      const expectedFilename = `${getFilenameForTitle(noteToSave.title)}.md`
+      let expectedPath = noteToSave.category ? `${noteToSave.category}/${expectedFilename}` : expectedFilename
+      expectedPath = expectedPath.replace(/\/+/g, '/')
+      
+      let finalPath = noteToSave.path
+      
+      if (noteToSave.path !== expectedPath) {
+        try {
+          const moved = await moveNote({ vaultRoot: vaultRoot.trim(), from: noteToSave.path, to: expectedPath })
+          finalPath = moved.path
+        } catch (error) {
+          const newExpectedPath = expectedPath.replace(/\.md$/, `-${Math.floor(1000 + Math.random() * 9000)}.md`)
+          const moved = await moveNote({ vaultRoot: vaultRoot.trim(), from: noteToSave.path, to: newExpectedPath })
+          finalPath = moved.path
+        }
+        noteToSave.path = finalPath
+      }
+
       const saved = await writeNote({
         vaultRoot: vaultRoot.trim(),
-        path: activeNote.path,
-        content: noteToMarkdown(activeNote),
+        path: finalPath,
+        content: noteToMarkdown(noteToSave),
       })
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
-      setNotes((current) => current.map((note) => (note.path === saved.path ? saved : note)))
+      setNotes((current) => current.map((note) => (note.path === activeNote.path ? saved : note)))
+      
+      if (activeNote.path !== saved.path) {
+        setActivePath(saved.path)
+      }
+      setActiveCategory(saved.category)
       setSaveState('saved')
       setStatus(`Saved ${saved.path}.`)
     } catch (error) {
@@ -776,9 +837,9 @@ export function App() {
       setStatus('Only inbox notes can use the archive flow.')
       return
     }
-    const title = window.prompt('Archive title', activeNote.title)
+    const title = await safePrompt('Archive title', activeNote.title)
     if (!title) return
-    const category = window.prompt('Archive category', activeCategory && activeCategory !== '00-inbox' ? activeCategory : 'knowledge')
+    const category = await safePrompt('Archive category', activeCategory && activeCategory !== '00-inbox' ? activeCategory : 'knowledge')
     if (!category) return
     try {
       const archived = await archiveNote({
@@ -790,7 +851,6 @@ export function App() {
         createdAt: activeNote.createdAt,
         body: activeNote.body,
       })
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [archived, ...current.filter((note) => note.path !== activeNote.path)])
       setActivePath(archived.path)
@@ -811,7 +871,6 @@ export function App() {
     }
     try {
       const note = await createTodayNote(vaultRoot.trim())
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
@@ -830,7 +889,6 @@ export function App() {
     try {
       const today = localDateString()
       const note = await createWeeklyReview({ vaultRoot: vaultRoot.trim(), date: today })
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
@@ -851,7 +909,6 @@ export function App() {
     try {
       const today = localDateString()
       const note = await createMonthlyReview({ vaultRoot: vaultRoot.trim(), date: today })
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
@@ -871,7 +928,6 @@ export function App() {
     }
     try {
       const note = await createInboxNote(vaultRoot.trim(), 'Quick Thought')
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
@@ -887,13 +943,11 @@ export function App() {
       setStatus('Open a real vault before creating notes.')
       return
     }
-    const title = window.prompt('Note title')
-    if (!title) return
-    const category = window.prompt('Category folder', activeCategory || 'knowledge')
-    if (!category) return
+    const title = '无标题'
+    const fallbackCategory = categoryOptions.length > 0 ? categoryOptions[0].name : 'knowledge'
+    const category = activeCategory || defaultCategory || fallbackCategory
     try {
       const note = await createNote({ vaultRoot: vaultRoot.trim(), title, category })
-      await rebuildSearchIndex(vaultRoot.trim())
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current])
       setActivePath(note.path)
@@ -911,12 +965,11 @@ export function App() {
       setStatus('Open a real vault before creating folders.')
       return
     }
-    const path = window.prompt('Folder path', activeCategory || 'knowledge/new-topic')
+    const path = await safePrompt('Folder path', activeCategory || 'knowledge/new-topic')
     if (!path) return
     try {
       await createFolder({ vaultRoot: vaultRoot.trim(), path })
       const loadedNotes = await scanVault(vaultRoot.trim())
-      await rebuildSearchIndex(vaultRoot.trim())
       setNotes(loadedNotes)
       setActiveCategory(path)
       setActiveView('category')
@@ -932,7 +985,7 @@ export function App() {
       return
     }
     const currentName = activeNote.path.split('/').pop() ?? activeNote.path
-    const nextName = window.prompt('New filename', currentName)
+    const nextName = await safePrompt('New filename', currentName)
     if (!nextName || nextName === currentName) return
     const folder = activeNote.path.includes('/') ? activeNote.path.split('/').slice(0, -1).join('/') : ''
     const normalized = nextName.endsWith('.md') ? nextName : `${nextName}.md`
@@ -942,7 +995,7 @@ export function App() {
 
   async function moveActiveNotePrompt() {
     if (!activeNote) return
-    const nextPath = window.prompt('Move to path', activeNote.path)
+    const nextPath = await safePrompt('Move to path', activeNote.path)
     if (!nextPath || nextPath === activeNote.path) return
     await moveActiveNote(nextPath.endsWith('.md') ? nextPath : `${nextPath}.md`)
   }
@@ -960,9 +1013,7 @@ export function App() {
       setSaveState('saved')
       setStatus(`Moved to ${moved.path}.`)
 
-      rebuildSearchIndex(vaultRoot.trim())
-        .then(() => setLinkVersion((current) => current + 1))
-        .catch(console.error)
+      setLinkVersion((current) => current + 1)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -1416,10 +1467,13 @@ export function App() {
                 themePreference={themePreference}
                 effectiveTheme={effectiveTheme}
                 baseFontSize={baseFontSize}
+                defaultCategory={defaultCategory}
+                categories={categoryOptions}
                 onVaultRootChange={setVaultRoot}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}
                 onBaseFontSizeChange={setBaseFontSize}
+                onDefaultCategoryChange={setDefaultCategory}
                 onOpenVault={openVault}
                 onInitializeVault={initVault}
                 onCreateToday={addTodayNote}
@@ -1431,6 +1485,54 @@ export function App() {
                 onClose={() => setSettingsOpen(false)}
               />
             </Suspense>
+          </div>
+        </div>
+      ) : null}
+
+      {promptConfig ? (
+        <div className="settings-window-backdrop" role="presentation" style={{ zIndex: 1000 }} onMouseDown={() => { promptConfig.resolve(null); setPromptConfig(null) }}>
+          <div
+            className="settings-window"
+            role="dialog"
+            aria-modal="true"
+            aria-label={promptConfig.message}
+            style={{ width: '400px', height: 'auto', minHeight: 'auto', padding: '24px' }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const val = new FormData(e.currentTarget).get('val') as string
+              promptConfig.resolve(val)
+              setPromptConfig(null)
+            }}>
+              <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>{promptConfig.message}</h3>
+              <input
+                name="val"
+                defaultValue={promptConfig.defaultValue}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    promptConfig.resolve(null)
+                    setPromptConfig(null)
+                  }
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '8px 12px', 
+                  marginBottom: '24px', 
+                  backgroundColor: 'var(--surface-sunken)', 
+                  color: 'var(--text-primary)', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: '4px',
+                  outline: 'none',
+                  fontSize: 'var(--font-size-base)'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn" onClick={() => { promptConfig.resolve(null); setPromptConfig(null) }}>Cancel</button>
+                <button type="submit" className="btn primary">OK</button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

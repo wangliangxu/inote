@@ -60,60 +60,72 @@ impl NoteIndex {
 
         let resolver = LinkResolver::new(notes);
         for note in notes {
-            let tags = note.tags.join(" ");
+            self.insert_note(note, &resolver)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn update_note(&self, note: &NoteMetadata, notes: &[NoteMetadata]) -> Result<(), String> {
+        self.delete_note(&note.path)?;
+        let resolver = LinkResolver::new(notes);
+        self.insert_note(note, &resolver)
+    }
+
+    fn insert_note(&self, note: &NoteMetadata, resolver: &LinkResolver) -> Result<(), String> {
+        let tags = note.tags.join(" ");
+        self.conn
+            .execute(
+                "
+                INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ",
+                params![
+                    note.path,
+                    note.title,
+                    note.category,
+                    note.created_at,
+                    note.updated_at,
+                    note.word_count as i64,
+                    note.summary
+                ],
+            )
+            .map_err(|error| format!("failed to index note metadata: {error}"))?;
+
+        for tag in &note.tags {
+            self.conn
+                .execute(
+                    "INSERT INTO tags (note_path, tag) VALUES (?1, ?2)",
+                    params![note.path, tag],
+                )
+                .map_err(|error| format!("failed to index tag: {error}"))?;
+        }
+
+        self.conn
+            .execute(
+                "
+                INSERT INTO search_index (path, title, body, tags, summary)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ",
+                params![note.path, note.title, note.body, tags, note.summary],
+            )
+            .map_err(|error| format!("failed to index note text: {error}"))?;
+
+        for extracted in extract_links(note, resolver) {
             self.conn
                 .execute(
                     "
-                    INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary)
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    INSERT OR IGNORE INTO links (source_path, target_path, label, kind)
+                    VALUES (?1, ?2, ?3, ?4)
                     ",
                     params![
                         note.path,
-                        note.title,
-                        note.category,
-                        note.created_at,
-                        note.updated_at,
-                        note.word_count as i64,
-                        note.summary
+                        extracted.target_path,
+                        extracted.label,
+                        extracted.kind
                     ],
                 )
-                .map_err(|error| format!("failed to index note metadata: {error}"))?;
-
-            for tag in &note.tags {
-                self.conn
-                    .execute(
-                        "INSERT INTO tags (note_path, tag) VALUES (?1, ?2)",
-                        params![note.path, tag],
-                    )
-                    .map_err(|error| format!("failed to index tag: {error}"))?;
-            }
-
-            self.conn
-                .execute(
-                    "
-                    INSERT INTO search_index (path, title, body, tags, summary)
-                    VALUES (?1, ?2, ?3, ?4, ?5)
-                    ",
-                    params![note.path, note.title, note.body, tags, note.summary],
-                )
-                .map_err(|error| format!("failed to index note text: {error}"))?;
-
-            for extracted in extract_links(note, &resolver) {
-                self.conn
-                    .execute(
-                        "
-                        INSERT OR IGNORE INTO links (source_path, target_path, label, kind)
-                        VALUES (?1, ?2, ?3, ?4)
-                        ",
-                        params![
-                            note.path,
-                            extracted.target_path,
-                            extracted.label,
-                            extracted.kind
-                        ],
-                    )
-                    .map_err(|error| format!("failed to index note link: {error}"))?;
-            }
+                .map_err(|error| format!("failed to index note link: {error}"))?;
         }
 
         Ok(())

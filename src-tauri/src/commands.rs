@@ -165,32 +165,50 @@ pub fn read_note(vault_root: String, path: String) -> Result<NoteMetadata, Strin
 
 #[tauri::command]
 pub fn write_note(input: WriteNoteInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.write_note(&input.path, &input.content)
+    let vault = Vault::new(&input.vault_root)?;
+    let note = vault.write_note(&input.path, &input.content)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn create_inbox_note(vault_root: String, title: String) -> Result<NoteMetadata, String> {
-    Vault::new(vault_root)?.create_inbox_note(&title)
+    let vault = Vault::new(&vault_root)?;
+    let note = vault.create_inbox_note(&title)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn create_today_note(vault_root: String) -> Result<NoteMetadata, String> {
-    Vault::new(vault_root)?.create_today_note()
+    let vault = Vault::new(&vault_root)?;
+    let note = vault.create_today_note()?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn create_weekly_review(input: CreateReviewInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.create_weekly_review(&input.date)
+    let vault = Vault::new(&input.vault_root)?;
+    let note = vault.create_weekly_review(&input.date)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn create_monthly_review(input: CreateReviewInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.create_monthly_review(&input.date)
+    let vault = Vault::new(&input.vault_root)?;
+    let note = vault.create_monthly_review(&input.date)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn create_note(input: CreateNoteInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.create_note(&input.title, &input.category)
+    let vault = Vault::new(&input.vault_root)?;
+    let note = vault.create_note(&input.title, &input.category)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
@@ -200,19 +218,26 @@ pub fn create_folder(input: CreateFolderInput) -> Result<(), String> {
 
 #[tauri::command]
 pub fn move_note(input: MoveNoteInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.move_note(&input.from, &input.to)
+    let vault = Vault::new(&input.vault_root)?;
+    let note = vault.move_note(&input.from, &input.to)?;
+    update_index_for_move(&vault, &input.from, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
 pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
-    Vault::new(input.vault_root)?.archive_note(ArchiveNote {
+    let vault = Vault::new(&input.vault_root)?;
+    let old_path = input.from.clone();
+    let note = vault.archive_note(ArchiveNote {
         from: input.from,
         title: input.title,
         category: input.category,
         tags: input.tags,
         created_at: input.created_at,
         body: input.body,
-    })
+    })?;
+    update_index_for_move(&vault, &old_path, &note)?;
+    Ok(note)
 }
 
 #[tauri::command]
@@ -249,6 +274,19 @@ fn settings_db_path(app: &AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data folder: {error}"))?
         .join("settings.sqlite3"))
+}
+
+fn update_index_for_note(vault: &Vault, note: &NoteMetadata) -> Result<(), String> {
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let notes = vault.scan()?;
+    index.update_note(note, &notes)
+}
+
+fn update_index_for_move(vault: &Vault, old_path: &str, new_note: &NoteMetadata) -> Result<(), String> {
+    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    index.delete_note(old_path)?;
+    let notes = vault.scan()?;
+    index.update_note(new_note, &notes)
 }
 
 #[cfg(test)]
