@@ -13,6 +13,8 @@ const ENCRYPTED_SECRET_PREFIX: &str = "enc:v1:";
 pub struct UserSettings {
     pub vault_root: String,
     pub active_path: String,
+    pub active_view: String,
+    pub active_category: String,
     pub llm_settings: LlmProviderSettings,
     pub default_category: String,
 }
@@ -22,6 +24,8 @@ impl Default for UserSettings {
         Self {
             vault_root: String::new(),
             active_path: String::new(),
+            active_view: "today".to_string(),
+            active_category: "journal".to_string(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.openai.com/v1".to_string(),
@@ -62,6 +66,12 @@ impl UserSettingsStore {
         if let Some(active_path) = self.get_value("active_path")? {
             settings.active_path = active_path;
         }
+        if let Some(active_view) = self.get_value("active_view")? {
+            settings.active_view = active_view;
+        }
+        if let Some(active_category) = self.get_value("active_category")? {
+            settings.active_category = active_category;
+        }
         if let Some(default_category) = self.get_value("default_category")? {
             settings.default_category = default_category;
         }
@@ -79,6 +89,8 @@ impl UserSettingsStore {
     pub fn save(&self, settings: &UserSettings) -> Result<(), String> {
         self.set_value("vault_root", &settings.vault_root)?;
         self.set_value("active_path", &settings.active_path)?;
+        self.set_value("active_view", &settings.active_view)?;
+        self.set_value("active_category", &settings.active_category)?;
         self.set_value("default_category", &settings.default_category)?;
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
@@ -267,6 +279,8 @@ mod tests {
         let settings = UserSettings {
             vault_root: "/Users/example/Notes".to_string(),
             active_path: "knowledge/current.md".to_string(),
+            active_view: "category".to_string(),
+            active_category: "knowledge".to_string(),
             llm_settings: LlmProviderSettings {
                 provider_name: "Local".to_string(),
                 api_base_url: "http://localhost:11434/v1".to_string(),
@@ -291,6 +305,8 @@ mod tests {
         let settings = UserSettings {
             vault_root: "/Users/example/Notes".to_string(),
             active_path: "knowledge/current.md".to_string(),
+            active_view: "today".to_string(),
+            active_category: "journal".to_string(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.example.com/v1".to_string(),

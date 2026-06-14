@@ -65,6 +65,8 @@ export interface LlmProviderSettings {
 export interface UserSettings {
   vaultRoot: string
   activePath: string
+  activeView: WorkspaceView
+  activeCategory: string
   llmSettings: LlmProviderSettings
   defaultCategory?: string
 }

@@ -369,6 +369,12 @@ export function App() {
         if (savedSettings.defaultCategory) {
           setDefaultCategory(savedSettings.defaultCategory)
         }
+        if (savedSettings.activeView) {
+          setActiveView(savedSettings.activeView)
+        }
+        if (savedSettings.activeCategory) {
+          setActiveCategory(savedSettings.activeCategory)
+        }
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
@@ -444,7 +450,7 @@ export function App() {
     }
     const timeout = window.setTimeout(() => {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
-      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, llmSettings, defaultCategory })
+      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, activeView, activeCategory, llmSettings, defaultCategory })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
           window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
@@ -460,7 +466,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [activePath, llmSettings, settingsLoaded, vaultRoot, defaultCategory])
+  }, [activePath, activeView, activeCategory, llmSettings, settingsLoaded, vaultRoot, defaultCategory])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return
