@@ -194,13 +194,16 @@ export function Editor({
         currentMeta.title !== newMeta.title ||
         currentMeta.category !== newMeta.category ||
         (currentMeta.tags || []).join(',') !== (newMeta.tags || []).join(',') ||
-        currentMeta.summary !== newMeta.summary
+        currentMeta.summary !== newMeta.summary ||
+        currentMeta.due !== newMeta.due ||
+        currentMeta.status !== newMeta.status ||
+        currentMeta.project !== newMeta.project
 
       if (changed) {
         editorRef.current.setMarkdown(newMd)
       }
     }
-  }, [note.title, note.category, note.tags, note.summary])
+  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.project])
 
   const saveLabel = {
     loading: 'Loading',

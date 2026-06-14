@@ -683,7 +683,10 @@ export function App() {
       (metadata.title !== undefined && metadata.title !== activeNote.title) ||
       (metadata.category !== undefined && metadata.category !== activeNote.category) ||
       (metadata.tags !== undefined && metadata.tags.join(',') !== activeNote.tags.join(',')) ||
-      (metadata.summary !== undefined && metadata.summary !== activeNote.summary)
+      (metadata.summary !== undefined && metadata.summary !== activeNote.summary) ||
+      (metadata.due !== undefined && metadata.due !== activeNote.due) ||
+      (metadata.status !== undefined && metadata.status !== activeNote.status) ||
+      (metadata.project !== undefined && metadata.project !== activeNote.project)
 
     if (!hasChanges) {
       const hasFormattingChanges = body !== activeNote.body
@@ -944,7 +947,12 @@ export function App() {
         diskNote.body !== activeNote.body ||
         diskNote.title !== activeNote.title ||
         diskNote.updatedAt !== activeNote.updatedAt ||
-        diskNote.tags.join('\n') !== activeNote.tags.join('\n')
+        diskNote.tags.join('\n') !== activeNote.tags.join('\n') ||
+        diskNote.category !== activeNote.category ||
+        diskNote.summary !== activeNote.summary ||
+        diskNote.due !== activeNote.due ||
+        diskNote.status !== activeNote.status ||
+        diskNote.project !== activeNote.project
 
       if (!changedOnDisk) {
         setStatus('Disk version matches the editor.')
