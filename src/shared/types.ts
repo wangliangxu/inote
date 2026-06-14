@@ -67,6 +67,7 @@ export interface UserSettings {
   activePath: string
   activeView: WorkspaceView
   activeCategory: string
+  selectedSearchCategories: string[]
   llmSettings: LlmProviderSettings
   defaultCategory?: string
 }

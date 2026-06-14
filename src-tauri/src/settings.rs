@@ -15,6 +15,7 @@ pub struct UserSettings {
     pub active_path: String,
     pub active_view: String,
     pub active_category: String,
+    pub selected_search_categories: Vec<String>,
     pub llm_settings: LlmProviderSettings,
     pub default_category: String,
 }
@@ -26,6 +27,7 @@ impl Default for UserSettings {
             active_path: String::new(),
             active_view: "today".to_string(),
             active_category: "journal".to_string(),
+            selected_search_categories: Vec::new(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.openai.com/v1".to_string(),
@@ -72,6 +74,11 @@ impl UserSettingsStore {
         if let Some(active_category) = self.get_value("active_category")? {
             settings.active_category = active_category;
         }
+        if let Some(cats_json) = self.get_value("selected_search_categories")? {
+            if let Ok(cats) = serde_json::from_str(&cats_json) {
+                settings.selected_search_categories = cats;
+            }
+        }
         if let Some(default_category) = self.get_value("default_category")? {
             settings.default_category = default_category;
         }
@@ -91,6 +98,9 @@ impl UserSettingsStore {
         self.set_value("active_path", &settings.active_path)?;
         self.set_value("active_view", &settings.active_view)?;
         self.set_value("active_category", &settings.active_category)?;
+        let cats_json = serde_json::to_string(&settings.selected_search_categories)
+            .map_err(|error| format!("failed to serialize selected_search_categories: {error}"))?;
+        self.set_value("selected_search_categories", &cats_json)?;
         self.set_value("default_category", &settings.default_category)?;
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
@@ -281,6 +291,7 @@ mod tests {
             active_path: "knowledge/current.md".to_string(),
             active_view: "category".to_string(),
             active_category: "knowledge".to_string(),
+            selected_search_categories: vec!["knowledge".to_string()],
             llm_settings: LlmProviderSettings {
                 provider_name: "Local".to_string(),
                 api_base_url: "http://localhost:11434/v1".to_string(),
@@ -307,6 +318,7 @@ mod tests {
             active_path: "knowledge/current.md".to_string(),
             active_view: "today".to_string(),
             active_category: "journal".to_string(),
+            selected_search_categories: Vec::new(),
             llm_settings: LlmProviderSettings {
                 provider_name: "OpenAI compatible".to_string(),
                 api_base_url: "https://api.example.com/v1".to_string(),
