@@ -150,7 +150,10 @@ export async function saveUserSettings(settings: UserSettings): Promise<void> {
 export function noteToMarkdown(note: Note): string {
   const tags = note.tags.map((tag) => `"${tag}"`).join(', ')
   const summary = note.summary ? `summary: "${escapeYamlString(note.summary)}"\n` : ''
-  return `---\ntitle: "${escapeYamlString(note.title)}"\ncategory: "${note.category}"\ntags: [${tags}]\ncreated_at: ${note.createdAt}\nupdated_at: ${note.updatedAt}\n${summary}---\n\n${note.body}`
+  const due = note.due ? `due: "${escapeYamlString(note.due)}"\n` : ''
+  const status = note.status ? `status: "${escapeYamlString(note.status)}"\n` : ''
+  const project = note.project ? `project: "${escapeYamlString(note.project)}"\n` : ''
+  return `---\ntitle: "${escapeYamlString(note.title)}"\ncategory: "${note.category}"\ntags: [${tags}]\ncreated_at: ${note.createdAt}\nupdated_at: ${note.updatedAt}\n${due}${status}${project}${summary}---\n\n${note.body}`
 }
 
 function escapeYamlString(value: string): string {
@@ -180,6 +183,15 @@ export function parseMarkdownWithFrontmatter(content: string): { body: string, m
   
   const summaryMatch = yamlRaw.match(/^summary:\s*"(.*?)"/m) || yamlRaw.match(/^summary:\s*(.*?)$/m)
   if (summaryMatch) metadata.summary = summaryMatch[1].replace(/\\"/g, '"').trim()
+
+  const dueMatch = yamlRaw.match(/^due:\s*"(.*?)"/m) || yamlRaw.match(/^due:\s*(.*?)$/m)
+  if (dueMatch) metadata.due = dueMatch[1].replace(/\\"/g, '"').trim()
+
+  const statusMatch = yamlRaw.match(/^status:\s*"(.*?)"/m) || yamlRaw.match(/^status:\s*(.*?)$/m)
+  if (statusMatch) metadata.status = statusMatch[1].replace(/\\"/g, '"').trim()
+
+  const projectMatch = yamlRaw.match(/^project:\s*"(.*?)"/m) || yamlRaw.match(/^project:\s*(.*?)$/m)
+  if (projectMatch) metadata.project = projectMatch[1].replace(/\\"/g, '"').trim()
   
   return { body, metadata }
 }

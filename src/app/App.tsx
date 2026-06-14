@@ -168,34 +168,7 @@ function getFilenameForTitle(title: string) {
   }
 }
 
-const TagsInput = memo(function TagsInput({ tags, onChange }: { tags: string[], onChange: (value: string) => void }) {
-  const [value, setValue] = useState(tags.join(', '))
 
-  useEffect(() => {
-    const currentTags = value
-      .split(',')
-      .map(t => t.trim().replace(/^#/, ''))
-      .filter(Boolean)
-      .filter((tag, index, all) => all.indexOf(tag) === index)
-      .join(',')
-    
-    const newTags = tags.join(',')
-    
-    if (currentTags !== newTags) {
-      setValue(tags.join(', '))
-    }
-  }, [tags, value])
-
-  return (
-    <input 
-      value={value} 
-      onChange={(e) => {
-        setValue(e.target.value)
-        onChange(e.target.value)
-      }} 
-    />
-  )
-})
 
 export function App() {
   const initialWorkspace = useMemo(
@@ -776,6 +749,69 @@ export function App() {
           ? {
             ...note,
             createdAt,
+            updatedAt: localDateString(),
+            isDirty: true,
+          }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteUpdatedAt(updatedAt: string) {
+    if (!activeNote) return
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+            ...note,
+            updatedAt,
+            isDirty: true,
+          }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteDue(due: string) {
+    if (!activeNote) return
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+            ...note,
+            due,
+            updatedAt: localDateString(),
+            isDirty: true,
+          }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteStatus(status: string) {
+    if (!activeNote) return
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+            ...note,
+            status,
+            updatedAt: localDateString(),
+            isDirty: true,
+          }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNoteProject(project: string) {
+    if (!activeNote) return
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+            ...note,
+            project,
             updatedAt: localDateString(),
             isDirty: true,
           }
@@ -1461,6 +1497,16 @@ export function App() {
                 previewMode={previewMode}
                 onTogglePreview={() => setPreviewMode((current) => !current)}
                 saveState={saveState}
+                noteLinks={noteLinks}
+                onUpdateTitle={updateActiveNoteTitle}
+                onUpdateCreatedAt={updateActiveNoteCreatedAt}
+                onUpdateUpdatedAt={updateActiveNoteUpdatedAt}
+                onUpdateDue={updateActiveNoteDue}
+                onUpdateStatus={updateActiveNoteStatus}
+                onUpdateProject={updateActiveNoteProject}
+                onUpdateTags={updateActiveNoteTags}
+                onArchiveInboxNote={archiveActiveInboxNote}
+                onNavigateLink={setActivePath}
               />
             ) : (
               <div className="empty">No note selected.</div>
@@ -1471,91 +1517,7 @@ export function App() {
         <aside className={rightSidebarVisible ? 'context-panel' : 'context-panel hidden'}>
           {activeNote ? (
             <>
-              <section className="context-section">
-                <p className="panel-title">
-                  <PanelRight size={14} /> Context
-                </p>
-                <h3>{activeNote.title}</h3>
-                <dl className="note-facts">
-                  <div>
-                    <dt>Path</dt>
-                    <dd>{activeNote.path}</dd>
-                  </div>
-                  <div>
-                    <dt>Category</dt>
-                    <dd>{activeNote.category}</dd>
-                  </div>
-                  <div>
-                    <dt>Created</dt>
-                    <dd>{activeNote.createdAt}</dd>
-                  </div>
-                  <div>
-                    <dt>Updated</dt>
-                    <dd>{activeNote.updatedAt}</dd>
-                  </div>
-                </dl>
-                <div className="tag-strip">
-                  {activeNote.tags.map((tag) => (
-                    <span key={tag}>#{tag}</span>
-                  ))}
-                </div>
-                <label className="metadata-editor">
-                  <span>Title</span>
-                  <input value={activeNote.title} onChange={(event) => updateActiveNoteTitle(event.target.value)} />
-                </label>
-                <label className="metadata-editor">
-                  <span>Created</span>
-                  <input type="date" value={activeNote.createdAt.slice(0, 10)} onChange={(event) => updateActiveNoteCreatedAt(event.target.value)} />
-                </label>
-                <label className="metadata-editor">
-                  <span>Tags</span>
-                  <TagsInput tags={activeNote.tags} onChange={updateActiveNoteTags} />
-                </label>
-                <div className="context-actions">
-                  {activeNote.path.startsWith('00-inbox/') ? (
-                    <button type="button" onClick={archiveActiveInboxNote} title="Archive inbox note">
-                      <Archive size={15} />
-                    </button>
-                  ) : null}
-                </div>
-              </section>
-              <section className="context-section">
-                <p className="panel-title">
-                  <Sparkles size={14} /> Summary
-                </p>
-                <p className="summary-text">{activeNote.summary ?? activeNote.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
-              </section>
-              <section className="context-section">
-                <p className="panel-title">
-                  <Link2 size={14} /> Links
-                </p>
-                <div className="link-group">
-                  <h4>Backlinks</h4>
-                  {noteLinks.backlinks.length ? (
-                    noteLinks.backlinks.map((link) => (
-                      <button key={`${link.sourcePath}-${link.label}`} type="button" onClick={() => setActivePath(link.sourcePath)}>
-                        <strong>{link.sourceTitle}</strong>
-                        <span>{link.sourcePath}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <p>No backlinks.</p>
-                  )}
-                </div>
-                <div className="link-group">
-                  <h4>Outgoing</h4>
-                  {noteLinks.outgoing.length ? (
-                    noteLinks.outgoing.map((link) => (
-                      <button key={`${link.targetPath}-${link.label}`} type="button" onClick={() => setActivePath(link.targetPath)}>
-                        <strong>{link.targetTitle}</strong>
-                        <span>{link.targetPath}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <p>No outgoing links.</p>
-                  )}
-                </div>
-              </section>
+
               <section className="context-section">
                 <p className="panel-title">
                   <Bot size={14} /> Assistant

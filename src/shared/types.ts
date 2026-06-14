@@ -9,6 +9,9 @@ export interface Note {
   tags: string[]
   createdAt: string
   updatedAt: string
+  due?: string
+  status?: string
+  project?: string
   summary?: string
   body: string
   wordCount: number
@@ -37,6 +40,9 @@ export interface SearchResult {
   tags: string[]
   createdAt: string
   updatedAt: string
+  due?: string
+  status?: string
+  project?: string
   summary?: string
   excerpt: string
 }
