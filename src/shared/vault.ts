@@ -63,10 +63,38 @@ export function searchNotes(notes: Note[], query: string): Note[] {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return sortByUpdatedDesc(notes)
 
+  const orGroups = normalized.split(/\s+or\s+/)
+
+  const parsedGroups = orGroups.map((group) => {
+    const tagsToSearch: string[] = []
+    const textQueryParts: string[] = []
+
+    group.split(/\s+/).forEach((part) => {
+      if (part.startsWith('#') && part.length > 1) {
+        tagsToSearch.push(part.slice(1))
+      } else if (part.startsWith('tag:') && part.length > 4) {
+        tagsToSearch.push(part.slice(4))
+      } else if (part) {
+        textQueryParts.push(part)
+      }
+    })
+    return { tagsToSearch, textQueryParts }
+  })
+
   return sortByUpdatedDesc(
     notes.filter((note) => {
       const haystack = [note.title, note.category, note.summary, note.body, note.tags.join(' ')].join(' ').toLowerCase()
-      return haystack.includes(normalized)
+
+      return parsedGroups.some(({ tagsToSearch, textQueryParts }) => {
+        if (tagsToSearch.length > 0) {
+          const hasAllTags = tagsToSearch.every((t) => 
+            note.tags.some((nt) => nt.toLowerCase() === t || nt.toLowerCase().startsWith(t))
+          )
+          if (!hasAllTags) return false
+        }
+
+        return textQueryParts.every(part => haystack.includes(part))
+      })
     }),
   )
 }

@@ -239,8 +239,7 @@ export function App() {
       setActiveView(view)
     }
   }, [activeView, activeCategory, activePath])
-
-  const activeNote = notes.find((note) => note.path === activePath) ?? notes[0]
+  const activeNote = activePath ? notes.find((note) => note.path === activePath) : undefined
   
   const saveState: SaveState = !vaultRoot.trim() ? 'demo' :
     saveError ? 'error' :
@@ -1255,8 +1254,8 @@ export function App() {
 
           <Search size={17} />
           <input
-            aria-label="Search notes"
-            placeholder="Search notes"
+            aria-label="Search notes or #tags"
+            placeholder="Search notes or #tags"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
@@ -1475,10 +1474,10 @@ export function App() {
             <Suspense fallback={<div className="empty">Loading tags…</div>}>
               <TagsPanel
                 notes={notes}
-                activeTag={activeTag}
-                onSelectTag={setActiveTag}
-                onSelectNote={(path) => {
-                  setActivePath(path)
+                onSearchTag={(tag) => {
+                  setQuery(`#${tag}`)
+                  setActiveView('search')
+                  setActivePath('')
                 }}
               />
             </Suspense>
@@ -1509,7 +1508,11 @@ export function App() {
                 onNavigateLink={setActivePath}
               />
             ) : (
-              <div className="empty">No note selected.</div>
+              <div className="empty">
+                {activeView === 'search' && query.startsWith('#')
+                  ? '请在左侧边栏查看具体的搜索结果 (Please view the specific search results in the left sidebar)'
+                  : 'No note selected.'}
+              </div>
             )
           )}
         </section>

@@ -155,7 +155,23 @@ impl NoteIndex {
         if query.is_empty() {
             return Ok(Vec::new());
         }
-        let like_query = format!("%{}%", query.replace('%', "\\%").replace('_', "\\_"));
+        
+        let clean_query = query
+            .split_whitespace()
+            .filter(|part| !part.eq_ignore_ascii_case("OR"))
+            .map(|part| {
+                if part.starts_with('#') && part.len() > 1 {
+                    &part[1..]
+                } else if part.starts_with("tag:") && part.len() > 4 {
+                    &part[4..]
+                } else {
+                    part
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+            
+        let like_query = format!("%{}%", clean_query.replace('%', "\\%").replace('_', "\\_"));
 
         let mut stmt = self
             .conn
@@ -324,7 +340,17 @@ impl NoteIndex {
 fn fts_query(query: &str) -> String {
     query
         .split_whitespace()
-        .map(|part| format!("\"{}\"*", part.replace('"', "\"\"")))
+        .map(|part| {
+            if part.eq_ignore_ascii_case("OR") {
+                "OR".to_string()
+            } else if part.starts_with('#') && part.len() > 1 {
+                format!("tags:\"{}\"*", part[1..].replace('"', "\"\""))
+            } else if part.starts_with("tag:") && part.len() > 4 {
+                format!("tags:\"{}\"*", part[4..].replace('"', "\"\""))
+            } else {
+                format!("\"{}\"*", part.replace('"', "\"\""))
+            }
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
