@@ -47,7 +47,8 @@ export function filterNotesByTag(notes: Note[], tag: string): Note[] {
 export function groupByMonth(notes: Note[]): MonthGroup[] {
   const groups = new Map<string, Note[]>()
   for (const note of notes) {
-    const month = note.createdAt.slice(0, 7)
+    const dateToUse = note.updatedAt || note.createdAt
+    const month = dateToUse.slice(0, 7)
     groups.set(month, [...(groups.get(month) ?? []), note])
   }
   return Array.from(groups.entries())

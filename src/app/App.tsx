@@ -570,10 +570,10 @@ export function App() {
   const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE)
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
-  // Reset rendered count when the visible notes change (view/category/search switch)
+  // Reset rendered count when the view/category/search switch
   useEffect(() => {
     setRenderedCount(NOTES_PAGE_SIZE)
-  }, [visibleNotes])
+  }, [activeView, activeCategory, query, selectedSearchCategories, vaultRoot])
 
   // IntersectionObserver to load more notes when sentinel enters viewport
   useEffect(() => {
