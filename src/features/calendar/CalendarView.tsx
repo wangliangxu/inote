@@ -69,8 +69,8 @@ function buildCalendarDays(year: number, month: number) {
 }
 
 function getNoteDateKey(note: Note): string {
-  // Use createdAt as the primary date for calendar placement
-  return (note.createdAt || note.updatedAt || '').slice(0, 10)
+  // Use updatedAt as the primary date for calendar placement
+  return (note.updatedAt || note.createdAt || '').slice(0, 10)
 }
 
 function heatLevel(count: number): number {
