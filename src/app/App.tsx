@@ -439,7 +439,8 @@ export function App() {
           window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
           window.localStorage.removeItem(LLM_SETTINGS_KEY)
         })
-        .catch(() => {
+        .catch((e) => {
+          setStatus('Settings Save Error: ' + String(e))
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
           window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
           window.localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify({ ...llmSettings, apiKey: '' }))
@@ -1220,7 +1221,7 @@ export function App() {
     const startWidth = leftSidebarWidth
 
     function resize(moveEvent: PointerEvent) {
-      const nextWidth = Math.min(560, Math.max(220, startWidth + moveEvent.clientX - startX))
+      const nextWidth = Math.min(560, Math.max(220, Math.round(startWidth + moveEvent.clientX - startX)))
       setLeftSidebarWidth(nextWidth)
     }
 
@@ -1243,7 +1244,7 @@ export function App() {
 
     function resize(moveEvent: PointerEvent) {
       // Moving left increases width, moving right decreases width
-      const nextWidth = Math.min(560, Math.max(220, startWidth - (moveEvent.clientX - startX)))
+      const nextWidth = Math.min(560, Math.max(220, Math.round(startWidth - (moveEvent.clientX - startX))))
       setRightSidebarWidth(nextWidth)
     }
 
