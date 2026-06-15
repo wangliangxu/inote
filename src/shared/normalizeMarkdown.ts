@@ -71,8 +71,10 @@ export function normalizeMarkdownBody(body: string): string {
     let result = toMarkdown(tree, localToMarkdownOptions)
 
     // mdast-util-to-markdown always appends a trailing newline;
-    // trim to a single trailing newline for consistency.
-    result = result.replace(/\n+$/, '\n')
+    // but the original body might have multiple trailing newlines (e.g. empty paragraphs).
+    // Preserve the original trailing newlines, defaulting to a single newline.
+    const trailingNewlines = body.match(/\n*$/)?.[0] || '\n'
+    result = result.replace(/\n+$/, trailingNewlines)
 
     return result
   } catch {
