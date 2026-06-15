@@ -1,0 +1,50 @@
+import type { Note } from '../../shared/types'
+import type { QuickAgentAction } from './agentTypes'
+
+interface BuildAgentPromptInput {
+  command: string
+  note: Note
+  notes: Note[]
+  action?: QuickAgentAction
+}
+
+export function buildAgentPrompt({ command, note, notes, action }: BuildAgentPromptInput): { prompt: string, context: string } {
+  return {
+    prompt: [
+      'You are iNote Note Agent. Return only valid JSON and no Markdown wrapper.',
+      'The JSON shape is {"message":"short user-facing summary","operations":[...]}',
+      'Allowed operation types are update_current_note, append_to_current_note, replace_current_note_body, create_note, and suggest_only.',
+      'Allowed current-note patch fields are title, category, tags, summary, due, status, priority, and project.',
+      actionInstruction(action),
+      `User command: ${command.trim() || actionInstruction(action)}`,
+    ].filter(Boolean).join('\n'),
+    context: [
+      'Current note:',
+      `Title: ${note.title}`,
+      `Path: ${note.path}`,
+      `Category: ${note.category}`,
+      `Tags: ${note.tags.join(', ') || 'none'}`,
+      `Created: ${note.createdAt}`,
+      `Updated: ${note.updatedAt}`,
+      note.summary ? `Summary: ${note.summary}` : '',
+      `Existing categories: ${unique(notes.map((item) => item.category)).join(', ') || 'none'}`,
+      `Existing tags: ${unique(notes.flatMap((item) => item.tags)).join(', ') || 'none'}`,
+      '',
+      note.body.slice(0, 6000),
+    ].filter((line) => line !== '').join('\n'),
+  }
+}
+
+function actionInstruction(action?: QuickAgentAction): string {
+  if (action === 'summarize') return 'Summarize the note by updating summary or returning suggest_only markdown.'
+  if (action === 'suggest_tags') return 'Suggest concise tags. Use update_current_note when the user asks to apply tags.'
+  if (action === 'clean_metadata') return 'Clean title, tags, summary, status, priority, project, due, or category only.'
+  if (action === 'extract_tasks') return 'Extract tasks as Markdown that can be appended to the current note.'
+  if (action === 'continue_writing') return 'Continue the current note with append_to_current_note.'
+  if (action === 'create_related') return 'Create a related note with create_note and set linkBackToCurrent true.'
+  return 'Follow the user command using the smallest safe operation set.'
+}
+
+function unique(values: string[]): string[] {
+  return values.map((value) => value.trim()).filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).sort((a, b) => a.localeCompare(b))
+}
