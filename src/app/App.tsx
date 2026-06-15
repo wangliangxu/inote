@@ -569,6 +569,28 @@ export function App() {
 
   const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  const initialScrollDoneRef = useRef(false)
+
+  // Initial scroll to active note
+  useEffect(() => {
+    if (settingsLoaded && visibleNotes.length > 0 && !initialScrollDoneRef.current) {
+      const activeIndex = visibleNotes.findIndex((n) => n.path === activePath)
+      if (activeIndex !== -1) {
+        initialScrollDoneRef.current = true
+        if (activeIndex >= renderedCount) {
+          setRenderedCount(activeIndex + 20)
+        }
+        window.setTimeout(() => {
+          const activeElement = document.querySelector('.note-card.active, .note-row.active')
+          if (activeElement) {
+            activeElement.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }
+        }, 150)
+      } else if (notes.length > 0) {
+        initialScrollDoneRef.current = true
+      }
+    }
+  }, [settingsLoaded, visibleNotes, activePath, renderedCount, notes.length])
 
   // Reset rendered count when the view/category/search switch
   useEffect(() => {
@@ -647,11 +669,18 @@ export function App() {
     
     const { body, metadata } = parseMarkdownWithFrontmatter(fullContent)
     
-    // MDXEditor normalizes table spacing and delimiter rows (e.g., adding spaces or converting |-| to |---|).
-    // We normalize both bodies for comparison to avoid marking the note dirty just from toggling modes.
-    const normalizeTableFormatting = (md: string) => {
-      // Remove carriage returns and collapse 3+ consecutive newlines to 2
-      let normalized = md.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n');
+    // MDXEditor normalizes markdown (e.g. table spacing, list bullet characters, loose lists).
+    // We normalize both bodies for comparison to avoid marking the note dirty just from opening it.
+    const normalizeFormatting = (md: string) => {
+      // Remove carriage returns and collapse multiple newlines to a single newline to ignore blank line differences
+      let normalized = md.replace(/\r/g, '').replace(/\n{2,}/g, '\n');
+      
+      // Normalize list item spaces (e.g., "-  item" to "- item")
+      normalized = normalized.replace(/^([ \t]*[-*+])[ \t]+/gm, '$1 ');
+      normalized = normalized.replace(/^([ \t]*\d+\.)[ \t]+/gm, '$1 ');
+      // Normalize bullet characters so `-` and `*` are treated the same
+      normalized = normalized.replace(/^([ \t]*)\*[ \t]+/gm, '$1- ');
+
       return normalized.split('\n').map(line => {
         let row = line.replace(/[ \t]+$/, ''); // Remove trailing spaces from all lines
         const trimmed = row.trim();
@@ -679,7 +708,7 @@ export function App() {
     }
 
     const hasChanges =
-      normalizeTableFormatting(body) !== normalizeTableFormatting(activeNote.body) ||
+      normalizeFormatting(body) !== normalizeFormatting(activeNote.body) ||
       (metadata.title !== undefined && metadata.title !== activeNote.title) ||
       (metadata.category !== undefined && metadata.category !== activeNote.category) ||
       (metadata.tags !== undefined && metadata.tags.join(',') !== activeNote.tags.join(',')) ||
@@ -689,25 +718,6 @@ export function App() {
       (metadata.project !== undefined && metadata.project !== activeNote.project)
 
     if (!hasChanges) {
-      const hasFormattingChanges = body !== activeNote.body
-      if (hasFormattingChanges && vaultRoot.trim()) {
-        const updatedNote = {
-          ...activeNote,
-          ...metadata,
-          body,
-          wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
-        }
-        // Update state without changing saveState to 'dirty'
-        setNotes((current) => current.map((n) => (n.path === activeNote.path ? updatedNote : n)))
-        // Silently write to disk
-        writeNote({
-          vaultRoot: vaultRoot.trim(),
-          path: activeNote.path,
-          content: noteToMarkdown(updatedNote),
-        }).catch((err) => {
-          console.error('Silent save failed:', err)
-        })
-      }
       return
     }
 
