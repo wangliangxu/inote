@@ -18,6 +18,10 @@ pub struct UserSettings {
     pub selected_search_categories: Vec<String>,
     pub llm_settings: LlmProviderSettings,
     pub default_category: String,
+    pub left_sidebar_visible: bool,
+    pub right_sidebar_visible: bool,
+    pub left_sidebar_width: u32,
+    pub right_sidebar_width: u32,
 }
 
 impl Default for UserSettings {
@@ -35,6 +39,10 @@ impl Default for UserSettings {
                 model: "gpt-4.1-mini".to_string(),
             },
             default_category: "knowledge".to_string(),
+            left_sidebar_visible: true,
+            right_sidebar_visible: true,
+            left_sidebar_width: 268,
+            right_sidebar_width: 336,
         }
     }
 }
@@ -82,6 +90,22 @@ impl UserSettingsStore {
         if let Some(default_category) = self.get_value("default_category")? {
             settings.default_category = default_category;
         }
+        if let Some(left_sidebar_visible) = self.get_value("left_sidebar_visible")? {
+            settings.left_sidebar_visible = left_sidebar_visible == "true";
+        }
+        if let Some(right_sidebar_visible) = self.get_value("right_sidebar_visible")? {
+            settings.right_sidebar_visible = right_sidebar_visible == "true";
+        }
+        if let Some(left_sidebar_width) = self.get_value("left_sidebar_width")? {
+            if let Ok(w) = left_sidebar_width.parse() {
+                settings.left_sidebar_width = w;
+            }
+        }
+        if let Some(right_sidebar_width) = self.get_value("right_sidebar_width")? {
+            if let Ok(w) = right_sidebar_width.parse() {
+                settings.right_sidebar_width = w;
+            }
+        }
 
         if let Some(llm_settings) = self.get_value("llm_settings")? {
             let mut llm_settings: LlmProviderSettings = serde_json::from_str(&llm_settings)
@@ -102,6 +126,10 @@ impl UserSettingsStore {
             .map_err(|error| format!("failed to serialize selected_search_categories: {error}"))?;
         self.set_value("selected_search_categories", &cats_json)?;
         self.set_value("default_category", &settings.default_category)?;
+        self.set_value("left_sidebar_visible", if settings.left_sidebar_visible { "true" } else { "false" })?;
+        self.set_value("right_sidebar_visible", if settings.right_sidebar_visible { "true" } else { "false" })?;
+        self.set_value("left_sidebar_width", &settings.left_sidebar_width.to_string())?;
+        self.set_value("right_sidebar_width", &settings.right_sidebar_width.to_string())?;
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
         let llm_settings = serde_json::to_string(&llm_settings)
@@ -299,6 +327,10 @@ mod tests {
                 model: "llama3.1".to_string(),
             },
             default_category: "journal".to_string(),
+            left_sidebar_visible: false,
+            right_sidebar_visible: true,
+            left_sidebar_width: 300,
+            right_sidebar_width: 400,
         };
 
         store.save(&settings).unwrap();
@@ -326,6 +358,10 @@ mod tests {
                 model: "model-a".to_string(),
             },
             default_category: "knowledge".to_string(),
+            left_sidebar_visible: true,
+            right_sidebar_visible: true,
+            left_sidebar_width: 268,
+            right_sidebar_width: 336,
         };
 
         store.save(&settings).unwrap();

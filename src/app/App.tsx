@@ -187,6 +187,7 @@ export function App() {
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(true)
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(336)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot)
   const [status, setStatus] = useState(initialWorkspace.status)
@@ -350,6 +351,10 @@ export function App() {
         if (savedSettings.selectedSearchCategories) {
           setSelectedSearchCategories(savedSettings.selectedSearchCategories)
         }
+        if (savedSettings.leftSidebarVisible !== undefined) setLeftSidebarVisible(savedSettings.leftSidebarVisible)
+        if (savedSettings.rightSidebarVisible !== undefined) setRightSidebarVisible(savedSettings.rightSidebarVisible)
+        if (savedSettings.leftSidebarWidth !== undefined) setLeftSidebarWidth(savedSettings.leftSidebarWidth)
+        if (savedSettings.rightSidebarWidth !== undefined) setRightSidebarWidth(savedSettings.rightSidebarWidth)
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
@@ -425,7 +430,10 @@ export function App() {
     }
     const timeout = window.setTimeout(() => {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
-      saveUserSettings({ vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, activeView, activeCategory, selectedSearchCategories, llmSettings, defaultCategory })
+      saveUserSettings({ 
+        vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, activeView, activeCategory, selectedSearchCategories, llmSettings, defaultCategory,
+        leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth
+      })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
           window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, activePathForStorage)
@@ -441,7 +449,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory])
+  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return
@@ -1227,6 +1235,29 @@ export function App() {
     window.addEventListener('pointerup', stopResize)
   }
 
+  function startRightSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!rightSidebarVisible || event.button !== 0) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = rightSidebarWidth
+
+    function resize(moveEvent: PointerEvent) {
+      // Moving left increases width, moving right decreases width
+      const nextWidth = Math.min(560, Math.max(220, startWidth - (moveEvent.clientX - startX)))
+      setRightSidebarWidth(nextWidth)
+    }
+
+    function stopResize() {
+      document.body.style.cursor = ''
+      window.removeEventListener('pointermove', resize)
+      window.removeEventListener('pointerup', stopResize)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('pointermove', resize)
+    window.addEventListener('pointerup', stopResize)
+  }
+
   async function rebuildIndex() {
     if (!vaultRoot.trim()) {
       setStatus('Open a real vault before rebuilding the index.')
@@ -1348,7 +1379,7 @@ export function App() {
       <div
         className="app-shell"
         style={{
-          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : '0 0'} minmax(0, 1fr) ${rightSidebarVisible ? '336px' : '0'
+          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : '0 0'} minmax(0, 1fr) ${rightSidebarVisible ? `5px ${rightSidebarWidth}px` : '0 0'
             }`,
         }}
       >
@@ -1534,6 +1565,14 @@ export function App() {
             )
           )}
         </section>
+
+        <div
+          className={rightSidebarVisible ? 'sidebar-resizer right' : 'sidebar-resizer hidden'}
+          onPointerDown={startRightSidebarResize}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize right sidebar"
+        />
 
         <aside className={rightSidebarVisible ? 'context-panel' : 'context-panel hidden'}>
           {activeNote ? (

@@ -287,6 +287,10 @@ button {
   width: 1px;
 }
 
+.sidebar-resizer.right::before {
+  inset: 0 2px 0 auto;
+}
+
 .sidebar-resizer:hover::before {
   background: #5a8a6a;
 }

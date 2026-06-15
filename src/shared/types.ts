@@ -76,6 +76,10 @@ export interface UserSettings {
   selectedSearchCategories: string[]
   llmSettings: LlmProviderSettings
   defaultCategory?: string
+  leftSidebarVisible?: boolean
+  rightSidebarVisible?: boolean
+  leftSidebarWidth?: number
+  rightSidebarWidth?: number
 }
 
 export interface LlmChatResponse {
