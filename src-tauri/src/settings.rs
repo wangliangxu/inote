@@ -22,6 +22,11 @@ pub struct UserSettings {
     pub right_sidebar_visible: bool,
     pub left_sidebar_width: u32,
     pub right_sidebar_width: u32,
+    pub window_width: Option<u32>,
+    pub window_height: Option<u32>,
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
+    pub window_maximized: Option<bool>,
 }
 
 impl Default for UserSettings {
@@ -43,6 +48,11 @@ impl Default for UserSettings {
             right_sidebar_visible: true,
             left_sidebar_width: 268,
             right_sidebar_width: 336,
+            window_width: None,
+            window_height: None,
+            window_x: None,
+            window_y: None,
+            window_maximized: None,
         }
     }
 }
@@ -106,6 +116,21 @@ impl UserSettingsStore {
                 settings.right_sidebar_width = w;
             }
         }
+        if let Some(w) = self.get_value("window_width")? {
+            settings.window_width = w.parse().ok();
+        }
+        if let Some(h) = self.get_value("window_height")? {
+            settings.window_height = h.parse().ok();
+        }
+        if let Some(x) = self.get_value("window_x")? {
+            settings.window_x = x.parse().ok();
+        }
+        if let Some(y) = self.get_value("window_y")? {
+            settings.window_y = y.parse().ok();
+        }
+        if let Some(maximized) = self.get_value("window_maximized")? {
+            settings.window_maximized = Some(maximized == "true");
+        }
 
         if let Some(llm_settings) = self.get_value("llm_settings")? {
             let mut llm_settings: LlmProviderSettings = serde_json::from_str(&llm_settings)
@@ -130,6 +155,12 @@ impl UserSettingsStore {
         self.set_value("right_sidebar_visible", if settings.right_sidebar_visible { "true" } else { "false" })?;
         self.set_value("left_sidebar_width", &settings.left_sidebar_width.to_string())?;
         self.set_value("right_sidebar_width", &settings.right_sidebar_width.to_string())?;
+        if let Some(w) = settings.window_width { self.set_value("window_width", &w.to_string())?; }
+        if let Some(h) = settings.window_height { self.set_value("window_height", &h.to_string())?; }
+        if let Some(x) = settings.window_x { self.set_value("window_x", &x.to_string())?; }
+        if let Some(y) = settings.window_y { self.set_value("window_y", &y.to_string())?; }
+        if let Some(m) = settings.window_maximized { self.set_value("window_maximized", if m { "true" } else { "false" })?; }
+        
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
         let llm_settings = serde_json::to_string(&llm_settings)
@@ -163,7 +194,7 @@ impl UserSettingsStore {
             .map_err(|error| format!("failed to read setting {key}: {error}"))
     }
 
-    fn set_value(&self, key: &str, value: &str) -> Result<(), String> {
+    pub fn set_value(&self, key: &str, value: &str) -> Result<(), String> {
         self.conn
             .execute(
                 "
@@ -331,6 +362,11 @@ mod tests {
             right_sidebar_visible: true,
             left_sidebar_width: 300,
             right_sidebar_width: 400,
+            window_width: Some(1200),
+            window_height: Some(800),
+            window_x: Some(100),
+            window_y: Some(100),
+            window_maximized: Some(true),
         };
 
         store.save(&settings).unwrap();
@@ -362,6 +398,11 @@ mod tests {
             right_sidebar_visible: true,
             left_sidebar_width: 268,
             right_sidebar_width: 336,
+            window_width: None,
+            window_height: None,
+            window_x: None,
+            window_y: None,
+            window_maximized: None,
         };
 
         store.save(&settings).unwrap();

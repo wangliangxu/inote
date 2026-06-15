@@ -10,6 +10,27 @@ pub mod watcher;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            use tauri::Manager;
+            if let Ok(db_path) = crate::commands::settings_db_path(app.handle()) {
+                if let Ok(store) = crate::settings::UserSettingsStore::open(&db_path) {
+                    if let Ok(settings) = store.load() {
+                        if let Some(window) = app.get_webview_window("main") {
+                            if let (Some(w), Some(h)) = (settings.window_width, settings.window_height) {
+                                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w as f64, h as f64)));
+                            }
+                            if let (Some(x), Some(y)) = (settings.window_x, settings.window_y) {
+                                let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x as f64, y as f64)));
+                            }
+                            if let Some(true) = settings.window_maximized {
+                                let _ = window.maximize();
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })
         .manage(watcher::WatcherState::default())
         .menu(menu::build)
         .on_menu_event(menu::handle_event)
@@ -41,6 +62,7 @@ pub fn run() {
             commands::empty_trash,
             commands::load_user_settings,
             commands::save_user_settings,
+            commands::save_window_state,
             commands::build_llm_request_preview,
             commands::execute_llm_chat
         ])

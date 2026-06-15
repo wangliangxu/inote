@@ -98,6 +98,16 @@ pub struct LlmChatInput {
     pub context: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowStateInput {
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+    pub maximized: bool,
+}
+
 #[tauri::command]
 pub fn scan_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
     Vault::new(vault_root)?.scan()
@@ -288,7 +298,18 @@ pub fn save_user_settings(app: AppHandle, settings: UserSettings) -> Result<(), 
     UserSettingsStore::open(settings_db_path(&app)?)?.save(&settings)
 }
 
-fn settings_db_path(app: &AppHandle) -> Result<PathBuf, String> {
+#[tauri::command]
+pub fn save_window_state(app: AppHandle, input: WindowStateInput) -> Result<(), String> {
+    let store = UserSettingsStore::open(settings_db_path(&app)?)?;
+    store.set_value("window_width", &input.width.to_string())?;
+    store.set_value("window_height", &input.height.to_string())?;
+    store.set_value("window_x", &input.x.to_string())?;
+    store.set_value("window_y", &input.y.to_string())?;
+    store.set_value("window_maximized", if input.maximized { "true" } else { "false" })?;
+    Ok(())
+}
+
+pub(crate) fn settings_db_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .app_data_dir()

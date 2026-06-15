@@ -62,6 +62,7 @@ import {
   rebuildSearchIndex,
   loadUserSettings,
   saveUserSettings,
+  saveWindowState,
   scanVault,
   scanVaultAndRebuildIndex,
   searchIndex,
@@ -501,6 +502,48 @@ export function App() {
       window.clearTimeout(timeout)
     }
   }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window)) return
+
+    const appWindow = getCurrentWindow()
+    let unlistenResize: (() => void) | undefined
+    let unlistenMove: (() => void) | undefined
+    let timeout: number | undefined
+
+    const saveState = async () => {
+      try {
+        const factor = await appWindow.scaleFactor()
+        const size = await appWindow.innerSize()
+        const logicalSize = size.toLogical(factor)
+        const pos = await appWindow.innerPosition()
+        const logicalPos = pos.toLogical(factor)
+        const isMaximized = await appWindow.isMaximized()
+
+        await saveWindowState({
+          width: Math.round(logicalSize.width),
+          height: Math.round(logicalSize.height),
+          x: Math.round(logicalPos.x),
+          y: Math.round(logicalPos.y),
+          maximized: isMaximized
+        })
+      } catch {}
+    }
+
+    const debouncedSave = () => {
+      window.clearTimeout(timeout)
+      timeout = window.setTimeout(saveState, 500)
+    }
+
+    appWindow.onResized(debouncedSave).then(u => { unlistenResize = u })
+    appWindow.onMoved(debouncedSave).then(u => { unlistenMove = u })
+
+    return () => {
+      window.clearTimeout(timeout)
+      unlistenResize?.()
+      unlistenMove?.()
+    }
+  }, [])
 
   useEffect(() => {
     if (!vaultRoot.trim()) return

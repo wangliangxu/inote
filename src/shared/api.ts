@@ -147,6 +147,10 @@ export async function saveUserSettings(settings: UserSettings): Promise<void> {
   return invoke<void>('save_user_settings', { settings })
 }
 
+export async function saveWindowState(input: { width: number, height: number, x: number, y: number, maximized: boolean }): Promise<void> {
+  return invoke<void>('save_window_state', { input })
+}
+
 export function noteToMarkdown(note: Note): string {
   const tags = note.tags.map((tag) => `"${tag}"`).join(', ')
   const summary = note.summary ? `summary: "${escapeYamlString(note.summary)}"\n` : ''

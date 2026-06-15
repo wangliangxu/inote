@@ -82,6 +82,11 @@ export interface UserSettings {
   rightSidebarVisible?: boolean
   leftSidebarWidth?: number
   rightSidebarWidth?: number
+  windowWidth?: number
+  windowHeight?: number
+  windowX?: number
+  windowY?: number
+  windowMaximized?: boolean
 }
 
 export interface LlmChatResponse {
