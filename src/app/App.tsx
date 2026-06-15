@@ -8,14 +8,17 @@ import {
   Bot,
   CalendarDays,
   Check,
+  Clock,
   FileMinus2,
   FilePlus2,
+  Flag,
   FolderPlus,
   FolderTree,
   Eye,
   LayoutGrid,
   Link2,
   List,
+  ListTodo,
   MoveRight,
   PanelLeft,
   PanelRight,
@@ -33,6 +36,7 @@ import { Editor } from '../features/editor/Editor'
 const LlmAssistant = lazy(() => import('../features/llm/LlmAssistant').then(m => ({ default: m.LlmAssistant })))
 const SettingsPanel = lazy(() => import('../features/settings/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
 const TagsPanel = lazy(() => import('../features/tags/TagsPanel').then(m => ({ default: m.TagsPanel })))
+const TodoDashboard = lazy(() => import('../features/todo/TodoDashboard').then(m => ({ default: m.TodoDashboard })))
 import { demoNotes } from '../shared/fixtures'
 import { getEffectiveTheme, readStoredThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../shared/theme'
 import type { LlmProviderSettings, Note, NoteLinks, SaveState, SearchResult, WorkspaceView } from '../shared/types'
@@ -119,9 +123,22 @@ const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect }: No
   return (
     <div ref={ref} className={isActive ? 'note-card active' : 'note-card'}>
       <button className="note-card-select" type="button" onClick={() => onSelect(note.path)}>
-        <strong>{note.title}</strong>
+        <strong className="note-title-line">
+          {note.title}
+          {('priority' in note && note.priority && note.priority !== 'none') && (
+            <Flag size={12} className={`priority-icon ${note.priority}`} />
+          )}
+        </strong>
         <small>{noteExcerpt(note)}</small>
-        <time>{note.updatedAt}</time>
+        <div className="note-card-footer">
+          <time>{note.updatedAt}</time>
+          {('due' in note && note.due) && (
+            <span className="due-badge" title={`Due: ${note.due}`}>
+              <Clock size={12} />
+              {note.due.split('T')[0]}
+            </span>
+          )}
+        </div>
       </button>
     </div>
   )
@@ -139,9 +156,22 @@ const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect }: Note
   return (
     <div ref={ref} className={isActive ? 'note-row active' : 'note-row'}>
       <button className="note-row-select" type="button" onClick={() => onSelect(note.path)}>
-        <strong>{note.title}</strong>
+        <strong className="note-title-line">
+          {note.title}
+          {('priority' in note && note.priority && note.priority !== 'none') && (
+            <Flag size={12} className={`priority-icon ${note.priority}`} />
+          )}
+        </strong>
         <small>{noteExcerpt(note)}</small>
-        <time>{note.updatedAt}</time>
+        <div className="note-row-footer">
+          <time>{note.updatedAt}</time>
+          {('due' in note && note.due) && (
+            <span className="due-badge" title={`Due: ${note.due}`}>
+              <Clock size={12} />
+              {note.due.split('T')[0]}
+            </span>
+          )}
+        </div>
       </button>
     </div>
   )
@@ -605,6 +635,30 @@ export function App() {
     }
     if (activeView === 'today') return getTodayNote(notes) ? [getTodayNote(notes)!] : sortByUpdatedDesc(notes.filter(n => !isSpecialCategory(n))).slice(0, 5)
     if (activeView === 'category') return filterNotesByCategory(notes, activeCategory)
+    if (activeView === 'todo') {
+      const priorityWeights: Record<string, number> = { high: 3, medium: 2, low: 1, none: 0 }
+      const todoNotes = notes.filter(n => !isSpecialCategory(n) && (n.status === 'todo' || n.status === 'in_progress' || n.status === 'done' || (n.due && n.status !== 'cancelled')))
+      return todoNotes.sort((a, b) => {
+        // Sort by due date
+        if (a.due && b.due) {
+          const aDue = a.due.localeCompare(b.due)
+          if (aDue !== 0) return aDue
+        } else if (a.due) {
+          return -1
+        } else if (b.due) {
+          return 1
+        }
+        
+        // Sort by priority
+        const aPri = priorityWeights[a.priority ?? 'none'] ?? 0
+        const bPri = priorityWeights[b.priority ?? 'none'] ?? 0
+        if (aPri !== bPri) return bPri - aPri // high to low
+
+        // Sort by update date
+        return b.updatedAt.localeCompare(a.updatedAt)
+      })
+    }
+
     return sortByUpdatedDesc(notes.filter(n => !isSpecialCategory(n)))
   }, [activeCategory, activeView, indexedResults, notes, query, searchCategorySet, vaultRoot])
 
@@ -656,15 +710,51 @@ export function App() {
 
   const visibleNoteGroups = useMemo(() => {
     const sliced = visibleNotes.slice(0, renderedCount)
+    if (activeView === 'todo') {
+      const today = localDateString()
+      const groups = {
+        'Overdue': [] as Array<Note | SearchResult>,
+        'Due Today': [] as Array<Note | SearchResult>,
+        'Upcoming': [] as Array<Note | SearchResult>,
+        'No Due Date': [] as Array<Note | SearchResult>,
+        'Recently Completed': [] as Array<Note | SearchResult>
+      }
+
+      for (const note of sliced) {
+        if ('status' in note && note.status === 'done') {
+          groups['Recently Completed'].push(note)
+        } else if ('due' in note && note.due) {
+          const dueDate = note.due.slice(0, 10)
+          if (dueDate < today) {
+            groups['Overdue'].push(note)
+          } else if (dueDate === today) {
+            groups['Due Today'].push(note)
+          } else {
+            groups['Upcoming'].push(note)
+          }
+        } else {
+          groups['No Due Date'].push(note)
+        }
+      }
+
+      return [
+        { month: 'Overdue', notes: groups['Overdue'], isCollapsed: false },
+        { month: 'Due Today', notes: groups['Due Today'], isCollapsed: false },
+        { month: 'Upcoming', notes: groups['Upcoming'], isCollapsed: false },
+        { month: 'No Due Date', notes: groups['No Due Date'], isCollapsed: false },
+        { month: 'Recently Completed', notes: groups['Recently Completed'], isCollapsed: true },
+      ].filter(g => g.notes.length > 0)
+    }
+
     const groups = new Map<string, Array<Note | SearchResult>>()
     for (const note of sliced) {
       const month = note.createdAt.slice(0, 7)
       groups.set(month, [...(groups.get(month) ?? []), note])
     }
     return Array.from(groups.entries())
-      .map(([month, groupedNotes]) => ({ month, notes: groupedNotes }))
+      .map(([month, groupedNotes]) => ({ month, notes: groupedNotes, isCollapsed: false }))
       .sort((a, b) => b.month.localeCompare(a.month))
-  }, [visibleNotes, renderedCount])
+  }, [visibleNotes, renderedCount, activeView])
 
   useEffect(() => {
     if (!vaultRoot.trim() || !query.trim()) {
@@ -856,6 +946,30 @@ export function App() {
           : note,
       ),
     )
+  }
+
+  async function updateNoteStatus(path: string, status: string) {
+    if (!vaultRoot.trim()) return
+    const noteToUpdate = notes.find((n) => n.path === path)
+    if (!noteToUpdate) return
+
+    if (activeNote && activeNote.path === path) {
+      updateActiveNoteStatus(status)
+      return
+    }
+
+    try {
+      const updatedNote = { ...noteToUpdate, status, updatedAt: localDateString() }
+      const saved = await writeNote({
+        vaultRoot: vaultRoot.trim(),
+        path: updatedNote.path,
+        content: noteToMarkdown(updatedNote),
+      })
+      setNotes((current) => current.map((note) => (note.path === path ? saved : note)))
+      setStatus(`Updated status for ${saved.title}.`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
   }
 
   function updateActiveNotePriority(priority: string) {
@@ -1500,6 +1614,28 @@ export function App() {
                 ))}
               </div>
             </details>
+            <button
+              className={activeView === 'todo' ? 'todo-toggle-btn active' : 'todo-toggle-btn'}
+              onClick={() => {
+                if (activeView === 'todo') {
+                  setActiveView(previousViewRef.current.view)
+                  setActiveCategory(previousViewRef.current.category)
+                  if (previousViewRef.current.path) {
+                    setActivePath(previousViewRef.current.path)
+                  }
+                } else {
+                  if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'calendar' && activeView !== 'todo') {
+                    previousViewRef.current = { view: activeView, category: activeCategory, path: activePath }
+                  }
+                  setActiveView('todo')
+                  setActivePath('')
+                }
+              }}
+              title="Todo List"
+              aria-label="Toggle Todo List"
+            >
+              <ListTodo size={15} />
+            </button>
             <div className="note-list-tools" aria-label="Note list display mode">
               <small>{visibleNotes.length}</small>
               <button
@@ -1523,12 +1659,14 @@ export function App() {
             </div>
           </div>
           <div className={`note-list ${noteListMode}`}>
-            {visibleNoteGroups.map((group) => (
-              <section className="note-month-group" key={group.month}>
-                <div className="note-month-header">
+            {visibleNoteGroups.map((group) => {
+              const header = (
+                <>
                   <h3>{group.month}</h3>
                   <small>{group.notes.length}</small>
-                </div>
+                </>
+              );
+              const content = (
                 <div className={noteListMode === 'cards' ? 'note-card-grid' : 'note-summary-stack'}>
                   {group.notes.map((note) =>
                     noteListMode === 'cards' ? (
@@ -1548,8 +1686,28 @@ export function App() {
                     )
                   )}
                 </div>
-              </section>
-            ))}
+              );
+
+              return (
+                <section className="note-month-group" key={group.month}>
+                  {group.isCollapsed ? (
+                    <details className="note-group-details" data-no-drag>
+                      <summary className="note-month-header">
+                        {header}
+                      </summary>
+                      {content}
+                    </details>
+                  ) : (
+                    <>
+                      <div className="note-month-header">
+                        {header}
+                      </div>
+                      {content}
+                    </>
+                  )}
+                </section>
+              );
+            })}
             {renderedCount < visibleNotes.length && (
               <div ref={loadMoreRef} className="load-more-sentinel" aria-hidden="true" />
             )}
@@ -1569,8 +1727,11 @@ export function App() {
             <Suspense fallback={<div className="empty">Loading calendar…</div>}>
               <CalendarView notes={notes} onSelectNote={setActivePath} onClose={() => toggleSpecialView('calendar')} />
             </Suspense>
-          ) : (
-            activeNote ? (
+          ) : activeView === 'todo' && !activeNote ? (
+            <Suspense fallback={<div className="empty">Loading todo dashboard…</div>}>
+              <TodoDashboard notes={visibleNotes} onSelectNote={setActivePath} onUpdateNoteStatus={updateNoteStatus} />
+            </Suspense>
+          ) : activeNote ? (
               <Editor
                 key={activeNote.path}
                 vaultRoot={vaultRoot.trim()}
@@ -1603,7 +1764,7 @@ export function App() {
                   : 'No note selected.'}
               </div>
             )
-          )}
+          }
         </section>
 
         <div
