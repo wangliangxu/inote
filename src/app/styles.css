@@ -494,6 +494,26 @@ button {
   width: 100%;
 }
 
+.clear-search-btn {
+  background: transparent;
+  border: none;
+  color: #7a7568;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.clear-search-btn:hover {
+  background: #ece8de;
+  color: #1a1a18;
+  opacity: 1;
+}
+
 .workspace-stats {
   color: #7a7568;
   display: flex;
@@ -2427,6 +2447,11 @@ button {
 :root[data-theme="dark"] .editor-header,
 :root[data-theme="dark"] .note-list {
   border-color: #3a3b34;
+}
+
+:root[data-theme="dark"] .clear-search-btn:hover {
+  background: #363632;
+  color: #ffffff;
 }
 
 :root[data-theme="dark"] .command-box,

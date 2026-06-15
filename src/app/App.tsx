@@ -30,6 +30,7 @@ import {
   Sparkles,
   Tags,
   Trash2,
+  XCircle,
 } from 'lucide-react'
 const CalendarView = lazy(() => import('../features/calendar/CalendarView').then(m => ({ default: m.CalendarView })))
 import { Editor } from '../features/editor/Editor'
@@ -1515,6 +1516,20 @@ export function App() {
               setActiveView('search')
             }}
           />
+          {query && (
+            <button
+              className="clear-search-btn"
+              type="button"
+              onClick={() => {
+                setQuery('')
+                // Do not change view, it can remain in 'search' with empty results or whatever its behavior is.
+              }}
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              <XCircle size={15} />
+            </button>
+          )}
         </div>
         <div className="window-actions" aria-label="Window actions">
           <button className="icon-action" type="button" onClick={addCategoryNote} title="Create note" aria-label="Create note">
