@@ -134,7 +134,7 @@ const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect }: No
         </strong>
         <small>{noteExcerpt(note)}</small>
         <div className="note-card-footer">
-          <time>{note.updatedAt}</time>
+          <time>{note.updatedAt || note.createdAt}</time>
           {('due' in note && note.due) && (
             <span className="due-badge" title={`Due: ${note.due}`}>
               <Clock size={12} />
@@ -167,7 +167,7 @@ const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect }: Note
         </strong>
         <small>{noteExcerpt(note)}</small>
         <div className="note-row-footer">
-          <time>{note.updatedAt}</time>
+          <time>{note.updatedAt || note.createdAt}</time>
           {('due' in note && note.due) && (
             <span className="due-badge" title={`Due: ${note.due}`}>
               <Clock size={12} />

@@ -57,7 +57,11 @@ export function groupByMonth(notes: Note[]): MonthGroup[] {
 }
 
 export function sortByUpdatedDesc(notes: Note[]): Note[] {
-  return [...notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title))
+  return [...notes].sort((a, b) => {
+    const aDate = a.updatedAt || a.createdAt || ''
+    const bDate = b.updatedAt || b.createdAt || ''
+    return bDate.localeCompare(aDate) || a.title.localeCompare(b.title)
+  })
 }
 
 export function searchNotes(notes: Note[], query: string): Note[] {
