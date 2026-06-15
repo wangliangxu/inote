@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 const CalendarView = lazy(() => import('../features/calendar/CalendarView').then(m => ({ default: m.CalendarView })))
 import { Editor } from '../features/editor/Editor'
-const LlmAssistant = lazy(() => import('../features/llm/LlmAssistant').then(m => ({ default: m.LlmAssistant })))
+const NoteAgent = lazy(() => import('../features/agent/NoteAgent').then(m => ({ default: m.NoteAgent })))
 const SettingsPanel = lazy(() => import('../features/settings/SettingsPanel').then(m => ({ default: m.SettingsPanel })))
 const TagsPanel = lazy(() => import('../features/tags/TagsPanel').then(m => ({ default: m.TagsPanel })))
 const TodoDashboard = lazy(() => import('../features/todo/TodoDashboard').then(m => ({ default: m.TodoDashboard })))
@@ -41,6 +41,8 @@ import { demoNotes } from '../shared/fixtures'
 import { getEffectiveTheme, readStoredThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../shared/theme'
 import type { LlmProviderSettings, Note, NoteLinks, SaveState, SearchResult, WorkspaceView } from '../shared/types'
 import { hasNoteChanges } from '../shared/noteChanges'
+import { applyCurrentNoteOperations, getCreateNoteDraft } from '../features/agent/applyAgentOperations'
+import type { AgentResult } from '../features/agent/agentTypes'
 import {
   archiveNote,
   createFolder,
@@ -51,7 +53,6 @@ import {
   createWeeklyReview,
   deleteNote,
   emptyTrash,
-  executeLlmChat,
   getNoteLinks,
   initializeVault,
   moveNote,
@@ -1089,6 +1090,34 @@ export function App() {
     }
   }
 
+  async function applyAgentCurrentNote(result: AgentResult) {
+    if (!activeNote || !vaultRoot.trim()) {
+      setStatus('Open a real vault before applying agent changes.')
+      return
+    }
+
+    const applied = applyCurrentNoteOperations(activeNote, result.operations, localDateString())
+    setIsSaving(true)
+    try {
+      const saved = await writeNote({
+        vaultRoot: vaultRoot.trim(),
+        path: applied.note.path,
+        content: noteToMarkdown(applied.note),
+      })
+      setLinkVersion((current) => current + 1)
+      setNotes((current) => current.map((note) => (note.path === activeNote.path ? saved : note)))
+      setActiveCategory(saved.category)
+      setSaveError(false)
+      setStatus(`Agent updated ${applied.changedFields.join(', ') || 'note'}.`)
+    } catch (error) {
+      setSaveError(true)
+      setStatus(error instanceof Error ? error.message : String(error))
+      throw error
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   async function checkExternalActiveNote() {
     if (!activeNote || !vaultRoot.trim()) {
       setStatus('Open a real vault before checking disk changes.')
@@ -1257,6 +1286,46 @@ export function App() {
       setStatus(`Created ${note.path}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function createAgentNote(result: AgentResult) {
+    if (!vaultRoot.trim()) {
+      setStatus('Open a real vault before creating notes.')
+      return
+    }
+
+    const draft = getCreateNoteDraft(result.operations)
+    try {
+      const created = await createNote({
+        vaultRoot: vaultRoot.trim(),
+        title: draft.title,
+        category: draft.category,
+      })
+      const backlink = draft.linkBackToCurrent && activeNote ? `\n\nRelated: [[${activeNote.title}]]` : ''
+      const noteToSave = {
+        ...created,
+        tags: draft.tags ?? [],
+        summary: draft.summary,
+        body: `${draft.body.trimEnd()}${backlink}`,
+        updatedAt: localDateString(),
+      }
+      const saved = await writeNote({
+        vaultRoot: vaultRoot.trim(),
+        path: created.path,
+        content: noteToMarkdown(noteToSave),
+      })
+      setLinkVersion((current) => current + 1)
+      setNotes((current) => [saved, ...current.filter((note) => note.path !== saved.path)])
+      setActivePath(saved.path)
+      setActiveCategory(saved.category)
+      setActiveView('category')
+      setSaveError(false)
+      setStatus(`Agent created ${saved.path}.`)
+    } catch (error) {
+      setSaveError(true)
+      setStatus(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }
 
@@ -1752,10 +1821,16 @@ export function App() {
 
               <section className="context-section">
                 <p className="panel-title">
-                  <Bot size={14} /> Assistant
+                  <Bot size={14} /> Note Agent
                 </p>
-                <Suspense fallback={<div className="empty">Loading assistant…</div>}>
-                  <LlmAssistant note={activeNote} notes={notes} settings={llmSettings} />
+                <Suspense fallback={<div className="empty">Loading note agent...</div>}>
+                  <NoteAgent
+                    note={activeNote}
+                    notes={notes}
+                    settings={llmSettings}
+                    onApplyCurrentNote={applyAgentCurrentNote}
+                    onCreateNote={createAgentNote}
+                  />
                 </Suspense>
               </section>
             </>
