@@ -7,6 +7,8 @@ const OPEN_SETTINGS_MENU_ID: &str = "open-settings";
 const OPEN_SETTINGS_EVENT: &str = "inote://open-settings";
 const EMPTY_TRASH_MENU_ID: &str = "empty-trash";
 const EMPTY_TRASH_EVENT: &str = "inote://empty-trash";
+const REBUILD_INDEX_MENU_ID: &str = "rebuild-index";
+const REBUILD_INDEX_EVENT: &str = "inote://rebuild-index";
 
 pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app_handle.package_info();
@@ -99,6 +101,15 @@ pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     &PredefinedMenuItem::separator(app_handle)?,
                     &IconMenuItem::with_id_and_native_icon(
                         app_handle,
+                        REBUILD_INDEX_MENU_ID,
+                        "Rebuild Full Index",
+                        true,
+                        Some(NativeIcon::Refresh),
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app_handle)?,
+                    &IconMenuItem::with_id_and_native_icon(
+                        app_handle,
                         EMPTY_TRASH_MENU_ID,
                         "Empty Trash",
                         true,
@@ -143,5 +154,7 @@ pub fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         let _ = app.emit(OPEN_SETTINGS_EVENT, ());
     } else if event.id() == EMPTY_TRASH_MENU_ID {
         let _ = app.emit(EMPTY_TRASH_EVENT, ());
+    } else if event.id() == REBUILD_INDEX_MENU_ID {
+        let _ = app.emit(REBUILD_INDEX_EVENT, ());
     }
 }

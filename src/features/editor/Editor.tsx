@@ -262,7 +262,7 @@ export function Editor({
     markdownShortcutPlugin(),
     frontmatterPlugin(),
     tablePlugin(),
-    linkPlugin(),
+    linkPlugin({ disableAutoLink: true }),
     linkDialogPlugin(),
     imagePlugin({
       imageUploadHandler: async (image: File) => {

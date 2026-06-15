@@ -40,6 +40,7 @@ const TodoDashboard = lazy(() => import('../features/todo/TodoDashboard').then(m
 import { demoNotes } from '../shared/fixtures'
 import { getEffectiveTheme, readStoredThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../shared/theme'
 import type { LlmProviderSettings, Note, NoteLinks, SaveState, SearchResult, WorkspaceView } from '../shared/types'
+import { hasNoteChanges } from '../shared/noteChanges'
 import {
   archiveNote,
   createFolder,
@@ -601,6 +602,17 @@ export function App() {
   }, [vaultRoot, safeConfirm])
 
   useEffect(() => {
+    const unlistenPromise = listen('inote://rebuild-index', async () => {
+      if (!vaultRoot.trim()) return
+      await refreshVaultFromDisk('Full index rebuilt.')
+    })
+    
+    return () => {
+      unlistenPromise.then((dispose) => dispose()).catch(() => {})
+    }
+  }, [vaultRoot, refreshVaultFromDisk])
+
+  useEffect(() => {
     const unlistenPromise = listen(OPEN_SETTINGS_EVENT, () => {
       setSettingsOpen(true)
     })
@@ -799,55 +811,7 @@ export function App() {
     if (!activeNote) return
     
     const { body, metadata } = parseMarkdownWithFrontmatter(fullContent)
-    
-    // MDXEditor normalizes markdown (e.g. table spacing, list bullet characters, loose lists).
-    // We normalize both bodies for comparison to avoid marking the note dirty just from opening it.
-    const normalizeFormatting = (md: string) => {
-      // Remove carriage returns and collapse multiple newlines to a single newline to ignore blank line differences
-      let normalized = md.replace(/\r/g, '').replace(/\n{2,}/g, '\n');
-      
-      // Normalize list item spaces (e.g., "-  item" to "- item")
-      normalized = normalized.replace(/^([ \t]*[-*+])[ \t]+/gm, '$1 ');
-      normalized = normalized.replace(/^([ \t]*\d+\.)[ \t]+/gm, '$1 ');
-      // Normalize bullet characters so `-` and `*` are treated the same
-      normalized = normalized.replace(/^([ \t]*)\*[ \t]+/gm, '$1- ');
-
-      return normalized.split('\n').map(line => {
-        let row = line.replace(/[ \t]+$/, ''); // Remove trailing spaces from all lines
-        const trimmed = row.trim();
-        if (trimmed.includes('|')) {
-          let tableRow = trimmed.replace(/(^\||\|$)/g, '');
-          tableRow = tableRow.replace(/\s*\|\s*/g, '|').trim();
-          // Normalize multiple spaces/tabs to a single space to ignore internal text spacing changes
-          tableRow = tableRow.replace(/\s+/g, ' ');
-          // Handle delimiter rows, including those with colons for alignment
-          if (/^[:\-\| ]+$/.test(tableRow)) {
-            tableRow = tableRow.split('|').map(cell => {
-              const c = cell.trim();
-              const left = c.startsWith(':');
-              const right = c.endsWith(':');
-              if (left && right) return ':C:';
-              if (left) return ':L';
-              if (right) return 'R:';
-              return '-';
-            }).join('|');
-          }
-          return tableRow;
-        }
-        return row;
-      }).join('\n').trim();
-    }
-
-    const hasChanges =
-      normalizeFormatting(body) !== normalizeFormatting(activeNote.body) ||
-      (metadata.title !== undefined && metadata.title !== activeNote.title) ||
-      (metadata.category !== undefined && metadata.category !== activeNote.category) ||
-      (metadata.tags !== undefined && metadata.tags.join(',') !== activeNote.tags.join(',')) ||
-      (metadata.summary !== undefined && metadata.summary !== activeNote.summary) ||
-      (metadata.due !== undefined && metadata.due !== activeNote.due) ||
-      (metadata.status !== undefined && metadata.status !== activeNote.status) ||
-      (metadata.priority !== undefined && metadata.priority !== activeNote.priority) ||
-      (metadata.project !== undefined && metadata.project !== activeNote.project)
+    const hasChanges = hasNoteChanges(activeNote, { body, metadata })
 
     if (!hasChanges) {
       return
@@ -1631,7 +1595,7 @@ export function App() {
                     setActivePath(previousViewRef.current.path)
                   }
                 } else {
-                  if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'calendar' && activeView !== 'todo') {
+                  if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'calendar') {
                     previousViewRef.current = { view: activeView, category: activeCategory, path: activePath }
                   }
                   setActiveView('todo')
