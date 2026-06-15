@@ -724,6 +724,7 @@ export function App() {
       (metadata.summary !== undefined && metadata.summary !== activeNote.summary) ||
       (metadata.due !== undefined && metadata.due !== activeNote.due) ||
       (metadata.status !== undefined && metadata.status !== activeNote.status) ||
+      (metadata.priority !== undefined && metadata.priority !== activeNote.priority) ||
       (metadata.project !== undefined && metadata.project !== activeNote.project)
 
     if (!hasChanges) {
@@ -817,6 +818,22 @@ export function App() {
           ? {
             ...note,
             status,
+            updatedAt: localDateString(),
+            isDirty: true,
+          }
+          : note,
+      ),
+    )
+  }
+
+  function updateActiveNotePriority(priority: string) {
+    if (!activeNote) return
+    setNotes((current) =>
+      current.map((note) =>
+        note.path === activeNote.path
+          ? {
+            ...note,
+            priority,
             updatedAt: localDateString(),
             isDirty: true,
           }
@@ -1552,6 +1569,7 @@ export function App() {
                 onUpdateUpdatedAt={updateActiveNoteUpdatedAt}
                 onUpdateDue={updateActiveNoteDue}
                 onUpdateStatus={updateActiveNoteStatus}
+                onUpdatePriority={updateActiveNotePriority}
                 onUpdateProject={updateActiveNoteProject}
                 onUpdateTags={updateActiveNoteTags}
                 onArchiveInboxNote={archiveActiveInboxNote}

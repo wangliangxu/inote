@@ -55,6 +55,7 @@ interface EditorProps {
   onUpdateUpdatedAt?: (date: string) => void
   onUpdateDue?: (date: string) => void
   onUpdateStatus?: (status: string) => void
+  onUpdatePriority?: (priority: string) => void
   onUpdateProject?: (project: string) => void
   onUpdateTags?: (tags: string) => void
   onArchiveInboxNote?: () => void
@@ -108,6 +109,7 @@ export function Editor({
   onUpdateUpdatedAt,
   onUpdateDue,
   onUpdateStatus,
+  onUpdatePriority,
   onUpdateProject,
   onUpdateTags,
   onArchiveInboxNote,
@@ -209,13 +211,14 @@ export function Editor({
         currentMeta.summary !== newMeta.summary ||
         currentMeta.due !== newMeta.due ||
         currentMeta.status !== newMeta.status ||
+        currentMeta.priority !== newMeta.priority ||
         currentMeta.project !== newMeta.project
 
       if (changed) {
         editorRef.current.setMarkdown(normalizedMarkdown)
       }
     }
-  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.project, normalizedMarkdown])
+  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.priority, note.project, normalizedMarkdown])
 
   const saveLabel = {
     loading: 'Loading',
@@ -400,14 +403,24 @@ export function Editor({
               </label>
               <label className="metadata-editor">
                 <span>Due</span>
-                <input type="date" value={note.due?.slice(0, 10) || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
+                <input type="datetime-local" value={note.due || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
               </label>
               <label className="metadata-editor">
                 <span>Status</span>
-                <select value={note.status || 'open'} onChange={(event) => onUpdateStatus?.(event.target.value)}>
-                  <option value="open">Open</option>
-                  <option value="closed">Closed</option>
-                  <option value="canceled">Canceled</option>
+                <select value={note.status || 'todo'} onChange={(event) => onUpdateStatus?.(event.target.value)}>
+                  <option value="todo">To Do</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="done">Done</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <label className="metadata-editor">
+                <span>Priority</span>
+                <select value={note.priority || 'none'} onChange={(event) => onUpdatePriority?.(event.target.value)}>
+                  <option value="none">None</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
                 </select>
               </label>
               <label className="metadata-editor">

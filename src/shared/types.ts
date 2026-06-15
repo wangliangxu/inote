@@ -11,6 +11,7 @@ export interface Note {
   updatedAt: string
   due?: string
   status?: string
+  priority?: string
   project?: string
   summary?: string
   body: string
@@ -42,6 +43,7 @@ export interface SearchResult {
   updatedAt: string
   due?: string
   status?: string
+  priority?: string
   project?: string
   summary?: string
   excerpt: string
