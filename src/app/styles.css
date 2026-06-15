@@ -1787,3 +1787,19 @@ body.dark-theme .cm-activeLine {
 body.dark-theme .cm-content {
   caret-color: #ddd8cc !important;
 }
+
+/* === Code Block Toolbar: show on hover only ===
+   The toolbar (language select + delete) uses position:absolute at top-right,
+   which covers the first line of code when it's long. We hide it by default
+   and reveal on hover/focus so code content is never obstructed. */
+.mdxeditor [class*="_codeMirrorToolbar_"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.mdxeditor [class*="_codeMirrorWrapper_"]:hover [class*="_codeMirrorToolbar_"],
+.mdxeditor [class*="_codeMirrorWrapper_"]:focus-within [class*="_codeMirrorToolbar_"] {
+  opacity: 1;
+  pointer-events: auto;
+}
