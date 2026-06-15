@@ -104,20 +104,31 @@ pub fn scan_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
 }
 
 #[tauri::command]
-pub fn rebuild_search_index(vault_root: String) -> Result<(), String> {
+pub fn rebuild_search_index(vault_root: String, is_full: bool) -> Result<(), String> {
     let vault = Vault::new(&vault_root)?;
-    let notes = vault.scan()?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
-    index.rebuild(&notes)
+    if is_full {
+        let notes = vault.scan()?;
+        index.full_rebuild(vault.root(), &notes)?;
+    } else {
+        index.lightweight_rebuild(vault.root())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn scan_vault_and_rebuild_index(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
     let vault = Vault::new(&vault_root)?;
-    let notes = vault.scan()?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
-    index.rebuild(&notes)?;
-    Ok(notes)
+    let index_path = vault.root().join(".inote/index.sqlite3");
+    let exists = index_path.exists();
+    let index = NoteIndex::open(&index_path)?;
+    if exists {
+        index.get_all_notes()
+    } else {
+        let notes = vault.scan()?;
+        index.full_rebuild(vault.root(), &notes)?;
+        index.get_all_notes()
+    }
 }
 
 #[tauri::command]
@@ -254,7 +265,7 @@ pub fn empty_trash(vault_root: String) -> Result<(), String> {
     vault.empty_trash()?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
     let notes = vault.scan()?;
-    index.rebuild(&notes)
+    index.full_rebuild(vault.root(), &notes)
 }
 
 #[tauri::command]
@@ -288,14 +299,14 @@ fn settings_db_path(app: &AppHandle) -> Result<PathBuf, String> {
 fn update_index_for_note(vault: &Vault, note: &NoteMetadata) -> Result<(), String> {
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
     let notes = vault.scan()?;
-    index.update_note(note, &notes)
+    index.update_note(vault.root(), note, &notes)
 }
 
 fn update_index_for_move(vault: &Vault, old_path: &str, new_note: &NoteMetadata) -> Result<(), String> {
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
     index.delete_note(old_path)?;
     let notes = vault.scan()?;
-    index.update_note(new_note, &notes)
+    index.update_note(vault.root(), new_note, &notes)
 }
 
 #[cfg(test)]
@@ -449,7 +460,7 @@ mod tests {
         })
         .unwrap();
 
-        rebuild_search_index(root.clone()).unwrap();
+        rebuild_search_index(root.clone(), true).unwrap();
         let results = search_index(SearchIndexInput {
             vault_root: root,
             query: "phase2".to_string(),
@@ -480,7 +491,7 @@ mod tests {
         })
         .unwrap();
 
-        rebuild_search_index(root.clone()).unwrap();
+        rebuild_search_index(root.clone(), true).unwrap();
         let links = get_note_links(NoteLinksInput {
             vault_root: root,
             path: "knowledge/target.md".to_string(),

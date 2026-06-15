@@ -59,8 +59,8 @@ export async function scanVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault', { vaultRoot })
 }
 
-export async function rebuildSearchIndex(vaultRoot: string): Promise<void> {
-  return invoke<void>('rebuild_search_index', { vaultRoot })
+export async function rebuildSearchIndex(vaultRoot: string, isFull: boolean = false): Promise<void> {
+  return invoke<void>('rebuild_search_index', { vaultRoot, isFull })
 }
 
 export async function scanVaultAndRebuildIndex(vaultRoot: string): Promise<Note[]> {

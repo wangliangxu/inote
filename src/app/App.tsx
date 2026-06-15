@@ -900,7 +900,7 @@ export function App() {
     }
     try {
       const loadedNotes = await initializeVault(vaultRoot.trim())
-      await rebuildSearchIndex(vaultRoot.trim())
+      await rebuildSearchIndex(vaultRoot.trim(), true)
       setNotes(loadedNotes.length ? loadedNotes : [])
       setActivePath(loadedNotes[0]?.path ?? '')
       window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())

@@ -43,10 +43,19 @@ impl NoteIndex {
             Connection::open(path).map_err(|error| format!("failed to open index: {error}"))?;
         let index = Self { conn };
         index.create_schema()?;
+        index.upgrade_schema();
         Ok(index)
     }
 
-    pub fn rebuild(&self, notes: &[NoteMetadata]) -> Result<(), String> {
+    fn upgrade_schema(&self) {
+        let _ = self.conn.execute("ALTER TABLE notes ADD COLUMN due TEXT", []);
+        let _ = self.conn.execute("ALTER TABLE notes ADD COLUMN status TEXT", []);
+        let _ = self.conn.execute("ALTER TABLE notes ADD COLUMN priority TEXT", []);
+        let _ = self.conn.execute("ALTER TABLE notes ADD COLUMN project TEXT", []);
+        let _ = self.conn.execute("ALTER TABLE notes ADD COLUMN file_modified INTEGER DEFAULT 0", []);
+    }
+
+    pub fn full_rebuild(&self, vault_root: &Path, notes: &[NoteMetadata]) -> Result<(), String> {
         self.conn
             .execute_batch(
                 "
@@ -60,25 +69,39 @@ impl NoteIndex {
 
         let resolver = LinkResolver::new(notes);
         for note in notes {
-            self.insert_note(note, &resolver)?;
+            let file_modified = std::fs::metadata(vault_root.join(&note.path))
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            self.insert_note(note, file_modified, &resolver)?;
         }
 
         Ok(())
     }
 
-    pub fn update_note(&self, note: &NoteMetadata, notes: &[NoteMetadata]) -> Result<(), String> {
+    pub fn update_note(&self, vault_root: &Path, note: &NoteMetadata, notes: &[NoteMetadata]) -> Result<(), String> {
         self.delete_note(&note.path)?;
         let resolver = LinkResolver::new(notes);
-        self.insert_note(note, &resolver)
+        let file_modified = std::fs::metadata(vault_root.join(&note.path))
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        self.insert_note(note, file_modified, &resolver)
     }
 
-    fn insert_note(&self, note: &NoteMetadata, resolver: &LinkResolver) -> Result<(), String> {
+    fn insert_note(&self, note: &NoteMetadata, file_modified: i64, resolver: &LinkResolver) -> Result<(), String> {
         let tags = note.tags.join(" ");
         self.conn
             .execute(
                 "
-                INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary, due, status, priority, project, file_modified)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 ",
                 params![
                     note.path,
@@ -87,7 +110,12 @@ impl NoteIndex {
                     note.created_at,
                     note.updated_at,
                     note.word_count as i64,
-                    note.summary
+                    note.summary,
+                    note.due,
+                    note.status,
+                    note.priority,
+                    note.project,
+                    file_modified
                 ],
             )
             .map_err(|error| format!("failed to index note metadata: {error}"))?;
@@ -148,6 +176,118 @@ impl NoteIndex {
             .execute("DELETE FROM notes WHERE path = ?1", params![path])
             .map_err(|error| format!("failed to remove note metadata from index: {error}"))?;
         Ok(())
+    }
+
+    
+    pub fn get_all_notes(&self) -> Result<Vec<NoteMetadata>, String> {
+        let mut tags_stmt = self.conn.prepare("SELECT note_path, tag FROM tags").map_err(|e| format!("tags prep: {}", e))?;
+        let tags_rows = tags_stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|e| format!("tags query: {}", e))?;
+        
+        let mut tags_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        for row in tags_rows.flatten() {
+            tags_map.entry(row.0).or_default().push(row.1);
+        }
+
+        let mut stmt = self.conn.prepare(
+            "
+            SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.word_count, n.summary,
+                   n.due, n.status, n.priority, n.project, s.body
+            FROM notes n
+            JOIN search_index s ON n.path = s.path
+            ORDER BY n.updated_at DESC, n.title ASC
+            "
+        ).map_err(|e| format!("notes prep: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            let path: String = row.get(0)?;
+            Ok(NoteMetadata {
+                path: path.clone(),
+                title: row.get(1)?,
+                category: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                word_count: row.get(5)?,
+                summary: row.get(6)?,
+                due: row.get(7)?,
+                status: row.get(8)?,
+                priority: row.get(9)?,
+                project: row.get(10)?,
+                body: row.get(11)?,
+                tags: tags_map.remove(&path).unwrap_or_default(),
+            })
+        }).map_err(|e| format!("notes query: {}", e))?;
+
+        Ok(rows.flatten().collect())
+    }
+
+    pub fn lightweight_rebuild(&self, vault_root: &Path) -> Result<Vec<NoteMetadata>, String> {
+        let mut db_files = std::collections::HashMap::new();
+        {
+            let mut stmt = self.conn.prepare("SELECT path, file_modified FROM notes").map_err(|e| format!("prep: {}", e))?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            }).map_err(|e| format!("query: {}", e))?;
+            for row in rows.flatten() {
+                db_files.insert(row.0, row.1);
+            }
+        }
+
+        let mut disk_paths = std::collections::HashSet::new();
+        let mut to_update = Vec::new();
+        
+        for entry in walkdir::WalkDir::new(vault_root).into_iter().filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|v| v.to_str()) == Some("md") {
+                if let Ok(rel_path) = path.strip_prefix(vault_root) {
+                    let rel_str = rel_path.to_string_lossy().replace('\\', "/");
+                    disk_paths.insert(rel_str.clone());
+                    
+                    let file_modified = entry.metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64;
+                    
+                    let needs_update = match db_files.get(&rel_str) {
+                        Some(&db_mod) => file_modified > db_mod,
+                        None => true,
+                    };
+                    
+                    if needs_update {
+                        if let Ok(note) = crate::markdown::parse_note(vault_root, path) {
+                            to_update.push((note, file_modified));
+                        }
+                    }
+                }
+            }
+        }
+        
+        for db_path in db_files.keys() {
+            if !disk_paths.contains(db_path) {
+                self.delete_note(db_path)?;
+            }
+        }
+        
+        if !to_update.is_empty() {
+            let all_notes = self.get_all_notes()?;
+            let mut merged_notes = all_notes.into_iter()
+                .filter(|n| disk_paths.contains(&n.path) && !to_update.iter().any(|(u, _)| u.path == n.path))
+                .collect::<Vec<_>>();
+            for (note, _) in &to_update {
+                merged_notes.push(note.clone());
+            }
+            let resolver = LinkResolver::new(&merged_notes);
+            for (note, file_modified) in to_update {
+                self.delete_note(&note.path)?;
+                self.insert_note(&note, file_modified, &resolver)?;
+            }
+        }
+        
+        self.get_all_notes()
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<SearchResult>, String> {
@@ -264,7 +404,12 @@ impl NoteIndex {
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL,
                   word_count INTEGER NOT NULL,
-                  summary TEXT
+                  summary TEXT,
+                  due TEXT,
+                  status TEXT,
+                  priority TEXT,
+                  project TEXT,
+                  file_modified INTEGER DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS tags (
@@ -526,7 +671,7 @@ mod tests {
 
         let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
         let notes = vault.scan().unwrap();
-        index.rebuild(&notes).unwrap();
+        index.full_rebuild(vault.root(), &notes).unwrap();
 
         let by_title = index.search("城市网络").unwrap();
         let by_body = index.search("retrieval").unwrap();
@@ -548,11 +693,11 @@ mod tests {
             .unwrap();
 
         let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
-        index.rebuild(&vault.scan().unwrap()).unwrap();
+        index.full_rebuild(vault.root(), &vault.scan().unwrap()).unwrap();
         assert_eq!(index.search("stale").unwrap().len(), 1);
 
         fs::remove_file(dir.path().join("knowledge/old.md")).unwrap();
-        index.rebuild(&vault.scan().unwrap()).unwrap();
+        index.full_rebuild(vault.root(), &vault.scan().unwrap()).unwrap();
 
         assert!(index.search("stale").unwrap().is_empty());
     }
@@ -575,7 +720,7 @@ mod tests {
             .unwrap();
 
         let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
-        index.rebuild(&vault.scan().unwrap()).unwrap();
+        index.full_rebuild(vault.root(), &vault.scan().unwrap()).unwrap();
         assert_eq!(index.search("targetonly").unwrap().len(), 1);
         assert_eq!(index.backlinks("knowledge/target.md").unwrap().len(), 1);
 
@@ -610,7 +755,7 @@ mod tests {
             .unwrap();
 
         let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
-        index.rebuild(&vault.scan().unwrap()).unwrap();
+        index.full_rebuild(vault.root(), &vault.scan().unwrap()).unwrap();
 
         let outgoing = index.outgoing_links("knowledge/source.md").unwrap();
         let backlinks = index.backlinks("knowledge/target.md").unwrap();

@@ -14,6 +14,7 @@ pub struct NoteMetadata {
     pub updated_at: String,
     pub due: Option<String>,
     pub status: Option<String>,
+    pub priority: Option<String>,
     pub project: Option<String>,
     pub summary: Option<String>,
     pub body: String,
@@ -31,6 +32,7 @@ struct Frontmatter {
     updated_at: Option<String>,
     due: Option<String>,
     status: Option<String>,
+    priority: Option<String>,
     project: Option<String>,
     summary: Option<String>,
 }
@@ -69,6 +71,7 @@ pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
         updated_at,
         due: parsed.due,
         status: parsed.status,
+        priority: parsed.priority,
         project: parsed.project,
         summary: parsed.summary,
         body,
