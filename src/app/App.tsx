@@ -1878,20 +1878,15 @@ export function App() {
           {activeNote ? (
             <>
 
-              <section className="context-section">
-                <p className="panel-title">
-                  <Bot size={14} /> Note Agent
-                </p>
-                <Suspense fallback={<div className="empty">Loading note agent...</div>}>
-                  <NoteAgent
-                    note={activeNote}
-                    notes={notes}
-                    settings={llmSettings}
-                    onApplyCurrentNote={applyAgentCurrentNote}
-                    onCreateNote={createAgentNote}
-                  />
-                </Suspense>
-              </section>
+              <Suspense fallback={<div className="empty">Loading note agent...</div>}>
+                <NoteAgent
+                  note={activeNote}
+                  notes={notes}
+                  settings={llmSettings}
+                  onApplyCurrentNote={applyAgentCurrentNote}
+                  onCreateNote={createAgentNote}
+                />
+              </Suspense>
             </>
           ) : null}
         </aside>

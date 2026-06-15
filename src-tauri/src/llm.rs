@@ -89,6 +89,64 @@ pub async fn send_chat_request(
     extract_chat_content(&body).map(|content| LlmChatResponse { content })
 }
 
+pub async fn send_chat_request_stream(
+    settings: &LlmProviderSettings,
+    prompt: &str,
+    context: &str,
+    mut on_chunk: impl FnMut(String) + Send + 'static,
+) -> Result<(), String> {
+    let mut preview = build_chat_request_preview(settings, prompt, context)?;
+    if let Some(body) = preview.body.as_object_mut() {
+        body.insert("stream".to_string(), json!(true));
+    }
+
+    let mut response = reqwest::Client::new()
+        .post(&preview.url)
+        .bearer_auth(settings.api_key.trim())
+        .json(&preview.body)
+        .send()
+        .await
+        .map_err(|error| format!("failed to call LLM API: {error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!(
+            "LLM API returned {status}: {}",
+            compact_error_body(&body)
+        ));
+    }
+
+    let mut buffer = String::new();
+    while let Ok(Some(chunk)) = response.chunk().await {
+        let chunk_str = String::from_utf8_lossy(&chunk);
+        buffer.push_str(&chunk_str);
+
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].to_string();
+            buffer = buffer[pos + 1..].to_string();
+
+            let line = line.trim();
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    continue;
+                }
+                if let Ok(value) = serde_json::from_str::<Value>(data) {
+                    if let Some(content) = value["choices"][0]["delta"]["content"].as_str() {
+                        on_chunk(content.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn extract_chat_content(body: &str) -> Result<String, String> {
     let value = serde_json::from_str::<Value>(body)
         .map_err(|error| format!("failed to parse LLM API response: {error}"))?;

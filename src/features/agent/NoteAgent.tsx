@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { AgentOperation } from './agentTypes'
 import { FilePlus2, ListChecks, Plus, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
-import { executeLlmChat } from '../../shared/api'
+import { executeLlmChat, executeLlmChatStream } from '../../shared/api'
 import type { LlmProviderSettings, Note } from '../../shared/types'
 import { buildAgentPrompt } from './agentPrompts'
 import { parseAgentResult } from './agentParser'
@@ -48,14 +48,19 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
     try {
       setStatus('running')
       const request = buildAgentPrompt({ command: nextCommand, note, notes, action: nextAction })
-      setAgentProcess({ prompt: request.prompt, context: request.context })
-      const response = await executeLlmChat({
+      setAgentProcess({ prompt: request.prompt, context: request.context, rawResponse: '' })
+      
+      let fullResponse = ''
+      await executeLlmChatStream({
         settings,
         prompt: request.prompt,
         context: request.context,
+      }, (chunk) => {
+        fullResponse += chunk
+        setAgentProcess(prev => prev ? { ...prev, rawResponse: fullResponse } : null)
       })
-      setAgentProcess(prev => prev ? { ...prev, rawResponse: response.content } : null)
-      setResult(parseAgentResult(response.content))
+
+      setResult(parseAgentResult(fullResponse))
       setStatus('idle')
     } catch (err) {
       setStatus('error')
@@ -89,7 +94,51 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
 
   return (
     <div className="note-agent">
-      <div className="scope-pill">Note Agent</div>
+      <div className="agent-scroll-area">
+        {error ? <p className="agent-error">{error}</p> : null}
+        
+        {result && (
+          <>
+            <p className="panel-title compact">Proposed Changes</p>
+            <div className="agent-change-list">
+              <p>{result.message || 'Review the proposed operations before applying.'}</p>
+              {result.operations.map((operation, index) => (
+                <div className="agent-change" key={`${operation.type}-${index}`}>
+                  <strong>{operation.type.replace(/_/g, ' ')}</strong>
+                  {renderOperationDetails(operation)}
+                </div>
+              ))}
+            </div>
+            <div className="agent-footer">
+              <button type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
+                <Plus size={15} />
+              </button>
+              <button type="button" onClick={createNote} disabled={!canCreate || status === 'applying'} title="Create note">
+                <FilePlus2 size={15} />
+              </button>
+              <div style={{ flex: 1 }}></div>
+              <button type="button" onClick={() => setResult(null)} disabled={status === 'applying'} title="Discard">
+                <X size={15} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {agentProcess && (
+          <details className="agent-process-log" open={status === 'running'}>
+            <summary>Agent Process Log</summary>
+            <div className="agent-process-content">
+              <strong>System Prompt</strong>
+              <pre>{agentProcess.prompt}</pre>
+              <strong>Context</strong>
+              <pre>{agentProcess.context}</pre>
+              <strong>Raw Response</strong>
+              <pre>{agentProcess.rawResponse || 'Waiting for response...'}</pre>
+            </div>
+          </details>
+        )}
+      </div>
+
       <div className="agent-input-wrapper">
         <textarea
           className="agent-command"
@@ -127,47 +176,6 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
             {status === 'running' ? <RefreshCw size={15} /> : <Send size={15} />}
           </button>
         </div>
-      </div>
-      {agentProcess && (
-        <details className="agent-process-log" open={status === 'running'}>
-          <summary>Agent Process Log</summary>
-          <div className="agent-process-content">
-            <strong>System Prompt</strong>
-            <pre>{agentProcess.prompt}</pre>
-            <strong>Context</strong>
-            <pre>{agentProcess.context}</pre>
-            <strong>Raw Response</strong>
-            <pre>{agentProcess.rawResponse || 'Waiting for response...'}</pre>
-          </div>
-        </details>
-      )}
-      <p className="panel-title compact">Proposed Changes</p>
-      {error ? <p className="agent-error">{error}</p> : null}
-      {result ? (
-        <div className="agent-change-list">
-          <p>{result.message || 'Review the proposed operations before applying.'}</p>
-          {result.operations.map((operation, index) => (
-            <div className="agent-change" key={`${operation.type}-${index}`}>
-              <strong>{operation.type.replace(/_/g, ' ')}</strong>
-              {renderOperationDetails(operation)}
-            </div>
-          ))}
-        </div>
-      ) : !error ? (
-        <p className="agent-empty">Run the agent to preview changes here.</p>
-      ) : null}
-      <div className="agent-footer">
-        <button type="button" onClick={() => setResult(null)} disabled={!result || status === 'applying'} title="Discard">
-          <X size={15} />
-        </button>
-        <button type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
-          <Plus size={15} />
-          <span>Apply</span>
-        </button>
-        <button type="button" onClick={createNote} disabled={!canCreate || status === 'applying'} title="Create note">
-          <FilePlus2 size={15} />
-          <span>Create</span>
-        </button>
       </div>
     </div>
   )

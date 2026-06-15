@@ -64,7 +64,8 @@ pub fn run() {
             commands::save_user_settings,
             commands::save_window_state,
             commands::build_llm_request_preview,
-            commands::execute_llm_chat
+            commands::execute_llm_chat,
+            commands::execute_llm_chat_stream
         ])
         .run(tauri::generate_context!())
         .expect("failed to run iNote");

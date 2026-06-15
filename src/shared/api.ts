@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, Channel } from '@tauri-apps/api/core'
 import type { LlmChatResponse, LlmProviderSettings, Note, NoteLinks, SearchResult, UserSettings } from './types'
 
 interface WriteNoteInput {
@@ -137,6 +137,14 @@ export async function emptyTrash(vaultRoot: string): Promise<void> {
 
 export async function executeLlmChat(input: LlmChatInput): Promise<LlmChatResponse> {
   return invoke<LlmChatResponse>('execute_llm_chat', { input })
+}
+
+export async function executeLlmChatStream(input: LlmChatInput, onChunk: (chunk: string) => void): Promise<void> {
+  const channel = new Channel<string>()
+  channel.onmessage = (message: string) => {
+    onChunk(message)
+  }
+  return invoke<void>('execute_llm_chat_stream', { input, onChunk: channel })
 }
 
 export async function loadUserSettings(): Promise<UserSettings> {

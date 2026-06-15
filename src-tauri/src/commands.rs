@@ -289,6 +289,22 @@ pub async fn execute_llm_chat(input: LlmChatInput) -> Result<LlmChatResponse, St
 }
 
 #[tauri::command]
+pub async fn execute_llm_chat_stream(
+    input: LlmChatInput,
+    on_chunk: tauri::ipc::Channel<String>,
+) -> Result<(), String> {
+    crate::llm::send_chat_request_stream(
+        &input.settings,
+        &input.prompt,
+        &input.context,
+        move |content| {
+            let _ = on_chunk.send(content);
+        },
+    )
+    .await
+}
+
+#[tauri::command]
 pub fn load_user_settings(app: AppHandle) -> Result<UserSettings, String> {
     UserSettingsStore::open(settings_db_path(&app)?)?.load()
 }

@@ -299,11 +299,11 @@ button {
 .context-panel {
   background: #f7f5f0;
   border-left: 1px solid #ddd8cc;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -1754,6 +1754,10 @@ button {
   border-radius: 8px;
   min-width: 0;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .result-item {
@@ -1988,6 +1992,16 @@ button {
 }
 
 .note-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.agent-scroll-area {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2247,9 +2261,9 @@ button {
 }
 
 .agent-footer {
-  display: grid;
+  display: flex;
   gap: 6px;
-  grid-template-columns: 36px 1fr 1fr;
+  align-items: center;
 }
 
 .agent-footer button:disabled,
