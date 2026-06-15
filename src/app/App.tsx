@@ -1068,16 +1068,21 @@ export function App() {
       
       let noteToSave = { ...activeNote }
       
-      if (noteToSave.title === '无标题') {
-        const now = new Date()
-        const timestamp = now.getFullYear().toString() + 
-          String(now.getMonth() + 1).padStart(2, '0') + 
-          String(now.getDate()).padStart(2, '0') + 
-          String(now.getHours()).padStart(2, '0') + 
-          String(now.getMinutes()).padStart(2, '0') + 
-          String(now.getSeconds()).padStart(2, '0')
-        const randomDigits = Math.floor(1000 + Math.random() * 9000)
-        noteToSave.title = `${timestamp}-${randomDigits}`
+      if (noteToSave.title === '无标题' || noteToSave.title === 'Untitled') {
+        const firstH1Match = noteToSave.body.match(/^#\s+(.+)$/m)
+        if (firstH1Match && firstH1Match[1].trim()) {
+          noteToSave.title = firstH1Match[1].trim()
+        } else {
+          const now = new Date()
+          const timestamp = now.getFullYear().toString() + 
+            String(now.getMonth() + 1).padStart(2, '0') + 
+            String(now.getDate()).padStart(2, '0') + 
+            String(now.getHours()).padStart(2, '0') + 
+            String(now.getMinutes()).padStart(2, '0') + 
+            String(now.getSeconds()).padStart(2, '0')
+          const randomDigits = Math.floor(1000 + Math.random() * 9000)
+          noteToSave.title = `${timestamp}-${randomDigits}`
+        }
       }
 
       const expectedFilename = `${getFilenameForTitle(noteToSave.title)}.md`
@@ -1115,6 +1120,8 @@ export function App() {
     } catch (error) {
       setSaveError(true)
       setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsSaving(false)
     }
   }
 
