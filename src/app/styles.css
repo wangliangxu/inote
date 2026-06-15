@@ -2906,6 +2906,11 @@ body.dark-theme .cm-content {
   caret-color: #ddd8cc !important;
 }
 
+body.dark-theme .cm-cursor,
+body.dark-theme .cm-dropCursor {
+  border-left-color: #ddd8cc !important;
+}
+
 /* === Code Block Toolbar: show on hover only ===
    The toolbar (language select + delete) uses position:absolute at top-right,
    which covers the first line of code when it's long. We hide it by default
