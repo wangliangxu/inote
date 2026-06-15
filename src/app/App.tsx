@@ -226,7 +226,7 @@ export function App() {
   const skipNextVaultChangeUntilRef = useRef(0)
   const previousViewRef = useRef<{ view: WorkspaceView, category: string, path: string }>({ view: 'today', category: 'journal', path: '' })
 
-  const toggleSpecialView = useCallback((view: 'archive' | 'trash' | 'tags') => {
+  const toggleSpecialView = useCallback((view: 'archive' | 'trash' | 'tags' | 'calendar') => {
     if (activeView === view) {
       setActiveView(previousViewRef.current.view)
       setActiveCategory(previousViewRef.current.category)
@@ -234,7 +234,7 @@ export function App() {
         setActivePath(previousViewRef.current.path)
       }
     } else {
-      if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'tags') {
+      if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'tags' && activeView !== 'calendar') {
         previousViewRef.current = { view: activeView, category: activeCategory, path: activePath }
       }
       setActiveView(view)
@@ -1349,7 +1349,7 @@ export function App() {
           <button
             className={activeView === 'calendar' ? 'icon-action active' : 'icon-action'}
             type="button"
-            onClick={() => setActiveView('calendar')}
+            onClick={() => toggleSpecialView('calendar')}
             title="Calendar"
             aria-label="Open calendar"
           >
@@ -1535,7 +1535,7 @@ export function App() {
 
           {activeView === 'calendar' ? (
             <Suspense fallback={<div className="empty">Loading calendar…</div>}>
-              <CalendarView notes={notes} onSelectNote={setActivePath} />
+              <CalendarView notes={notes} onSelectNote={setActivePath} onClose={() => toggleSpecialView('calendar')} />
             </Suspense>
           ) : activeView === 'tags' ? (
             <Suspense fallback={<div className="empty">Loading tags…</div>}>
