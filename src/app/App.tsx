@@ -29,6 +29,7 @@ import {
   Settings,
   Sparkles,
   Tags,
+  Trash,
   Trash2,
   XCircle,
 } from 'lucide-react'
@@ -47,11 +48,8 @@ import type { AgentResult } from '../features/agent/agentTypes'
 import {
   archiveNote,
   createFolder,
-  createInboxNote,
-  createMonthlyReview,
   createNote,
   createTodayNote,
-  createWeeklyReview,
   deleteNote,
   emptyTrash,
   getNoteLinks,
@@ -1255,62 +1253,6 @@ export function App() {
     }
   }
 
-  async function addWeeklyReview() {
-    if (!vaultRoot.trim()) {
-      setStatus('Open a real vault before creating weekly review.')
-      return
-    }
-    try {
-      const today = localDateString()
-      const note = await createWeeklyReview({ vaultRoot: vaultRoot.trim(), date: today })
-      setLinkVersion((current) => current + 1)
-      setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
-      setActivePath(note.path)
-      setActiveCategory(note.category)
-      setActiveView('category')
-      setSaveError(false)
-      setStatus(`Created ${note.path}.`)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  async function addMonthlyReview() {
-    if (!vaultRoot.trim()) {
-      setStatus('Open a real vault before creating monthly review.')
-      return
-    }
-    try {
-      const today = localDateString()
-      const note = await createMonthlyReview({ vaultRoot: vaultRoot.trim(), date: today })
-      setLinkVersion((current) => current + 1)
-      setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
-      setActivePath(note.path)
-      setActiveCategory(note.category)
-      setActiveView('category')
-      setSaveError(false)
-      setStatus(`Created ${note.path}.`)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  async function addInboxNote() {
-    if (!vaultRoot.trim()) {
-      setStatus('Open a real vault before creating inbox note.')
-      return
-    }
-    try {
-      const note = await createInboxNote(vaultRoot.trim(), 'Quick Thought')
-      setLinkVersion((current) => current + 1)
-      setNotes((current) => [note, ...current])
-      setActivePath(note.path)
-      setSaveError(false)
-      setStatus(`Created ${note.path}.`)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error))
-    }
-  }
 
   async function addCategoryNote() {
     if (!vaultRoot.trim()) {
@@ -1579,9 +1521,7 @@ export function App() {
           <button className="icon-action" type="button" onClick={addCategoryNote} title="Create note" aria-label="Create note">
             <Pencil size={16} />
           </button>
-          <button className="icon-action" type="button" onClick={addFolder} title="Create folder" aria-label="Create folder">
-            <FolderPlus size={16} />
-          </button>
+
           <button
             className={tagsPopoverOpen ? 'icon-action active' : 'icon-action'}
             type="button"
@@ -1616,7 +1556,7 @@ export function App() {
             title="Trash"
             aria-label="Open trash"
           >
-            <Trash2 size={17} />
+            <Trash size={17} />
           </button>
           <button
             className={settingsOpen ? 'icon-action active' : 'icon-action'}
@@ -1919,9 +1859,7 @@ export function App() {
                 onOpenVault={openVault}
                 onInitializeVault={initVault}
                 onCreateToday={addTodayNote}
-                onCreateInbox={addInboxNote}
-                onCreateWeeklyReview={addWeeklyReview}
-                onCreateMonthlyReview={addMonthlyReview}
+
                 onCreateFolder={addFolder}
                 onRebuildIndex={rebuildIndex}
                 onClose={() => setSettingsOpen(false)}
