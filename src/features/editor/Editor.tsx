@@ -201,8 +201,8 @@ export function Editor({
   useEffect(() => {
     if (editorRef.current) {
       const currentMd = editorRef.current.getMarkdown()
-      const { metadata: currentMeta } = parseMarkdownWithFrontmatter(currentMd)
-      const { metadata: newMeta } = parseMarkdownWithFrontmatter(normalizedMarkdown)
+      const { metadata: currentMeta, body: currentBody } = parseMarkdownWithFrontmatter(currentMd)
+      const { metadata: newMeta, body: newBody } = parseMarkdownWithFrontmatter(normalizedMarkdown)
       
       const changed = 
         currentMeta.title !== newMeta.title ||
@@ -212,7 +212,8 @@ export function Editor({
         currentMeta.due !== newMeta.due ||
         currentMeta.status !== newMeta.status ||
         currentMeta.priority !== newMeta.priority ||
-        currentMeta.project !== newMeta.project
+        currentMeta.project !== newMeta.project ||
+        normalizeMarkdownBody(currentBody) !== normalizeMarkdownBody(newBody)
 
       if (changed) {
         editorRef.current.setMarkdown(normalizedMarkdown)

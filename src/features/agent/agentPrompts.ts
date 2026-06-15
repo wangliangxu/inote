@@ -12,9 +12,10 @@ export function buildAgentPrompt({ command, note, notes, action }: BuildAgentPro
   return {
     prompt: [
       'You are iNote Note Agent. Return only valid JSON and no Markdown wrapper.',
-      'The JSON shape is {"message":"short user-facing summary","operations":[...]}',
-      'Allowed operation types are update_current_note, append_to_current_note, replace_current_note_body, create_note, and suggest_only.',
-      'Allowed current-note patch fields are title, category, tags, summary, due, status, priority, and project.',
+      'The JSON shape must be: {"message":"summary","operations":[{"type":"operation_name", ...}]}',
+      'Allowed operation types: update_current_note, append_to_current_note, replace_current_note_body, create_note, suggest_only.',
+      'For append/replace/suggest, include a "markdown" string field. For update, include a "patch" object. For create, include a "note" object.',
+      'Allowed patch fields: title, category, tags, summary, due, status, priority, project.',
       actionInstruction(action),
       `User command: ${command.trim() || actionInstruction(action)}`,
     ].filter(Boolean).join('\n'),

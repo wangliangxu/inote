@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { FilePlus2, ListChecks, Plus, RefreshCw, Send, Sparkles, Tags, Wand2, X } from 'lucide-react'
+import type { AgentOperation } from './agentTypes'
+import { FilePlus2, ListChecks, Plus, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
 import { executeLlmChat } from '../../shared/api'
 import type { LlmProviderSettings, Note } from '../../shared/types'
 import { buildAgentPrompt } from './agentPrompts'
@@ -27,6 +28,7 @@ const quickActions: Array<{ action: QuickAgentAction, label: string, icon: typeo
 export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateNote }: NoteAgentProps) {
   const [command, setCommand] = useState('Update tags and summary for this note.')
   const [activeAction, setActiveAction] = useState<QuickAgentAction | undefined>()
+  const [agentProcess, setAgentProcess] = useState<{ prompt: string, context: string, rawResponse?: string } | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
   const [status, setStatus] = useState<'idle' | 'running' | 'applying' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -46,11 +48,13 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
     try {
       setStatus('running')
       const request = buildAgentPrompt({ command: nextCommand, note, notes, action: nextAction })
+      setAgentProcess({ prompt: request.prompt, context: request.context })
       const response = await executeLlmChat({
         settings,
         prompt: request.prompt,
         context: request.context,
       })
+      setAgentProcess(prev => prev ? { ...prev, rawResponse: response.content } : null)
       setResult(parseAgentResult(response.content))
       setStatus('idle')
     } catch (err) {
@@ -86,34 +90,57 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
   return (
     <div className="note-agent">
       <div className="scope-pill">Note Agent</div>
-      <textarea
-        className="agent-command"
-        aria-label="Note agent command"
-        value={command}
-        onChange={(event) => setCommand(event.target.value)}
-        placeholder="Ask the agent to update this note or create a new one."
-      />
-      <div className="agent-quick-actions" aria-label="Quick agent actions">
-        {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
-          <button
-            key={action}
-            className={activeAction === action ? 'active' : ''}
-            type="button"
-            onClick={() => {
-              setActiveAction(action)
-              setCommand(quickCommand)
-            }}
-            title={label}
-          >
-            <Icon size={14} />
-            <span>{label}</span>
+      <div className="agent-input-wrapper">
+        <textarea
+          className="agent-command"
+          aria-label="Note agent command"
+          value={command}
+          onChange={(event) => setCommand(event.target.value)}
+          placeholder="Ask the agent to update this note or create a new one."
+        />
+        <div className="agent-input-toolbar">
+          <details className="agent-quick-action-dropdown" data-no-drag>
+            <summary className="agent-quick-action-btn" title="Quick Actions">
+              <Zap size={16} />
+            </summary>
+            <div className="agent-quick-action-menu">
+              {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
+                <button
+                  key={action}
+                  className={activeAction === action ? 'active' : ''}
+                  type="button"
+                  onClick={(e) => {
+                    setActiveAction(action)
+                    setCommand(quickCommand)
+                    const details = e.currentTarget.closest('details')
+                    if (details) details.open = false
+                  }}
+                  title={label}
+                >
+                  <Icon size={14} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+          <button className="agent-run-btn" title="Run agent" type="button" onClick={() => runAgent()} disabled={status === 'running' || status === 'applying'}>
+            {status === 'running' ? <RefreshCw size={15} /> : <Send size={15} />}
           </button>
-        ))}
+        </div>
       </div>
-      <button className="llm-action" type="button" onClick={() => runAgent()} disabled={status === 'running' || status === 'applying'}>
-        <Send size={14} />
-        {status === 'running' ? 'Running...' : 'Run agent'}
-      </button>
+      {agentProcess && (
+        <details className="agent-process-log" open={status === 'running'}>
+          <summary>Agent Process Log</summary>
+          <div className="agent-process-content">
+            <strong>System Prompt</strong>
+            <pre>{agentProcess.prompt}</pre>
+            <strong>Context</strong>
+            <pre>{agentProcess.context}</pre>
+            <strong>Raw Response</strong>
+            <pre>{agentProcess.rawResponse || 'Waiting for response...'}</pre>
+          </div>
+        </details>
+      )}
       <p className="panel-title compact">Proposed Changes</p>
       {error ? <p className="agent-error">{error}</p> : null}
       {result ? (
@@ -122,7 +149,7 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
           {result.operations.map((operation, index) => (
             <div className="agent-change" key={`${operation.type}-${index}`}>
               <strong>{operation.type.replace(/_/g, ' ')}</strong>
-              <pre>{JSON.stringify(operation, null, 2)}</pre>
+              {renderOperationDetails(operation)}
             </div>
           ))}
         </div>
@@ -144,4 +171,45 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
       </div>
     </div>
   )
+}
+
+function renderOperationDetails(operation: AgentOperation) {
+  switch (operation.type) {
+    case 'update_current_note':
+      return (
+        <div className="operation-details">
+          {Object.entries(operation.patch).map(([key, value]) => (
+            <div key={key} className="detail-row">
+              <span className="detail-key">{key}:</span>
+              <span className="detail-value">{Array.isArray(value) ? value.join(', ') : String(value)}</span>
+            </div>
+          ))}
+        </div>
+      )
+    case 'append_to_current_note':
+    case 'replace_current_note_body':
+    case 'suggest_only':
+      return (
+        <div className="operation-details">
+          <pre>{operation.markdown}</pre>
+        </div>
+      )
+    case 'create_note':
+      return (
+        <div className="operation-details">
+          <div className="detail-row"><span className="detail-key">Title:</span> <span className="detail-value">{operation.note.title}</span></div>
+          <div className="detail-row"><span className="detail-key">Category:</span> <span className="detail-value">{operation.note.category}</span></div>
+          {operation.note.tags && operation.note.tags.length > 0 && (
+            <div className="detail-row"><span className="detail-key">Tags:</span> <span className="detail-value">{operation.note.tags.join(', ')}</span></div>
+          )}
+          {operation.note.summary && (
+            <div className="detail-row"><span className="detail-key">Summary:</span> <span className="detail-value">{operation.note.summary}</span></div>
+          )}
+          <div className="detail-row"><span className="detail-key">Body:</span></div>
+          <pre>{operation.note.body}</pre>
+        </div>
+      )
+    default:
+      return <pre>{JSON.stringify(operation, null, 2)}</pre>
+  }
 }
