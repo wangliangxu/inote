@@ -36,6 +36,10 @@ const fromOptions: FromMarkdownOptions = {
 export const EDITOR_TO_MARKDOWN_OPTIONS = {
   bullet: '-' as const,
   listItemIndent: 'one' as const,
+  // Force links to use [text](url) format instead of <url> autolinks.
+  // MDXEditor's MDX parser treats `<` as JSX tag start, so autolinks like
+  // <user@example.com> cause "Unexpected character `@`" parse errors.
+  resourceLink: true,
 }
 
 // Full options used locally for pre-normalization (includes GFM extensions).
@@ -56,20 +60,26 @@ const localToMarkdownOptions: ToMarkdownOptions = {
 export function normalizeMarkdownBody(body: string): string {
   if (!body.trim()) return body
 
-  const tree = fromMarkdown(body, fromOptions)
+  try {
+    const tree = fromMarkdown(body, fromOptions)
 
-  // MDXEditor's LexicalListVisitor hardcodes spread=false on all lists/items,
-  // meaning it always produces "tight" lists (no blank lines between items).
-  // We replicate that here so our normalization matches the editor's output.
-  forceAllListsTight(tree)
+    // MDXEditor's LexicalListVisitor hardcodes spread=false on all lists/items,
+    // meaning it always produces "tight" lists (no blank lines between items).
+    // We replicate that here so our normalization matches the editor's output.
+    forceAllListsTight(tree)
 
-  let result = toMarkdown(tree, localToMarkdownOptions)
+    let result = toMarkdown(tree, localToMarkdownOptions)
 
-  // mdast-util-to-markdown always appends a trailing newline;
-  // trim to a single trailing newline for consistency.
-  result = result.replace(/\n+$/, '\n')
+    // mdast-util-to-markdown always appends a trailing newline;
+    // trim to a single trailing newline for consistency.
+    result = result.replace(/\n+$/, '\n')
 
-  return result
+    return result
+  } catch {
+    // If normalization fails (e.g. unusual syntax), return the original body
+    // so the editor can still attempt to render it.
+    return body
+  }
 }
 
 /**
