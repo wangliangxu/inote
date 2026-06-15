@@ -3,6 +3,7 @@ import type { Note, SaveState, NoteLinks } from '../../shared/types'
 import { noteToMarkdown, parseMarkdownWithFrontmatter } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
+import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2 } from 'lucide-react'
 import {
   MDXEditor,
@@ -113,7 +114,19 @@ export function Editor({
   onNavigateLink,
 }: EditorProps) {
   const editorRef = useRef<MDXEditorMethods>(null)
-  const [diffBaseline, setDiffBaseline] = useState(() => noteToMarkdown(note))
+
+  // Pre-normalize the markdown body so it matches MDXEditor's canonical output.
+  // This prevents spurious diffs (bullet chars, list spacing, table formatting)
+  // that would otherwise appear when the editor round-trips the content.
+  const normalizedMarkdown = useMemo(() => {
+    const raw = noteToMarkdown(note)
+    const match = raw.match(/^(---\n[\s\S]*?\n---\n\n)([\s\S]*)$/)
+    if (!match) return raw
+    const [, frontmatter, body] = match
+    return frontmatter + normalizeMarkdownBody(body)
+  }, [note])
+
+  const [diffBaseline, setDiffBaseline] = useState(() => normalizedMarkdown)
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(false)
   const [metadataWidth, setMetadataWidth] = useState(300)
   const isDraggingRef = useRef(false)
@@ -179,16 +192,15 @@ export function Editor({
 
   useEffect(() => {
     if (saveState === 'saved' || saveState === 'demo') {
-      setDiffBaseline(noteToMarkdown(note))
+      setDiffBaseline(normalizedMarkdown)
     }
-  }, [saveState, note])
+  }, [saveState, normalizedMarkdown])
 
   useEffect(() => {
     if (editorRef.current) {
       const currentMd = editorRef.current.getMarkdown()
       const { metadata: currentMeta } = parseMarkdownWithFrontmatter(currentMd)
-      const newMd = noteToMarkdown(note)
-      const { metadata: newMeta } = parseMarkdownWithFrontmatter(newMd)
+      const { metadata: newMeta } = parseMarkdownWithFrontmatter(normalizedMarkdown)
       
       const changed = 
         currentMeta.title !== newMeta.title ||
@@ -200,10 +212,10 @@ export function Editor({
         currentMeta.project !== newMeta.project
 
       if (changed) {
-        editorRef.current.setMarkdown(newMd)
+        editorRef.current.setMarkdown(normalizedMarkdown)
       }
     }
-  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.project])
+  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.project, normalizedMarkdown])
 
   const saveLabel = {
     loading: 'Loading',
@@ -344,11 +356,12 @@ export function Editor({
             ref={editorRef}
             key={note.path} // Force re-mount on note change so internal state resets
             className={`mdx-editor-main ${isDark ? 'dark-theme dark-editor' : ''}`}
-            markdown={noteToMarkdown(note)}
+            markdown={normalizedMarkdown}
             onChange={onChange}
             readOnly={previewMode}
             contentEditableClassName="prose"
             plugins={plugins}
+            toMarkdownOptions={EDITOR_TO_MARKDOWN_OPTIONS}
           />
         </div>
         {metadataPanelOpen && (
