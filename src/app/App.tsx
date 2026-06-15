@@ -108,8 +108,16 @@ interface NoteItemProps {
 }
 
 const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect }: NoteItemProps) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isActive && ref.current) {
+      ref.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [isActive])
+
   return (
-    <div className={isActive ? 'note-card active' : 'note-card'}>
+    <div ref={ref} className={isActive ? 'note-card active' : 'note-card'}>
       <button className="note-card-select" type="button" onClick={() => onSelect(note.path)}>
         <strong>{note.title}</strong>
         <small>{noteExcerpt(note)}</small>
@@ -120,8 +128,16 @@ const NoteCardItem = memo(function NoteCardItem({ note, isActive, onSelect }: No
 })
 
 const NoteRowItem = memo(function NoteRowItem({ note, isActive, onSelect }: NoteItemProps) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isActive && ref.current) {
+      ref.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [isActive])
+
   return (
-    <div className={isActive ? 'note-row active' : 'note-row'}>
+    <div ref={ref} className={isActive ? 'note-row active' : 'note-row'}>
       <button className="note-row-select" type="button" onClick={() => onSelect(note.path)}>
         <strong>{note.title}</strong>
         <small>{noteExcerpt(note)}</small>
@@ -189,6 +205,7 @@ export function App() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(336)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false)
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot)
   const [status, setStatus] = useState(initialWorkspace.status)
   const [isSaving, setIsSaving] = useState(false)
@@ -226,7 +243,7 @@ export function App() {
   const skipNextVaultChangeUntilRef = useRef(0)
   const previousViewRef = useRef<{ view: WorkspaceView, category: string, path: string }>({ view: 'today', category: 'journal', path: '' })
 
-  const toggleSpecialView = useCallback((view: 'archive' | 'trash' | 'tags' | 'calendar') => {
+  const toggleSpecialView = useCallback((view: 'archive' | 'trash' | 'calendar') => {
     if (activeView === view) {
       setActiveView(previousViewRef.current.view)
       setActiveCategory(previousViewRef.current.category)
@@ -234,7 +251,7 @@ export function App() {
         setActivePath(previousViewRef.current.path)
       }
     } else {
-      if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'tags' && activeView !== 'calendar') {
+      if (activeView !== 'archive' && activeView !== 'trash' && activeView !== 'calendar') {
         previousViewRef.current = { view: activeView, category: activeCategory, path: activePath }
       }
       setActiveView(view)
@@ -508,6 +525,21 @@ export function App() {
       window.removeEventListener('keydown', closeSettings)
     }
   }, [settingsOpen])
+
+  useEffect(() => {
+    if (!tagsPopoverOpen) return
+
+    function closeTags(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setTagsPopoverOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', closeTags)
+    return () => {
+      window.removeEventListener('keydown', closeTags)
+    }
+  }, [tagsPopoverOpen])
 
   useEffect(() => {
     const unlistenPromise = listen('inote://empty-trash', async () => {
@@ -1338,9 +1370,9 @@ export function App() {
             <FolderPlus size={16} />
           </button>
           <button
-            className={activeView === 'tags' ? 'icon-action active' : 'icon-action'}
+            className={tagsPopoverOpen ? 'icon-action active' : 'icon-action'}
             type="button"
-            onClick={() => toggleSpecialView('tags')}
+            onClick={() => setTagsPopoverOpen(true)}
             title="Tags"
             aria-label="Open tags"
           >
@@ -1537,17 +1569,6 @@ export function App() {
             <Suspense fallback={<div className="empty">Loading calendar…</div>}>
               <CalendarView notes={notes} onSelectNote={setActivePath} onClose={() => toggleSpecialView('calendar')} />
             </Suspense>
-          ) : activeView === 'tags' ? (
-            <Suspense fallback={<div className="empty">Loading tags…</div>}>
-              <TagsPanel
-                notes={notes}
-                onSearchTag={(tag) => {
-                  setQuery(`#${tag}`)
-                  setActiveView('search')
-                  setActivePath('')
-                }}
-              />
-            </Suspense>
           ) : (
             activeNote ? (
               <Editor
@@ -1643,6 +1664,22 @@ export function App() {
                 onCreateFolder={addFolder}
                 onRebuildIndex={rebuildIndex}
                 onClose={() => setSettingsOpen(false)}
+              />
+            </Suspense>
+          </div>
+        </div>
+      ) : null}
+
+      {tagsPopoverOpen ? (
+        <div className="tags-popover-backdrop" role="presentation" onMouseDown={() => setTagsPopoverOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Tags" onMouseDown={(event) => event.stopPropagation()}>
+            <Suspense fallback={<div className="empty">Loading tags…</div>}>
+              <TagsPanel
+                notes={notes}
+                onSelectNote={(path) => {
+                  setActivePath(path)
+                }}
+                onClose={() => setTagsPopoverOpen(false)}
               />
             </Suspense>
           </div>
