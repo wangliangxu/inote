@@ -2838,6 +2838,13 @@ button {
   min-height: 0;
 }
 
+.mdx-editor-main .cm-editor,
+.mdx-editor-main .cm-content,
+.mdx-editor-main .cm-line,
+.mdx-editor-main [class*="_codeMirrorWrapper_"] {
+  font-size: var(--font-size-base) !important;
+}
+
 .mdx-editor-main > div:not(.mdxeditor-toolbar) {
   flex: 1;
   overflow-y: auto;
