@@ -1,5 +1,6 @@
 import type { Note } from '../../shared/types'
 import { groupByCategory } from '../../shared/vault'
+import { useTranslation } from 'react-i18next'
 
 interface ExplorerProps {
   notes: Note[]
@@ -8,9 +9,10 @@ interface ExplorerProps {
 }
 
 export function Explorer({ notes, activeCategory, onSelectCategory }: ExplorerProps) {
+  const { t } = useTranslation()
   return (
     <section>
-      <p className="explorer-title">Categories</p>
+      <p className="explorer-title">{t('app.categories')}</p>
       <div className="category-list">
         {groupByCategory(notes).map((category) => (
           <button

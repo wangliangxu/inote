@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef, memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Note, SaveState, NoteLinks } from '../../shared/types'
 import { noteToMarkdown, parseMarkdownWithFrontmatter } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
@@ -115,6 +116,7 @@ export function Editor({
   onArchiveInboxNote,
   onNavigateLink,
 }: EditorProps) {
+  const { t } = useTranslation()
   const editorRef = useRef<MDXEditorMethods>(null)
 
   // Pre-normalize the markdown body so it matches MDXEditor's canonical output.
@@ -310,26 +312,26 @@ export function Editor({
           </div>
           <div className="editor-actions">
             {onRename ? (
-              <button className="secondary-action icon-action" type="button" onClick={onRename} title="Rename note">
+              <button className="secondary-action icon-action" type="button" onClick={onRename} title={t('editor.renameNote')}>
                 <TextCursorInput size={16} />
               </button>
             ) : null}
             {onMove ? (
-              <button className="secondary-action icon-action" type="button" onClick={onMove} title="Move note">
+              <button className="secondary-action icon-action" type="button" onClick={onMove} title={t('editor.moveNote')}>
                 <MoveRight size={16} />
               </button>
             ) : null}
 
-            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title="Metadata">
+            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title={t('editor.metadata')}>
               <Info size={16} />
             </button>
             {onCheckExternal ? (
-              <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title="Check file">
+              <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title={t('editor.checkFile')}>
                 <RefreshCw size={16} />
               </button>
             ) : null}
             {onSave ? (
-              <button className="secondary-action icon-action" type="button" onClick={onSave} title="Save">
+              <button className="secondary-action icon-action" type="button" onClick={onSave} title={t('editor.save')}>
                 <Save size={16} />
               </button>
             ) : null}
@@ -338,7 +340,7 @@ export function Editor({
                 e.preventDefault()
                 e.stopPropagation()
                 onDelete()
-              }} title="Delete">
+              }} title={t('editor.delete')}>
                 <Trash2 size={16} />
               </button>
             ) : null}
@@ -348,7 +350,7 @@ export function Editor({
           <span className={`save-state ${saveState}`}>{saveLabel}</span>
           <span>{note.category}</span>
           <span>{note.createdAt}</span>
-          <span>{note.wordCount} words</span>
+          <span>{note.wordCount} {t('editor.words')}</span>
           {note.tags.map((tag) => (
             <span key={tag}>#{tag}</span>
           ))}
@@ -391,50 +393,50 @@ export function Editor({
             <aside className="context-panel" style={{ width: `${metadataWidth}px`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">
               <label className="metadata-editor">
-                <span>Title</span>
+                <span>{t('editor.title')}</span>
                 <input value={note.title} onChange={(event) => onUpdateTitle?.(event.target.value)} />
               </label>
               <label className="metadata-editor">
-                <span>Created</span>
+                <span>{t('editor.created')}</span>
                 <input type="date" value={note.createdAt.slice(0, 10)} onChange={(event) => onUpdateCreatedAt?.(event.target.value)} />
               </label>
               <label className="metadata-editor">
-                <span>Updated</span>
+                <span>{t('editor.updated')}</span>
                 <input type="date" value={note.updatedAt.slice(0, 10)} onChange={(event) => onUpdateUpdatedAt?.(event.target.value)} />
               </label>
               <label className="metadata-editor">
-                <span>Due</span>
+                <span>{t('editor.due')}</span>
                 <input type="datetime-local" value={note.due || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
               </label>
               <label className="metadata-editor">
-                <span>Status</span>
+                <span>{t('editor.status')}</span>
                 <select value={note.status || 'todo'} onChange={(event) => onUpdateStatus?.(event.target.value)}>
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="done">Done</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="todo">{t('editor.todo')}</option>
+                  <option value="in_progress">{t('editor.inProgress')}</option>
+                  <option value="done">{t('editor.done')}</option>
+                  <option value="cancelled">{t('editor.cancelled')}</option>
                 </select>
               </label>
               <label className="metadata-editor">
-                <span>Priority</span>
+                <span>{t('editor.priority')}</span>
                 <select value={note.priority || 'none'} onChange={(event) => onUpdatePriority?.(event.target.value)}>
-                  <option value="none">None</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
+                  <option value="none">{t('editor.none')}</option>
+                  <option value="low">{t('editor.low')}</option>
+                  <option value="medium">{t('editor.medium')}</option>
+                  <option value="high">{t('editor.high')}</option>
                 </select>
               </label>
               <label className="metadata-editor">
-                <span>Project</span>
-                <input type="text" value={note.project || ''} onChange={(event) => onUpdateProject?.(event.target.value)} placeholder="Project name" />
+                <span>{t('editor.project')}</span>
+                <input type="text" value={note.project || ''} onChange={(event) => onUpdateProject?.(event.target.value)} placeholder={t('editor.projectName')} />
               </label>
               <label className="metadata-editor">
-                <span>Tags</span>
+                <span>{t('editor.tags')}</span>
                 <TagsInput tags={note.tags} onChange={onUpdateTags!} />
               </label>
               <div className="context-actions">
                 {note.path.startsWith('00-inbox/') && onArchiveInboxNote ? (
-                  <button type="button" onClick={onArchiveInboxNote} title="Archive inbox note">
+                  <button type="button" onClick={onArchiveInboxNote} title={t('editor.archiveInboxNote')}>
                     <Archive size={15} />
                   </button>
                 ) : null}
@@ -442,16 +444,16 @@ export function Editor({
             </section>
             <section className="context-section">
               <p className="panel-title">
-                <Sparkles size={14} /> Summary
+                <Sparkles size={14} /> {t('editor.summary')}
               </p>
               <p className="summary-text">{note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
             </section>
             <section className="context-section">
               <p className="panel-title">
-                <Link2 size={14} /> Links
+                <Link2 size={14} /> {t('editor.links')}
               </p>
               <div className="link-group">
-                <h4>Backlinks</h4>
+                <h4>{t('editor.backlinks')}</h4>
                 {noteLinks?.backlinks.length ? (
                   noteLinks.backlinks.map((link) => (
                     <button key={`${link.sourcePath}-${link.label}`} type="button" onClick={() => onNavigateLink?.(link.sourcePath)}>
@@ -460,11 +462,11 @@ export function Editor({
                     </button>
                   ))
                 ) : (
-                  <p>No backlinks.</p>
+                  <p>{t('editor.noBacklinks')}</p>
                 )}
               </div>
               <div className="link-group">
-                <h4>Outgoing</h4>
+                <h4>{t('editor.outgoing')}</h4>
                 {noteLinks?.outgoing.length ? (
                   noteLinks.outgoing.map((link) => (
                     <button key={`${link.targetPath}-${link.label}`} type="button" onClick={() => onNavigateLink?.(link.targetPath)}>
@@ -473,7 +475,7 @@ export function Editor({
                     </button>
                   ))
                 ) : (
-                  <p>No outgoing links.</p>
+                  <p>{t('editor.noOutgoingLinks')}</p>
                 )}
               </div>
             </section>

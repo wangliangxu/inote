@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { Note, SearchResult } from '../../shared/types'
+import { useTranslation } from 'react-i18next'
 import { CalendarDays, Flag, LayoutList } from 'lucide-react'
 import './TodoDashboard.css'
 
@@ -10,6 +11,7 @@ interface TodoDashboardProps {
 }
 
 export function TodoDashboard({ notes, onSelectNote, onUpdateNoteStatus }: TodoDashboardProps) {
+  const { t } = useTranslation()
   const columns = useMemo(() => {
     const cols: Record<string, Array<Note | SearchResult>> = {
       todo: [],
@@ -74,7 +76,7 @@ export function TodoDashboard({ notes, onSelectNote, onUpdateNoteStatus }: TodoD
   return (
     <div className="todo-dashboard">
       <header className="todo-dashboard-header">
-        <h2><LayoutList size={22} /> Todo Board</h2>
+        <h2><LayoutList size={22} /> {t('todo.title')}</h2>
       </header>
       <div className="todo-board">
         {['todo', 'in_progress', 'done'].map((status) => (
@@ -87,7 +89,7 @@ export function TodoDashboard({ notes, onSelectNote, onUpdateNoteStatus }: TodoD
             onDragLeave={handleDragLeave}
           >
             <div className="todo-column-header">
-              <h3>{status === 'todo' ? 'Todo' : status === 'in_progress' ? 'In Progress' : 'Done'}</h3>
+              <h3>{status === 'todo' ? t('todo.todoStatus') : status === 'in_progress' ? t('todo.inProgressStatus') : t('todo.doneStatus')}</h3>
               <span className="count-badge">{columns[status].length}</span>
             </div>
             <div className="todo-column-list">

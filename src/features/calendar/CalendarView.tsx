@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { Note } from '../../shared/types'
 
 interface CalendarViewProps {
@@ -8,18 +9,11 @@ interface CalendarViewProps {
   onClose: () => void
 }
 
-const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
-
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-function formatMonthTitle(year: number, month: number): string {
-  const date = new Date(year, month)
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -82,6 +76,14 @@ function heatLevel(count: number): number {
 }
 
 export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps) {
+  const { t, i18n } = useTranslation()
+  const WEEKDAYS = t('calendar.weekdays', { returnObjects: true }) as string[]
+  
+  function formatMonthTitle(year: number, month: number): string {
+    const date = new Date(year, month)
+    return date.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long' })
+  }
+
   const today = toLocalDateString(new Date())
   const todayYear = new Date().getFullYear()
   const todayMonth = new Date().getMonth()
@@ -160,7 +162,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             className="cal-nav-btn"
             type="button"
             onClick={prevMonth}
-            aria-label="上一个月"
+            aria-label={t('calendar.prevMonth')}
           >
             <ChevronLeft size={18} />
           </button>
@@ -168,7 +170,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             className="cal-title-btn"
             type="button"
             onClick={goToday}
-            title="回到今天"
+            title={t('calendar.goToday')}
           >
             {formatMonthTitle(viewYear, viewMonth)}
           </button>
@@ -176,12 +178,12 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             className="cal-nav-btn"
             type="button"
             onClick={nextMonth}
-            aria-label="下一个月"
+            aria-label={t('calendar.nextMonth')}
           >
             <ChevronRight size={18} />
           </button>
         </div>
-        <span className="cal-stats">{monthNoteCount} 篇笔记</span>
+        <span className="cal-stats">{t('calendar.notesCount', { count: monthNoteCount })}</span>
       </div>
 
       {/* Weekday header */}
@@ -213,7 +215,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
               className={classes}
               type="button"
               onClick={() => setSelectedDate(cell.dateStr === selectedDate ? null : cell.dateStr)}
-              aria-label={`${cell.dateStr}，${count} 篇笔记`}
+              aria-label={`${cell.dateStr}，${t('calendar.notesCount', { count })}`}
             >
               <span className="cal-day-num">{cell.day}</span>
               {count > 0 && (
@@ -239,10 +241,10 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
         <div className="cal-day-detail">
           <div className="cal-day-detail-header">
             <h3>{selectedDate}</h3>
-            <span>{selectedNotes.length} 篇笔记</span>
+            <span>{t('calendar.notesCount', { count: selectedNotes.length })}</span>
           </div>
           {selectedNotes.length === 0 ? (
-            <p className="cal-empty">这一天没有笔记</p>
+            <p className="cal-empty">{t('calendar.noNotesThisDay')}</p>
           ) : (
             <div className="cal-note-list">
               {selectedNotes.map((note) => (

@@ -1,5 +1,6 @@
 import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
 import type { EffectiveTheme, ThemePreference } from '../../shared/theme'
+import { useTranslation } from 'react-i18next'
 
 interface SettingsPanelProps {
   vaultRoot: string
@@ -46,6 +47,7 @@ export function SettingsPanel({
   onRebuildIndex,
   onClose,
 }: SettingsPanelProps) {
+  const { t, i18n } = useTranslation()
   function updateLlmSettings(patch: Partial<LlmProviderSettings>) {
     onLlmSettingsChange({ ...llmSettings, ...patch })
   }
@@ -53,39 +55,50 @@ export function SettingsPanel({
   return (
     <section className="settings-panel">
       <header className="settings-window-header">
-        <h2>Settings</h2>
-        <button className="settings-close-button" type="button" onClick={onClose} aria-label="Close settings">
+        <h2>{t('settings.title')}</h2>
+        <button className="settings-close-button" type="button" onClick={onClose} aria-label={t('settings.close')}>
           x
         </button>
       </header>
       <div className="setting-box">
         <label>
-          Theme
+          {t('settings.language')}
+          <select
+            className="setting-input"
+            value={i18n.resolvedLanguage || 'en'}
+            onChange={(event) => i18n.changeLanguage(event.target.value)}
+          >
+            <option value="en">English</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </label>
+        <label>
+          {t('settings.theme')}
           <select
             className="setting-input"
             value={themePreference}
             onChange={(event) => onThemePreferenceChange(event.target.value as ThemePreference)}
           >
-            <option value="system">Follow system ({effectiveTheme})</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="system">{t('settings.themeFollowSystem')} ({effectiveTheme})</option>
+            <option value="light">{t('settings.themeLight')}</option>
+            <option value="dark">{t('settings.themeDark')}</option>
           </select>
         </label>
         <label>
-          Font size
+          {t('settings.fontSize')}
           <select
             className="setting-input"
             value={baseFontSize}
             onChange={(event) => onBaseFontSizeChange(Number(event.target.value))}
           >
-            <option value={14}>Small</option>
-            <option value={16}>Medium</option>
-            <option value={18}>Large</option>
-            <option value={20}>Extra Large</option>
+            <option value={14}>{t('settings.fontSizeSmall')}</option>
+            <option value={16}>{t('settings.fontSizeMedium')}</option>
+            <option value={18}>{t('settings.fontSizeLarge')}</option>
+            <option value={20}>{t('settings.fontSizeXLarge')}</option>
           </select>
         </label>
         <label>
-          Vault path
+          {t('settings.vaultPath')}
           <input
             className="setting-input"
             placeholder="/Users/you/Notes"
@@ -94,7 +107,7 @@ export function SettingsPanel({
           />
         </label>
         <label>
-          Default Category
+          {t('settings.defaultCategory')}
           <select
             className="setting-input"
             value={defaultCategory || (categories.length > 0 ? categories[0].name : '')}
@@ -110,25 +123,25 @@ export function SettingsPanel({
         </label>
         <div className="action-row">
           <button className="secondary-action" type="button" onClick={onOpenVault}>
-            Open vault
+            {t('settings.openVault')}
           </button>
           <button className="secondary-action" type="button" onClick={onInitializeVault}>
-            Initialize
+            {t('settings.initialize')}
           </button>
           <button className="secondary-action" type="button" onClick={onCreateToday}>
-            Today note
+            {t('settings.todayNote')}
           </button>
 
           <button className="secondary-action" type="button" onClick={onCreateFolder}>
-            New folder
+            {t('settings.newFolder')}
           </button>
           <button className="secondary-action" type="button" onClick={onRebuildIndex}>
-            Rebuild index
+            {t('settings.rebuildIndex')}
           </button>
         </div>
         <p className="settings-status">{status}</p>
         <label>
-          Provider
+          {t('settings.providerName')}
           <input
             className="setting-input"
             value={llmSettings.providerName}
@@ -136,7 +149,7 @@ export function SettingsPanel({
           />
         </label>
         <label>
-          LLM API base URL
+          {t('settings.apiBaseUrl')}
           <input
             className="setting-input"
             placeholder="https://api.openai.com/v1"
@@ -145,7 +158,7 @@ export function SettingsPanel({
           />
         </label>
         <label>
-          API key
+          {t('settings.apiKey')}
           <input
             className="setting-input"
             placeholder="Stored locally in this app"
@@ -155,7 +168,7 @@ export function SettingsPanel({
           />
         </label>
         <label>
-          Model
+          {t('settings.model')}
           <input
             className="setting-input"
             placeholder="gpt-4.1-mini"
@@ -164,7 +177,7 @@ export function SettingsPanel({
           />
         </label>
         <p className="settings-status">
-          API keys are encrypted before being stored locally in SQLite. Browser fallback storage never keeps the key.
+          {t('settings.apiKeysNote')}
         </p>
       </div>
     </section>

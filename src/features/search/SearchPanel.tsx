@@ -1,4 +1,5 @@
 import type { Note, SearchResult } from '../../shared/types'
+import { useTranslation } from 'react-i18next'
 
 interface SearchPanelProps {
   query: string
@@ -9,15 +10,16 @@ interface SearchPanelProps {
 }
 
 export function SearchPanel({ query, notes, onQueryChange, onSelectNote, backendEnabled = false }: SearchPanelProps) {
+  const { t } = useTranslation()
   return (
     <section className="search-panel">
       <header className="panel-heading">
-        <h2>Search</h2>
-        <span>{notes.length} matches · {backendEnabled ? 'SQLite FTS' : 'memory'}</span>
+        <h2>{t('search.title')}</h2>
+        <span>{t('search.matches', { count: notes.length, type: backendEnabled ? 'SQLite FTS' : 'memory' })}</span>
       </header>
       <input
         className="search-input"
-        placeholder="Search title, body, tags, category, or summary"
+        placeholder={t('search.placeholder')}
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
       />

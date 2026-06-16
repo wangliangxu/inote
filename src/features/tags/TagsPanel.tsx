@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Search, ArrowDownAZ, TrendingDown, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { Note } from '../../shared/types'
 import { groupByTag } from '../../shared/vault'
 
@@ -12,6 +13,7 @@ interface TagsPanelProps {
 type SortMode = 'frequency' | 'alpha'
 
 export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('frequency')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
@@ -56,14 +58,14 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
     <div className="tags-popover">
       <div className="tags-popover-header">
         <div className="tags-popover-title">
-          <h2>Tags</h2>
+          <h2>{t('tags.title')}</h2>
           <span className="tags-popover-count">{allTags.length}</span>
         </div>
         <button
           className="tags-popover-close"
           type="button"
           onClick={onClose}
-          aria-label="关闭标签面板"
+          aria-label={t('tags.close')}
         >
           <X size={18} />
         </button>
@@ -74,7 +76,7 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
           <Search size={14} />
           <input
             type="text"
-            placeholder="筛选标签…"
+            placeholder={t('tags.filterPlaceholder')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             autoFocus
@@ -85,8 +87,8 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
             className={sortMode === 'frequency' ? 'active' : ''}
             type="button"
             onClick={() => setSortMode('frequency')}
-            title="按使用频率排序"
-            aria-label="按使用频率排序"
+            title={t('tags.sortByFrequency')}
+            aria-label={t('tags.sortByFrequency')}
           >
             <TrendingDown size={14} />
           </button>
@@ -94,8 +96,8 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
             className={sortMode === 'alpha' ? 'active' : ''}
             type="button"
             onClick={() => setSortMode('alpha')}
-            title="按字母排序"
-            aria-label="按字母排序"
+            title={t('tags.sortByAlpha')}
+            aria-label={t('tags.sortByAlpha')}
           >
             <ArrowDownAZ size={14} />
           </button>
@@ -105,7 +107,7 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
       <div className="tags-cloud">
         {filteredTags.length === 0 ? (
           <p className="tags-empty">
-            {filter.trim() ? '没有匹配的标签' : '暂无标签'}
+            {filter.trim() ? t('tags.noMatch') : t('tags.noTags')}
           </p>
         ) : (
           filteredTags.map((tag) => (
@@ -126,7 +128,7 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
         <div className="tags-note-section">
           <div className="tags-note-header">
             <h3>#{selectedTag}</h3>
-            <span>{selectedNotes.length} 篇笔记</span>
+            <span>{t('tags.notesCount', { count: selectedNotes.length })}</span>
           </div>
           <div className="cal-note-list tags-note-list">
             {selectedNotes.map((note) => (
@@ -152,9 +154,9 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
 
       {!selectedTag && (
         <div className="tags-popover-footer">
-          <span>{allTags.length} 个标签</span>
+          <span>{t('tags.tagsCount', { count: allTags.length })}</span>
           <span>·</span>
-          <span>{totalTaggedNotes} 篇带标签笔记</span>
+          <span>{t('tags.taggedNotesCount', { count: totalTaggedNotes })}</span>
         </div>
       )}
     </div>

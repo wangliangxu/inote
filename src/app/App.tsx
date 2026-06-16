@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { confirm as tauriConfirm } from '@tauri-apps/plugin-dialog'
+import { useTranslation } from 'react-i18next'
 import {
   Archive,
   Bot,
@@ -219,6 +220,7 @@ function getFilenameForTitle(title: string) {
 
 
 export function App() {
+  const { t } = useTranslation()
   const initialWorkspace = useMemo(
     () => createInitialWorkspaceState(typeof window === 'undefined' ? undefined : window.localStorage),
     [],
@@ -311,12 +313,12 @@ export function App() {
         : `${selectedSearchCategories.length} categories`
   const totalWords = useMemo(() => notes.reduce((sum, note) => sum + note.wordCount, 0), [notes])
   const saveLabel = {
-    loading: 'Loading',
-    demo: 'Demo only',
-    dirty: 'Unsaved changes',
-    saving: 'Saving',
-    saved: 'Saved',
-    error: 'Save failed',
+    loading: t('app.loading'),
+    demo: t('app.demoOnly'),
+    dirty: t('app.unsavedChanges'),
+    saving: t('app.saving'),
+    saved: t('app.saved'),
+    error: t('app.saveFailed'),
   }[saveState]
 
   useEffect(() => {
@@ -1494,8 +1496,8 @@ export function App() {
 
           <Search size={17} />
           <input
-            aria-label="Search notes or #tags"
-            placeholder="Search notes or #tags"
+            aria-label={t('app.searchPlaceholder')}
+            placeholder={t('app.searchPlaceholder')}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
@@ -1510,15 +1512,15 @@ export function App() {
                 setQuery('')
                 // Do not change view, it can remain in 'search' with empty results or whatever its behavior is.
               }}
-              title="Clear search"
-              aria-label="Clear search"
+              title={t('app.clearSearch')}
+              aria-label={t('app.clearSearch')}
             >
               <XCircle size={15} />
             </button>
           )}
         </div>
         <div className="window-actions" aria-label="Window actions">
-          <button className="icon-action" type="button" onClick={addCategoryNote} title="Create note" aria-label="Create note">
+          <button className="icon-action" type="button" onClick={addCategoryNote} title={t('app.createNote')} aria-label={t('app.createNote')}>
             <Pencil size={16} />
           </button>
 
@@ -1526,8 +1528,8 @@ export function App() {
             className={tagsPopoverOpen ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => setTagsPopoverOpen(true)}
-            title="Tags"
-            aria-label="Open tags"
+            title={t('app.tags')}
+            aria-label={t('app.tags')}
           >
             <Tags size={17} />
           </button>
@@ -1535,8 +1537,8 @@ export function App() {
             className={activeView === 'calendar' ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => toggleSpecialView('calendar')}
-            title="Calendar"
-            aria-label="Open calendar"
+            title={t('app.calendar')}
+            aria-label={t('app.calendar')}
           >
             <CalendarDays size={17} />
           </button>
@@ -1544,8 +1546,8 @@ export function App() {
             className={activeView === 'archive' ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => toggleSpecialView('archive')}
-            title="Archive"
-            aria-label="Open archive"
+            title={t('app.archive')}
+            aria-label={t('app.archive')}
           >
             <Archive size={17} />
           </button>
@@ -1553,8 +1555,8 @@ export function App() {
             className={activeView === 'trash' ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => toggleSpecialView('trash')}
-            title="Trash"
-            aria-label="Open trash"
+            title={t('app.trash')}
+            aria-label={t('app.trash')}
           >
             <Trash size={17} />
           </button>
@@ -1562,8 +1564,8 @@ export function App() {
             className={settingsOpen ? 'icon-action active' : 'icon-action'}
             type="button"
             onClick={() => setSettingsOpen(true)}
-            title="Settings"
-            aria-label="Open settings"
+            title={t('app.settings')}
+            aria-label={t('app.settings')}
           >
             <Settings size={17} />
           </button>
@@ -1609,16 +1611,16 @@ export function App() {
             >
               <summary title={searchScopeLabel}>
                 {activeView === 'today'
-                  ? 'Today'
+                  ? t('app.today')
                   : activeView === 'search'
                     ? searchScopeLabel
                     : activeView === 'category'
                       ? activeCategory
                       : activeView === 'archive'
-                        ? 'Archive'
+                        ? t('app.archive')
                         : activeView === 'trash'
-                          ? 'Trash'
-                          : 'All notes'}
+                          ? t('app.trash')
+                          : t('app.allNotes')}
               </summary>
               <div className="category-filter-menu">
                 <label>
@@ -1631,7 +1633,7 @@ export function App() {
                     }}
                   />
                   <Check className="category-check" size={14} />
-                  <span>All categories</span>
+                  <span>{t('app.categories')}</span>
                 </label>
                 {categoryOptions.map((category) => (
                   <label key={category.name}>
@@ -1799,8 +1801,8 @@ export function App() {
             ) : (
               <div className="empty">
                 {activeView === 'search' && query.startsWith('#')
-                  ? '请在左侧边栏查看具体的搜索结果 (Please view the specific search results in the left sidebar)'
-                  : 'No note selected.'}
+                  ? t('app.noNoteSelected')
+                  : t('app.noNoteSelected')}
               </div>
             )
           }
