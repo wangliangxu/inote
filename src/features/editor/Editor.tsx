@@ -37,6 +37,7 @@ import {
   realmPlugin
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
+import { EditorView } from '@codemirror/view'
 
 interface EditorProps {
   vaultRoot?: string
@@ -169,10 +170,24 @@ export function Editor({
     setSetting('mdxeditor-toc-numbering', String(tocNumbering)).catch(console.error)
   }, [tocNumbering])
 
+  const [activeHeadingIndex, setActiveHeadingIndex] = useState<number>(-1)
+
+
+  // Auto-scroll TOC when active heading changes
+  useEffect(() => {
+    if (activeHeadingIndex >= 0) {
+      const activeEl = document.getElementById(`toc-heading-${activeHeadingIndex}`)
+      if (activeEl) {
+        // block: 'nearest' ensures it only scrolls if out of view
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [activeHeadingIndex])
+
   // Extract headings
   const headings = useMemo(() => {
     const lines = normalizedMarkdown.split('\n')
-    const result: { id: string; text: string; level: number; numberPrefix?: string }[] = []
+    const result: { id: string; text: string; level: number; numberPrefix?: string; lineIndex: number }[] = []
     let inCodeBlock = false
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
@@ -186,7 +201,8 @@ export function Editor({
         result.push({
           id: `h-${i}`,
           level: match[1].length,
-          text: match[2].trim()
+          text: match[2].trim(),
+          lineIndex: i
         })
       }
     }
@@ -209,9 +225,117 @@ export function Editor({
     return result
   }, [normalizedMarkdown])
 
-  const handleHeadingClick = useCallback((text: string, level: number) => {
+  // Helper: find the active heading index from a 0-based line index
+  const findActiveHeadingFromLine = useCallback((lineIndex: number) => {
+    let activeIndex = -1
+    for (let i = 0; i < headings.length; i++) {
+      if (headings[i].lineIndex <= lineIndex) {
+        activeIndex = i
+      } else {
+        break
+      }
+    }
+    return activeIndex
+  }, [headings])
+
+  // Helper: get the CodeMirror EditorView from the DOM
+  const getCmEditorView = useCallback(() => {
+    // Source mode: .mdxeditor-source-editor .cm-editor
+    // Diff mode: .mdxeditor-diff-editor .cm-editor (last one is the editable "b" side)
+    const cmEditors = document.querySelectorAll('.mdx-editor-main .cm-editor')
+    if (cmEditors.length === 0) return null
+    // Pick the last cm-editor (in diff mode, the "b" side is last)
+    const cmEl = cmEditors[cmEditors.length - 1] as HTMLElement
+    return EditorView.findFromDOM(cmEl)
+  }, [])
+
+  // Read current line from CodeMirror and update active heading
+  const updateCmActiveHeading = useCallback(() => {
+    const view = getCmEditorView()
+    if (!view) return
+    const cursor = view.state.selection.main.head
+    const line = view.state.doc.lineAt(cursor)
+    setActiveHeadingIndex(findActiveHeadingFromLine(line.number - 1))
+  }, [getCmEditorView, findActiveHeadingFromLine])
+
+  useEffect(() => {
+    // --- Rich text mode: use selectionchange ---
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+      
+      const node = selection.anchorNode
+      if (!node) return
+      
+      // Skip if the selection is inside a CodeMirror editor
+      const cmEditor = document.querySelector('.mdx-editor-main .cm-editor')
+      if (cmEditor && cmEditor.contains(node)) return
+
+      // Rich Text Mode support
+      const editorElement = document.querySelector('.mdx-editor-main [contenteditable="true"]')
+      if (!editorElement || !editorElement.contains(node)) return
+      
+      const headingElements = Array.from(editorElement.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+      
+      let activeIndex = -1
+      for (let i = 0; i < headingElements.length; i++) {
+        const heading = headingElements[i]
+        const position = heading.compareDocumentPosition(node)
+        if ((position & Node.DOCUMENT_POSITION_FOLLOWING) || (position & Node.DOCUMENT_POSITION_CONTAINED_BY) || heading === node) {
+          activeIndex = i
+        } else {
+          break
+        }
+      }
+      setActiveHeadingIndex(activeIndex)
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+
+    // --- CodeMirror mode: use keyup/mouseup/focus on the cm-editor elements ---
+    const handleCmCursorChange = () => {
+      // Small delay to let CM update its state
+      setTimeout(updateCmActiveHeading, 20)
+    }
+
+    // We attach listeners to the entire editor wrapper to catch events from any CM instance
+    const editorWrapper = document.querySelector('.mdx-editor-main')
+    if (editorWrapper) {
+      editorWrapper.addEventListener('keyup', handleCmCursorChange)
+      editorWrapper.addEventListener('mouseup', handleCmCursorChange)
+      editorWrapper.addEventListener('focusin', handleCmCursorChange)
+    }
+
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+      if (editorWrapper) {
+        editorWrapper.removeEventListener('keyup', handleCmCursorChange)
+        editorWrapper.removeEventListener('mouseup', handleCmCursorChange)
+        editorWrapper.removeEventListener('focusin', handleCmCursorChange)
+      }
+    }
+  }, [headings, updateCmActiveHeading])
+
+  const handleHeadingClick = useCallback((text: string, level: number, lineIndex: number) => {
     const editorContainer = document.querySelector('.mdx-editor-main')
     if (!editorContainer) return
+
+    // Try CodeMirror first (source/diff mode)
+    const view = getCmEditorView()
+    if (view) {
+      // lineIndex is 0-based, CM lines are 1-based
+      const targetLine = Math.min(lineIndex + 1, view.state.doc.lines)
+      const line = view.state.doc.line(targetLine)
+      view.dispatch({
+        selection: { anchor: line.from },
+        scrollIntoView: true
+      })
+      view.focus()
+      setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+      return
+    }
+
+    // Rich text mode: find the heading element and scroll to it
     const elements = editorContainer.querySelectorAll(`h${level}`)
     for (let i = 0; i < elements.length; i++) {
       if (elements[i].textContent?.trim() === text) {
@@ -219,7 +343,7 @@ export function Editor({
         break
       }
     }
-  }, [])
+  }, [getCmEditorView, findActiveHeadingFromLine])
 
   const [metadataWidth, setMetadataWidth] = useState(300)
   const [tocWidth, setTocWidth] = useState(250)
@@ -523,30 +647,41 @@ export function Editor({
                   {headings.length === 0 ? (
                     <div style={{ opacity: 0.5 }}>No headings found</div>
                   ) : (
-                    headings.map(h => (
+                    headings.map((h, i) => {
+                      const isActive = i === activeHeadingIndex;
+                      return (
                       <button 
+                        id={`toc-heading-${i}`}
                         key={h.id} 
-                        onClick={() => handleHeadingClick(h.text, h.level)}
+                        onClick={() => handleHeadingClick(h.text, h.level, h.lineIndex)}
                         style={{
                           textAlign: 'left',
                           padding: '2px 4px',
                           paddingLeft: `${(h.level - 1) * 12 + 4}px`,
                           border: 'none',
-                          background: 'transparent',
+                          background: isActive ? 'var(--highlight-bg, rgba(124, 181, 144, 0.2))' : 'transparent',
                           cursor: 'pointer',
-                          color: 'var(--text-color)',
+                          color: isActive ? 'var(--text-color)' : 'inherit',
+                          borderRadius: '4px',
+                          opacity: isActive ? 1 : 0.8,
+                          transition: 'background 0.2s, opacity 0.2s',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          opacity: 0.8
+                          width: '100%'
                         }}
-                        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                        onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                        onMouseEnter={e => {
+                          if (!isActive) e.currentTarget.style.opacity = '1'
+                        }}
+                        onMouseLeave={e => {
+                          if (!isActive) e.currentTarget.style.opacity = '0.8'
+                        }}
                       >
                         {tocNumbering ? <span style={{ opacity: 0.6, marginRight: '4px' }}>{h.numberPrefix}</span> : null}
                         {h.text}
                       </button>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </section>
