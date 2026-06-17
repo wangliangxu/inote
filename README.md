@@ -19,7 +19,7 @@ iNote is a powerful, local-first Markdown knowledge base application designed to
 ## 🛠️ Tech Stack
 
 ### Frontend
-- **Framework:** React 18
+- **Framework:** React 19
 - **Build Tool:** Vite
 - **Language:** TypeScript
 - **Icons:** Lucide React

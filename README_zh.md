@@ -19,7 +19,7 @@ iNote 是一款功能强大、本地优先的 Markdown 知识库应用程序，�
 ## 🛠️ 技术栈
 
 ### 前端 (Frontend)
-- **核心框架:** React 18
+- **核心框架:** React 19
 - **构建工具:** Vite
 - **开发语言:** TypeScript
 - **图标库:** Lucide React
