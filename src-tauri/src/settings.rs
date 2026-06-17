@@ -183,7 +183,7 @@ impl UserSettingsStore {
             .map_err(|error| format!("failed to create settings schema: {error}"))
     }
 
-    fn get_value(&self, key: &str) -> Result<Option<String>, String> {
+    pub fn get_value(&self, key: &str) -> Result<Option<String>, String> {
         self.conn
             .query_row(
                 "SELECT value FROM user_settings WHERE key = ?1",

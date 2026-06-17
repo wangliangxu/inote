@@ -62,6 +62,8 @@ pub fn run() {
             commands::empty_trash,
             commands::load_user_settings,
             commands::save_user_settings,
+            commands::get_setting,
+            commands::set_setting,
             commands::save_window_state,
             commands::build_llm_request_preview,
             commands::execute_llm_chat,

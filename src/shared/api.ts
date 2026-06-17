@@ -155,6 +155,14 @@ export async function saveUserSettings(settings: UserSettings): Promise<void> {
   return invoke<void>('save_user_settings', { settings })
 }
 
+export async function getSetting(key: string): Promise<string | null> {
+  return invoke<string | null>('get_setting', { key })
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  return invoke<void>('set_setting', { key, value })
+}
+
 export async function saveWindowState(input: { width: number, height: number, x: number, y: number, maximized: boolean }): Promise<void> {
   return invoke<void>('save_window_state', { input })
 }

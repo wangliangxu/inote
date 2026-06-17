@@ -315,6 +315,16 @@ pub fn save_user_settings(app: AppHandle, settings: UserSettings) -> Result<(), 
 }
 
 #[tauri::command]
+pub fn get_setting(app: AppHandle, key: String) -> Result<Option<String>, String> {
+    UserSettingsStore::open(settings_db_path(&app)?)?.get_value(&key)
+}
+
+#[tauri::command]
+pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    UserSettingsStore::open(settings_db_path(&app)?)?.set_value(&key, &value)
+}
+
+#[tauri::command]
 pub fn save_window_state(app: AppHandle, input: WindowStateInput) -> Result<(), String> {
     let store = UserSettingsStore::open(settings_db_path(&app)?)?;
     store.set_value("window_width", &input.width.to_string())?;

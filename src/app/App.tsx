@@ -69,6 +69,7 @@ import {
   startVaultWatcher,
   stopVaultWatcher,
   parseMarkdownWithFrontmatter,
+  getSetting,
 } from '../shared/api'
 import { filterNotesByCategory, getTodayNote, groupByCategory, searchNotes, sortByUpdatedDesc } from '../shared/vault'
 import { createInitialWorkspaceState, LAST_ACTIVE_PATH_KEY, LAST_VAULT_KEY } from './startup'
@@ -383,6 +384,20 @@ export function App() {
     loadUserSettings()
       .then(async (savedSettings) => {
         if (cancelled) return
+        
+        try {
+          const [tocOpen, tocNum, viewMode] = await Promise.all([
+            getSetting('mdxeditor-toc-open'),
+            getSetting('mdxeditor-toc-numbering'),
+            getSetting('mdxeditor-view-mode')
+          ])
+          if (tocOpen !== null) window.localStorage.setItem('mdxeditor-toc-open', tocOpen)
+          if (tocNum !== null) window.localStorage.setItem('mdxeditor-toc-numbering', tocNum)
+          if (viewMode !== null) window.localStorage.setItem('mdxeditor-view-mode', viewMode)
+        } catch (e) {
+          console.error('Failed to pre-hydrate editor settings', e)
+        }
+
         const legacyVaultRoot = window.localStorage.getItem(LAST_VAULT_KEY) ?? ''
         const legacyActivePath = window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? ''
         const vaultRootFromSettings = savedSettings.vaultRoot || legacyVaultRoot

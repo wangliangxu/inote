@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect, useRef, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Note, SaveState, NoteLinks } from '../../shared/types'
-import { noteToMarkdown, parseMarkdownWithFrontmatter } from '../../shared/api'
+import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting } from '../../shared/api'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
-import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2 } from 'lucide-react'
+import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
 import {
   MDXEditor,
   type MDXEditorMethods,
@@ -141,12 +141,90 @@ export function Editor({
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(false)
   const metadataPanelOpenRef = useRef(metadataPanelOpen)
 
+  const [tocPanelOpen, setTocPanelOpen] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('mdxeditor-toc-open') === 'true'
+    }
+    return false
+  })
+
+  const [tocNumbering, setTocNumbering] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('mdxeditor-toc-numbering') === 'true'
+    }
+    return false
+  })
+
   useEffect(() => {
     metadataPanelOpenRef.current = metadataPanelOpen
   }, [metadataPanelOpen])
 
+  useEffect(() => {
+    localStorage.setItem('mdxeditor-toc-open', String(tocPanelOpen))
+    setSetting('mdxeditor-toc-open', String(tocPanelOpen)).catch(console.error)
+  }, [tocPanelOpen])
+
+  useEffect(() => {
+    localStorage.setItem('mdxeditor-toc-numbering', String(tocNumbering))
+    setSetting('mdxeditor-toc-numbering', String(tocNumbering)).catch(console.error)
+  }, [tocNumbering])
+
+  // Extract headings
+  const headings = useMemo(() => {
+    const lines = normalizedMarkdown.split('\n')
+    const result: { id: string; text: string; level: number; numberPrefix?: string }[] = []
+    let inCodeBlock = false
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.startsWith('```')) {
+        inCodeBlock = !inCodeBlock
+        continue
+      }
+      if (inCodeBlock) continue
+      const match = line.match(/^(#{1,6})\s+(.+)$/)
+      if (match) {
+        result.push({
+          id: `h-${i}`,
+          level: match[1].length,
+          text: match[2].trim()
+        })
+      }
+    }
+    
+    // Compute numbering
+    if (result.length > 0) {
+      const numberPath: number[] = [];
+      const minLevel = Math.min(...result.map(h => h.level));
+      result.forEach(h => {
+        const relLevel = h.level - minLevel;
+        numberPath.length = relLevel + 1;
+        for (let j = 0; j < relLevel; j++) {
+          if (numberPath[j] === undefined) numberPath[j] = 1;
+        }
+        numberPath[relLevel] = (numberPath[relLevel] || 0) + 1;
+        h.numberPrefix = numberPath.join('.') + '. ';
+      });
+    }
+
+    return result
+  }, [normalizedMarkdown])
+
+  const handleHeadingClick = useCallback((text: string, level: number) => {
+    const editorContainer = document.querySelector('.mdx-editor-main')
+    if (!editorContainer) return
+    const elements = editorContainer.querySelectorAll(`h${level}`)
+    for (let i = 0; i < elements.length; i++) {
+      if (elements[i].textContent?.trim() === text) {
+        elements[i].scrollIntoView({ behavior: 'smooth', block: 'start' })
+        break
+      }
+    }
+  }, [])
+
   const [metadataWidth, setMetadataWidth] = useState(300)
-  const isDraggingRef = useRef(false)
+  const [tocWidth, setTocWidth] = useState(250)
+  const metadataDragState = useRef({ isDragging: false, startX: 0, startWidth: 0 })
+  const tocDragState = useRef({ isDragging: false, startX: 0, startWidth: 0 })
   const realmRef = useRef<any>(null)
   const previousModeRef = useRef<string>(savedViewMode)
 
@@ -156,9 +234,11 @@ export function Editor({
       realm.sub(viewMode$, (mode: string) => {
         if (!metadataPanelOpenRef.current) {
           localStorage.setItem('mdxeditor-view-mode', mode)
+          setSetting('mdxeditor-view-mode', mode).catch(console.error)
         } else if (mode !== 'source') {
           previousModeRef.current = mode
           localStorage.setItem('mdxeditor-view-mode', mode)
+          setSetting('mdxeditor-view-mode', mode).catch(console.error)
         }
       })
     }
@@ -183,20 +263,34 @@ export function Editor({
     }
   }, [metadataPanelOpen])
 
+  const handleTocMouseDown = useCallback((e: React.MouseEvent) => {
+    tocDragState.current = { isDragging: true, startX: e.clientX, startWidth: tocWidth }
+    document.body.style.cursor = 'col-resize'
+    e.preventDefault()
+  }, [tocWidth])
+
+  const handleMetadataMouseDown = useCallback((e: React.MouseEvent) => {
+    metadataDragState.current = { isDragging: true, startX: e.clientX, startWidth: metadataWidth }
+    document.body.style.cursor = 'col-resize'
+    e.preventDefault()
+  }, [metadataWidth])
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return
-      const editorContainer = document.querySelector('.editor') as HTMLElement
-      if (editorContainer) {
-        const bounds = editorContainer.getBoundingClientRect()
-        const newWidth = bounds.right - e.clientX
-        setMetadataWidth(Math.max(200, Math.min(newWidth, bounds.width - 200)))
+      if (tocDragState.current.isDragging) {
+        const delta = tocDragState.current.startX - e.clientX
+        setTocWidth(Math.max(150, Math.min(tocDragState.current.startWidth + delta, 600)))
+      }
+      if (metadataDragState.current.isDragging) {
+        const delta = metadataDragState.current.startX - e.clientX
+        setMetadataWidth(Math.max(200, Math.min(metadataDragState.current.startWidth + delta, 600)))
       }
     }
     
     const handleMouseUp = () => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false
+      if (tocDragState.current.isDragging || metadataDragState.current.isDragging) {
+        tocDragState.current.isDragging = false
+        metadataDragState.current.isDragging = false
         document.body.style.cursor = ''
       }
     }
@@ -207,12 +301,6 @@ export function Editor({
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [])
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    isDraggingRef.current = true
-    document.body.style.cursor = 'col-resize'
-    e.preventDefault()
   }, [])
 
   useEffect(() => {
@@ -332,6 +420,12 @@ export function Editor({
             <h2>{note.title}</h2>
           </div>
           <div className="editor-actions">
+            <button className={`secondary-action icon-action ${tocPanelOpen ? 'active' : ''}`} type="button" onClick={() => setTocPanelOpen(!tocPanelOpen)} title={t('editor.toc') || 'Table of Contents'}>
+              <ListTree size={16} />
+            </button>
+            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title={t('editor.metadata')}>
+              <Info size={16} />
+            </button>
             {onRename ? (
               <button className="secondary-action icon-action" type="button" onClick={onRename} title={t('editor.renameNote')}>
                 <TextCursorInput size={16} />
@@ -342,10 +436,6 @@ export function Editor({
                 <MoveRight size={16} />
               </button>
             ) : null}
-
-            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title={t('editor.metadata')}>
-              <Info size={16} />
-            </button>
             {onCheckExternal ? (
               <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title={t('editor.checkFile')}>
                 <RefreshCw size={16} />
@@ -391,11 +481,11 @@ export function Editor({
             toMarkdownOptions={EDITOR_TO_MARKDOWN_OPTIONS}
           />
         </div>
-        {metadataPanelOpen && (
+        {tocPanelOpen && (
           <>
             <div
               className="metadata-resizer"
-              onMouseDown={handleMouseDown}
+              onMouseDown={handleTocMouseDown}
               style={{
                 width: '5px',
                 cursor: 'col-resize',
@@ -405,10 +495,82 @@ export function Editor({
                 marginRight: '-3px'
               }}
               onMouseEnter={(e) => {
-                if (!isDraggingRef.current) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'
+                if (!tocDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'
               }}
               onMouseLeave={(e) => {
-                if (!isDraggingRef.current) e.currentTarget.style.backgroundColor = 'transparent'
+                if (!tocDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
+              }}
+            />
+            <aside className="context-panel" style={{ width: `${tocWidth}px`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <section className="context-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ opacity: 0.7, display: 'flex', alignItems: 'center' }}>
+                    <ListTree size={14} />
+                  </div>
+                  <button 
+                    className={`secondary-action icon-action ${tocNumbering ? 'active' : ''}`} 
+                    type="button" 
+                    onClick={() => setTocNumbering(!tocNumbering)} 
+                    title={t('editor.toggleNumbering') || 'Toggle Numbering'}
+                    style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-color)', opacity: tocNumbering ? 1 : 0.5 }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={e => e.currentTarget.style.opacity = tocNumbering ? '1' : '0.5'}
+                  >
+                    <ListOrdered size={14} />
+                  </button>
+                </div>
+                <div className="toc-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.9em' }}>
+                  {headings.length === 0 ? (
+                    <div style={{ opacity: 0.5 }}>No headings found</div>
+                  ) : (
+                    headings.map(h => (
+                      <button 
+                        key={h.id} 
+                        onClick={() => handleHeadingClick(h.text, h.level)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '2px 4px',
+                          paddingLeft: `${(h.level - 1) * 12 + 4}px`,
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color: 'var(--text-color)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          opacity: 0.8
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                      >
+                        {tocNumbering ? <span style={{ opacity: 0.6, marginRight: '4px' }}>{h.numberPrefix}</span> : null}
+                        {h.text}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+            </aside>
+          </>
+        )}
+        {metadataPanelOpen && (
+          <>
+            <div
+              className="metadata-resizer"
+              onMouseDown={handleMetadataMouseDown}
+              style={{
+                width: '5px',
+                cursor: 'col-resize',
+                backgroundColor: 'transparent',
+                zIndex: 10,
+                marginLeft: '-2px',
+                marginRight: '-3px'
+              }}
+              onMouseEnter={(e) => {
+                if (!metadataDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'
+              }}
+              onMouseLeave={(e) => {
+                if (!metadataDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
               }}
             />
             <aside className="context-panel" style={{ width: `${metadataWidth}px`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
