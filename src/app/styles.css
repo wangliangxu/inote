@@ -2947,3 +2947,20 @@ body.dark-theme .cm-dropCursor {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* === Dark mode text selection === */
+:root[data-theme="dark"] .mdx-editor-wrapper ::selection {
+  background: rgba(124, 181, 144, 0.30);
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .mdx-editor-wrapper ::-moz-selection {
+  background: rgba(124, 181, 144, 0.30);
+  color: #ffffff;
+}
+
+body.dark-theme .cm-editor .cm-selectionBackground,
+body.dark-theme .cm-editor.cm-focused .cm-selectionBackground,
+body.dark-theme .cm-editor ::selection {
+  background: rgba(124, 181, 144, 0.30) !important;
+}

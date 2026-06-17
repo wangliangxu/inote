@@ -29,6 +29,52 @@ const fromOptions: FromMarkdownOptions = {
   ],
 }
 
+/**
+ * Characters whose phrasing-level escape rules we suppress.
+ *
+ * In GFM-compatible renderers, intra-word underscores (`foo_bar`) never trigger
+ * emphasis, so escaping them as `foo\_bar` is unnecessary and produces noisy
+ * diffs in source/diff mode. The same applies to `*` in many practical cases
+ * but we leave it alone for now since it IS ambiguous more often.
+ */
+const SUPPRESSED_PHRASING_CHARS = new Set(['_'])
+
+/**
+ * A custom text handler that temporarily filters `state.unsafe` before calling
+ * `state.safe()`. This removes the overly-aggressive underscore escaping at its
+ * source — inside mdast-util-to-markdown's serializer — so it works everywhere:
+ * pre-normalization, MDXEditor onChange, and the internal source/diff views.
+ */
+function textHandlerNoOverEscape(node: any, _parent: any, state: any, info: any): string {
+  const originalUnsafe = state.unsafe
+  state.unsafe = originalUnsafe.filter((pattern: any) => {
+    // Remove phrasing-level escape rules for suppressed characters.
+    // Keep atBreak rules (line-start `_` can start a thematic break).
+    if (
+      SUPPRESSED_PHRASING_CHARS.has(pattern.character) &&
+      pattern.inConstruct === 'phrasing' &&
+      !pattern.atBreak
+    ) {
+      return false
+    }
+    return true
+  })
+  const result = state.safe(node.value, info)
+  state.unsafe = originalUnsafe
+  return result
+}
+
+/**
+ * toMarkdown extension that replaces the default `text` handler to suppress
+ * overly-aggressive underscore escaping. Safe to pass as both a local extension
+ * and via MDXEditor's `toMarkdownOptions.handlers`.
+ */
+export const noOverEscapeExtension = {
+  handlers: {
+    text: textHandlerNoOverEscape,
+  },
+}
+
 // Options passed to MDXEditor's toMarkdownOptions prop.
 // Must NOT include `extensions` because MDXEditor applies its own extensions
 // via `{ extensions: toMarkdownExtensions, ...toMarkdownOptions }` — a spread
@@ -40,6 +86,10 @@ export const EDITOR_TO_MARKDOWN_OPTIONS = {
   // MDXEditor's MDX parser treats `<` as JSX tag start, so autolinks like
   // <user@example.com> cause "Unexpected character `@`" parse errors.
   resourceLink: true,
+  // Override the text handler to suppress over-escaping of underscores.
+  handlers: {
+    text: textHandlerNoOverEscape,
+  },
 }
 
 // Full options used locally for pre-normalization (includes GFM extensions).
