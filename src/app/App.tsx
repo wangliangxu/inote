@@ -239,6 +239,7 @@ export function App() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(336)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showTodayNoteButton, setShowTodayNoteButton] = useState(false)
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false)
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot)
   const [status, setStatus] = useState(initialWorkspace.status)
@@ -406,6 +407,7 @@ export function App() {
         if (savedSettings.rightSidebarVisible !== undefined) setRightSidebarVisible(savedSettings.rightSidebarVisible)
         if (savedSettings.leftSidebarWidth !== undefined) setLeftSidebarWidth(savedSettings.leftSidebarWidth)
         if (savedSettings.rightSidebarWidth !== undefined) setRightSidebarWidth(savedSettings.rightSidebarWidth)
+        if (savedSettings.showTodayNoteButton !== undefined) setShowTodayNoteButton(savedSettings.showTodayNoteButton)
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
@@ -483,7 +485,7 @@ export function App() {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
       saveUserSettings({ 
         vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, activeView, activeCategory, selectedSearchCategories, llmSettings, defaultCategory,
-        leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth
+        leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton
       })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
@@ -501,7 +503,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window)) return
@@ -1523,6 +1525,12 @@ export function App() {
           <button className="icon-action" type="button" onClick={addCategoryNote} title={t('app.createNote')} aria-label={t('app.createNote')}>
             <Pencil size={16} />
           </button>
+          
+          {showTodayNoteButton && (
+            <button className="icon-action" type="button" onClick={addTodayNote} title={t('settings.todayNote')} aria-label={t('settings.todayNote')}>
+              <FilePlus2 size={16} />
+            </button>
+          )}
 
           <button
             className={tagsPopoverOpen ? 'icon-action active' : 'icon-action'}
@@ -1853,6 +1861,8 @@ export function App() {
                 baseFontSize={baseFontSize}
                 defaultCategory={defaultCategory}
                 categories={categoryOptions}
+                showTodayNoteButton={showTodayNoteButton}
+                onShowTodayNoteButtonChange={setShowTodayNoteButton}
                 onVaultRootChange={setVaultRoot}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}

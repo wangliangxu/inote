@@ -87,6 +87,7 @@ export interface UserSettings {
   windowX?: number
   windowY?: number
   windowMaximized?: boolean
+  showTodayNoteButton?: boolean
 }
 
 export interface LlmChatResponse {
