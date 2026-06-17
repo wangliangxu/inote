@@ -28,7 +28,7 @@ impl WatcherState {
                 let Ok(event) = result else {
                     return;
                 };
-                if !is_markdown_event(&event) {
+                if !is_relevant_event(&event) {
                     return;
                 }
                 if last_emit.elapsed() < Duration::from_millis(350) {
@@ -70,12 +70,30 @@ impl WatcherState {
     }
 }
 
-pub fn is_markdown_event(event: &Event) -> bool {
-    event.paths.iter().any(|path| is_markdown_path(path))
+pub fn is_relevant_event(event: &Event) -> bool {
+    event.paths.iter().any(|path| is_relevant_path(path))
 }
 
-fn is_markdown_path(path: &Path) -> bool {
-    path.extension().and_then(|value| value.to_str()) == Some("md")
+fn is_relevant_path(path: &Path) -> bool {
+    // Ignore hidden files and directories (like .git, .inote, .DS_Store)
+    if path.components().any(|c| c.as_os_str().to_string_lossy().starts_with('.')) {
+        return false;
+    }
+
+    // Check extension
+    if let Some(ext) = path.extension().and_then(|v| v.to_str()) {
+        if ext == "md" {
+            return true;
+        }
+        // If it has an extension but is actually a directory (e.g., "v1.0")
+        if path.is_dir() {
+            return true;
+        }
+        return false;
+    }
+
+    // Paths without extensions are treated as directories/relevant
+    true
 }
 
 #[cfg(test)]
@@ -90,7 +108,7 @@ mod tests {
         )))
         .add_path(PathBuf::from("knowledge/rust.md"));
 
-        assert!(is_markdown_event(&event));
+        assert!(is_relevant_event(&event));
     }
 
     #[test]
@@ -100,6 +118,17 @@ mod tests {
         )))
         .add_path(PathBuf::from(".inote/index.sqlite3"));
 
-        assert!(!is_markdown_event(&event));
+        assert!(!is_relevant_event(&event));
+    }
+
+    #[test]
+    fn directory_events_trigger_refresh() {
+        let event = Event::new(EventKind::Modify(ModifyKind::Name(
+            notify::event::RenameMode::Both,
+        )))
+        .add_path(PathBuf::from("Notes/OldCategory"))
+        .add_path(PathBuf::from("Notes/NewCategory"));
+
+        assert!(is_relevant_event(&event));
     }
 }
