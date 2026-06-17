@@ -130,16 +130,37 @@ export function Editor({
     return frontmatter + normalizeMarkdownBody(body)
   }, [note])
 
+  const [savedViewMode] = useState<'rich-text' | 'diff' | 'source'>(() => {
+    if (typeof localStorage !== 'undefined') {
+      return (localStorage.getItem('mdxeditor-view-mode') as any) || 'rich-text'
+    }
+    return 'rich-text'
+  })
+
   const [diffBaseline, setDiffBaseline] = useState(() => normalizedMarkdown)
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(false)
+  const metadataPanelOpenRef = useRef(metadataPanelOpen)
+
+  useEffect(() => {
+    metadataPanelOpenRef.current = metadataPanelOpen
+  }, [metadataPanelOpen])
+
   const [metadataWidth, setMetadataWidth] = useState(300)
   const isDraggingRef = useRef(false)
   const realmRef = useRef<any>(null)
-  const previousModeRef = useRef<string>('rich-text')
+  const previousModeRef = useRef<string>(savedViewMode)
 
   const realmTrackerPlugin = useMemo(() => realmPlugin({
     init: (realm) => {
       realmRef.current = realm
+      realm.sub(viewMode$, (mode: string) => {
+        if (!metadataPanelOpenRef.current) {
+          localStorage.setItem('mdxeditor-view-mode', mode)
+        } else if (mode !== 'source') {
+          previousModeRef.current = mode
+          localStorage.setItem('mdxeditor-view-mode', mode)
+        }
+      })
     }
   }), [])
 
@@ -284,7 +305,7 @@ export function Editor({
     codeMirrorPlugin({ 
       codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript (React)', css: 'CSS', txt: 'Text', markdown: 'Markdown', json: 'JSON', html: 'HTML', python: 'Python', bash: 'Bash' } 
     }),
-    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: diffBaseline }),
+    diffSourcePlugin({ viewMode: savedViewMode as any, diffMarkdown: diffBaseline }),
     toolbarPlugin({
       toolbarContents: () => (
         <DiffSourceToggleWrapper>
