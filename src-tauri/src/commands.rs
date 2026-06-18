@@ -201,9 +201,9 @@ pub fn create_inbox_note(vault_root: String, title: String) -> Result<NoteMetada
 }
 
 #[tauri::command]
-pub fn create_today_note(vault_root: String) -> Result<NoteMetadata, String> {
+pub fn create_today_note(vault_root: String, category: String) -> Result<NoteMetadata, String> {
     let vault = Vault::new(&vault_root)?;
-    let note = vault.create_today_note()?;
+    let note = vault.create_today_note(&category)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
 }

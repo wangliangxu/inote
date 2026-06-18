@@ -1293,11 +1293,22 @@ export function App() {
       setStatus('Open a real vault before creating today note.')
       return
     }
+
+    const fallbackCategory = categoryOptions.length > 0 ? categoryOptions[0].name : 'journal'
+    let category = defaultCategory || fallbackCategory
+    if (activeView === 'category') {
+      category = activeCategory
+    } else if (activeView === 'search' && selectedSearchCategories.length === 1) {
+      category = selectedSearchCategories[0]
+    }
+
     try {
-      const note = await createTodayNote(vaultRoot.trim())
+      const note = await createTodayNote(vaultRoot.trim(), category)
       setLinkVersion((current) => current + 1)
       setNotes((current) => [note, ...current.filter((item) => item.path !== note.path)])
       setActivePath(note.path)
+      setActiveCategory(note.category)
+      setActiveView('category')
       setSaveError(false)
       setStatus(`Opened ${note.path}.`)
     } catch (error) {
@@ -1581,11 +1592,9 @@ export function App() {
             <Pencil size={16} />
           </button>
           
-          {showTodayNoteButton && (
-            <button className="icon-action" type="button" onClick={addTodayNote} title={t('settings.todayNote')} aria-label={t('settings.todayNote')}>
-              <FilePlus2 size={16} />
-            </button>
-          )}
+          <button className="icon-action" type="button" onClick={addTodayNote} title={t('settings.todayNote')} aria-label={t('settings.todayNote')}>
+            <FilePlus2 size={16} />
+          </button>
 
           <button
             className={tagsPopoverOpen ? 'icon-action active' : 'icon-action'}

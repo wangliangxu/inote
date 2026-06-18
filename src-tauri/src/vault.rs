@@ -119,18 +119,27 @@ impl Vault {
         self.write_note(&relative_path, &content)
     }
 
-    pub fn create_today_note(&self) -> Result<NoteMetadata, String> {
+    pub fn create_today_note(&self, category: &str) -> Result<NoteMetadata, String> {
+        let clean_category = category.trim().trim_matches('/');
+        let effective_category = if clean_category.is_empty() { "journal" } else { clean_category };
+
         let date = Local::now().format("%Y-%m-%d").to_string();
-        let year = Local::now().format("%Y").to_string();
-        let month = Local::now().format("%m").to_string();
-        let relative_path = format!("journal/{year}/{month}/{date}.md");
+        
+        let relative_path = if effective_category == "journal" {
+            let year = Local::now().format("%Y").to_string();
+            let month = Local::now().format("%m").to_string();
+            format!("journal/{year}/{month}/{date}.md")
+        } else {
+            format!("{effective_category}/{date}.md")
+        };
+        
         let path = self.safe_path(&relative_path)?;
         if path.exists() {
             return self.read_note(&relative_path);
         }
 
         let body = format!("# {date}\n\n## Notes\n\n## Review\n\n");
-        let content = build_note(&date, "journal", &["journal".to_string()], &date, &body);
+        let content = build_note(&date, effective_category, &["journal".to_string()], &date, &body);
         self.write_note(&relative_path, &content)
     }
 

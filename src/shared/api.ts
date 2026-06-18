@@ -103,8 +103,8 @@ export async function createFolder(input: CreateFolderInput): Promise<void> {
   return invoke<void>('create_folder', { input })
 }
 
-export async function createTodayNote(vaultRoot: string): Promise<Note> {
-  return invoke<Note>('create_today_note', { vaultRoot })
+export async function createTodayNote(vaultRoot: string, category: string): Promise<Note> {
+  return invoke<Note>('create_today_note', { vaultRoot, category })
 }
 
 export async function createWeeklyReview(input: CreateReviewInput): Promise<Note> {
