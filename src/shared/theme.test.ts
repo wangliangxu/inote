@@ -3,7 +3,10 @@ import {
   applyInitialTheme,
   getEffectiveTheme,
   getThemeDatasetValue,
+  isColorTheme,
+  isDarkThemeDatasetValue,
   isThemePreference,
+  readStoredColorTheme,
   readStoredThemePreference,
 } from './theme'
 
@@ -58,12 +61,40 @@ describe('theme helpers', () => {
   it('maps color themes to light and dark dataset values', () => {
     expect(getThemeDatasetValue('light', 'default')).toBe('light')
     expect(getThemeDatasetValue('dark', 'default')).toBe('dark')
-    expect(getThemeDatasetValue('light', 'nord')).toBe('nord')
-    expect(getThemeDatasetValue('dark', 'nord')).toBe('nord-dark')
-    expect(getThemeDatasetValue('light', 'sepia')).toBe('sepia')
-    expect(getThemeDatasetValue('dark', 'sepia')).toBe('sepia-dark')
-    expect(getThemeDatasetValue('light', 'ocean')).toBe('ocean')
-    expect(getThemeDatasetValue('dark', 'ocean')).toBe('ocean-dark')
+    expect(getThemeDatasetValue('light', 'forest')).toBe('forest')
+    expect(getThemeDatasetValue('dark', 'forest')).toBe('forest-dark')
+    expect(getThemeDatasetValue('light', 'graphite')).toBe('graphite')
+    expect(getThemeDatasetValue('dark', 'graphite')).toBe('graphite-dark')
+    expect(getThemeDatasetValue('light', 'ember')).toBe('ember')
+    expect(getThemeDatasetValue('dark', 'ember')).toBe('ember-dark')
+  })
+
+  it('accepts the redesigned color themes and rejects removed themes', () => {
+    expect(isColorTheme('default')).toBe(true)
+    expect(isColorTheme('forest')).toBe(true)
+    expect(isColorTheme('graphite')).toBe(true)
+    expect(isColorTheme('ember')).toBe(true)
+    expect(isColorTheme('nord')).toBe(false)
+    expect(isColorTheme('sepia')).toBe(false)
+    expect(isColorTheme('ocean')).toBe(false)
+  })
+
+  it('reads removed stored color themes as default', () => {
+    const storage = new Map<string, string>([['inote.colorTheme', 'nord']])
+    const localStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+    } as Storage
+
+    expect(readStoredColorTheme(localStorage)).toBe('default')
+  })
+
+  it('detects default and custom dark dataset themes', () => {
+    expect(isDarkThemeDatasetValue('dark')).toBe(true)
+    expect(isDarkThemeDatasetValue('forest-dark')).toBe(true)
+    expect(isDarkThemeDatasetValue('graphite-dark')).toBe(true)
+    expect(isDarkThemeDatasetValue('ember-dark')).toBe(true)
+    expect(isDarkThemeDatasetValue('light')).toBe(false)
+    expect(isDarkThemeDatasetValue('forest')).toBe(false)
   })
 
 })

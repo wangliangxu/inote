@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Settings, Palette, Bot } from 'lucide-react'
 import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
 import type { EffectiveTheme, ThemePreference, ColorTheme } from '../../shared/theme'
+import { COLOR_THEME_OPTIONS } from '../../shared/theme'
 import { getSystemFonts } from '../../shared/api'
 import { useTranslation } from 'react-i18next'
 import { useEffect } from 'react'
@@ -202,10 +203,9 @@ export function SettingsPanel({
                 value={colorTheme}
                 onChange={(event) => onColorThemeChange(event.target.value as ColorTheme)}
               >
-                <option value="default">Default</option>
-                <option value="nord">Nord</option>
-                <option value="sepia">Sepia</option>
-                <option value="ocean">Ocean</option>
+                {COLOR_THEME_OPTIONS.map((theme) => (
+                  <option key={theme.value} value={theme.value}>{theme.label}</option>
+                ))}
               </select>
             </label>
             <label className="setting-label">

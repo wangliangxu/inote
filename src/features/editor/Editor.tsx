@@ -5,6 +5,7 @@ import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting } from '../../
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
+import { isDarkThemeDatasetValue } from '../../shared/theme'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
 import {
   MDXEditor,
@@ -466,7 +467,7 @@ export function Editor({
   }[saveState]
 
   // Detect current theme from HTML dataset to pass to MDXEditor
-  const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark')
+  const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && isDarkThemeDatasetValue(document.documentElement.dataset.theme))
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -477,13 +478,13 @@ export function Editor({
     }
 
     const observer = new MutationObserver(() => {
-      const dark = document.documentElement.dataset.theme === 'dark'
+      const dark = isDarkThemeDatasetValue(document.documentElement.dataset.theme)
       setIsDark(dark)
       syncBodyClass(dark)
     })
     
     // Initial sync
-    const initialDark = document.documentElement.dataset.theme === 'dark'
+    const initialDark = isDarkThemeDatasetValue(document.documentElement.dataset.theme)
     syncBodyClass(initialDark)
 
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })

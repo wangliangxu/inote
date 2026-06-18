@@ -27,13 +27,18 @@
     <script>
       ;(() => {
         const key = 'inote.themePreference'
+        const colorThemeKey = 'inote.colorTheme'
+        const colorThemes = ['default', 'forest', 'graphite', 'ember']
         const saved = window.localStorage.getItem(key)
+        const savedColorTheme = window.localStorage.getItem(colorThemeKey)
         const preference = saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system'
+        const colorTheme = colorThemes.includes(savedColorTheme) ? savedColorTheme : 'default'
         const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-        const theme = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
+        const effectiveTheme = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
+        const theme = colorTheme === 'default' ? effectiveTheme : (effectiveTheme === 'dark' ? `${colorTheme}-dark` : colorTheme)
         document.documentElement.dataset.theme = theme
         document.documentElement.dataset.themePreference = preference
-        document.documentElement.style.colorScheme = theme
+        document.documentElement.style.colorScheme = effectiveTheme
       })()
     </script>
   </head>

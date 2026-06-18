@@ -14,6 +14,15 @@ describe('startup shell', () => {
     expect(html).toContain('document.documentElement.dataset.theme')
   })
 
+  it('applies the stored color theme before the app module loads', () => {
+    const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8')
+
+    expect(html).toContain('inote.colorTheme')
+    expect(html).toContain("['default', 'forest', 'graphite', 'ember']")
+    expect(html).toContain("colorTheme === 'default'")
+    expect(html).not.toContain("['default', 'nord', 'sepia', 'ocean']")
+  })
+
   it('keeps the native window hidden until the webview has a painted frame', () => {
     const config = JSON.parse(readFileSync(resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'))
     const [mainWindow] = config.app.windows
