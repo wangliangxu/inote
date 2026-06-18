@@ -239,8 +239,11 @@ export function Editor({
     return activeIndex
   }, [headings])
 
-  // Helper: get the CodeMirror EditorView from the DOM
+  // Helper: get the CodeMirror EditorView for the source/diff editor (NOT code block editors)
   const getCmEditorView = useCallback(() => {
+    const mode = currentViewModeRef.current
+    if (mode !== 'source' && mode !== 'diff') return null
+
     // Source mode: .mdxeditor-source-editor .cm-editor
     // Diff mode: .mdxeditor-diff-editor .cm-editor (last one is the editable "b" side)
     const cmEditors = document.querySelectorAll('.mdx-editor-main .cm-editor')
@@ -321,7 +324,26 @@ export function Editor({
     const editorContainer = document.querySelector('.mdx-editor-main')
     if (!editorContainer) return
 
-    // Try CodeMirror first (source/diff mode)
+    const mode = currentViewModeRef.current
+
+    // Rich text mode: find the heading element in the contenteditable area and scroll to it
+    if (mode === 'rich-text') {
+      const richTextArea = editorContainer.querySelector('[contenteditable="true"]')
+      if (richTextArea) {
+        const elements = richTextArea.querySelectorAll(`h${level}`)
+        const normalizedText = text.replace(/\s+/g, ' ')
+        for (let i = 0; i < elements.length; i++) {
+          if (elements[i].textContent?.trim().replace(/\s+/g, ' ') === normalizedText) {
+            elements[i].scrollIntoView({ behavior: 'smooth', block: 'start' })
+            setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+            return
+          }
+        }
+      }
+      return
+    }
+
+    // Source/diff mode: use CodeMirror
     const view = getCmEditorView()
     if (view) {
       // lineIndex is 0-based, CM lines are 1-based
@@ -333,16 +355,6 @@ export function Editor({
       })
       view.focus()
       setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
-      return
-    }
-
-    // Rich text mode: find the heading element and scroll to it
-    const elements = editorContainer.querySelectorAll(`h${level}`)
-    for (let i = 0; i < elements.length; i++) {
-      if (elements[i].textContent?.trim() === text) {
-        elements[i].scrollIntoView({ behavior: 'smooth', block: 'start' })
-        break
-      }
     }
   }, [getCmEditorView, findActiveHeadingFromLine])
 
@@ -352,11 +364,13 @@ export function Editor({
   const tocDragState = useRef({ isDragging: false, startX: 0, startWidth: 0 })
   const realmRef = useRef<any>(null)
   const previousModeRef = useRef<string>(savedViewMode)
+  const currentViewModeRef = useRef<string>(savedViewMode)
 
   const realmTrackerPlugin = useMemo(() => realmPlugin({
     init: (realm) => {
       realmRef.current = realm
       realm.sub(viewMode$, (mode: string) => {
+        currentViewModeRef.current = mode
         if (!metadataPanelOpenRef.current) {
           localStorage.setItem('mdxeditor-view-mode', mode)
           setSetting('mdxeditor-view-mode', mode).catch(console.error)
