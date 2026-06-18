@@ -320,6 +320,18 @@ pub fn get_setting(app: AppHandle, key: String) -> Result<Option<String>, String
 }
 
 #[tauri::command]
+pub fn get_system_fonts() -> Result<Vec<String>, String> {
+    let source = font_kit::source::SystemSource::new();
+    match source.all_families() {
+        Ok(mut families) => {
+            families.sort_by_key(|f| f.to_lowercase());
+            Ok(families)
+        }
+        Err(e) => Err(format!("Failed to load fonts: {}", e)),
+    }
+}
+
+#[tauri::command]
 pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), String> {
     UserSettingsStore::open(settings_db_path(&app)?)?.set_value(&key, &value)
 }

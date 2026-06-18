@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Settings, Palette, Bot } from 'lucide-react'
 import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
 import type { EffectiveTheme, ThemePreference } from '../../shared/theme'
+import { getSystemFonts } from '../../shared/api'
 import { useTranslation } from 'react-i18next'
+import { useEffect } from 'react'
 
 interface SettingsPanelProps {
   vaultRoot: string
@@ -11,6 +13,7 @@ interface SettingsPanelProps {
   themePreference: ThemePreference
   effectiveTheme: EffectiveTheme
   baseFontSize: number
+  fontFamily: string
   defaultCategory: string
   categories: CategoryGroup[]
   showTodayNoteButton: boolean
@@ -19,6 +22,7 @@ interface SettingsPanelProps {
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onThemePreferenceChange: (preference: ThemePreference) => void
   onBaseFontSizeChange: (size: number) => void
+  onFontFamilyChange: (family: string) => void
   onDefaultCategoryChange: (category: string) => void
   onOpenVault: () => void
   onInitializeVault: () => void
@@ -36,6 +40,7 @@ export function SettingsPanel({
   themePreference,
   effectiveTheme,
   baseFontSize,
+  fontFamily,
   defaultCategory,
   categories,
   showTodayNoteButton,
@@ -44,6 +49,7 @@ export function SettingsPanel({
   onLlmSettingsChange,
   onThemePreferenceChange,
   onBaseFontSizeChange,
+  onFontFamilyChange,
   onDefaultCategoryChange,
   onOpenVault,
   onInitializeVault,
@@ -55,6 +61,15 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'llm'>('general')
+  const [systemFonts, setSystemFonts] = useState<string[]>([])
+
+  useEffect(() => {
+    if (activeTab === 'appearance' && systemFonts.length === 0) {
+      getSystemFonts().then(fonts => {
+        setSystemFonts(fonts)
+      }).catch(err => console.error("Failed to load fonts:", err))
+    }
+  }, [activeTab, systemFonts.length])
   
   function updateLlmSettings(patch: Partial<LlmProviderSettings>) {
     onLlmSettingsChange({ ...llmSettings, ...patch })
@@ -189,6 +204,19 @@ export function SettingsPanel({
                 <option value={16}>{t('settings.fontSizeMedium')}</option>
                 <option value={18}>{t('settings.fontSizeLarge')}</option>
                 <option value={20}>{t('settings.fontSizeXLarge')}</option>
+              </select>
+            </label>
+            <label>
+              {t('settings.fontFamily') || 'Font Family'}
+              <select
+                className="setting-input"
+                value={fontFamily}
+                onChange={(event) => onFontFamilyChange(event.target.value)}
+              >
+                <option value="">{t('settings.fontFamilyDefault') || 'System Default'}</option>
+                {systemFonts.map((font) => (
+                  <option key={font} value={font}>{font}</option>
+                ))}
               </select>
             </label>
           </div>

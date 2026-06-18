@@ -59,8 +59,9 @@
     "fontSizeLarge": "大号",
     "fontSizeXLarge": "特大号",
     "themeFollowSystem": "跟随系统",
-    "vaultPath": "笔记库路径",
-    "showTodayNoteButton": "显示今日笔记按钮"
+    "showTodayNoteButton": "显示今日笔记按钮",
+    "fontFamily": "字体设置",
+    "fontFamilyDefault": "系统默认"
   },
   "todo": {
     "title": "待办事项仪表盘",

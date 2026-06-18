@@ -59,8 +59,9 @@
     "fontSizeLarge": "Large",
     "fontSizeXLarge": "Extra Large",
     "themeFollowSystem": "Follow system",
-    "vaultPath": "Vault path",
-    "showTodayNoteButton": "Show Today Note Button"
+    "showTodayNoteButton": "Show Today Note Button",
+    "fontFamily": "Font Family",
+    "fontFamilyDefault": "System Default"
   },
   "todo": {
     "title": "To-Do Dashboard",

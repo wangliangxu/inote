@@ -87,6 +87,7 @@ async function safeConfirm(message: string): Promise<boolean> {
 
 const LLM_SETTINGS_KEY = 'inote.llmSettings'
 const BASE_FONT_SIZE_KEY = 'inote.baseFontSize'
+const FONT_FAMILY_KEY = 'inote.fontFamily'
 const OPEN_SETTINGS_EVENT = 'inote://open-settings'
 
 const defaultLlmSettings: LlmProviderSettings = {
@@ -262,6 +263,10 @@ export function App() {
     const stored = window.localStorage.getItem(BASE_FONT_SIZE_KEY)
     return stored ? parseInt(stored, 10) : 16
   })
+  const [fontFamily, setFontFamily] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return window.localStorage.getItem(FONT_FAMILY_KEY) || ''
+  })
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -339,11 +344,17 @@ export function App() {
   useLayoutEffect(() => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, themePreference)
     window.localStorage.setItem(BASE_FONT_SIZE_KEY, baseFontSize.toString())
+    window.localStorage.setItem(FONT_FAMILY_KEY, fontFamily)
     document.documentElement.dataset.theme = effectiveTheme
     document.documentElement.dataset.themePreference = themePreference
     document.documentElement.style.colorScheme = effectiveTheme
     document.documentElement.style.setProperty('--font-size-base', `${baseFontSize}px`)
-  }, [effectiveTheme, themePreference, baseFontSize])
+    if (fontFamily) {
+      document.documentElement.style.setProperty('--font-family-base', fontFamily)
+    } else {
+      document.documentElement.style.removeProperty('--font-family-base')
+    }
+  }, [effectiveTheme, themePreference, baseFontSize, fontFamily])
 
   const loadVaultFromDisk = useCallback(
     async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
@@ -423,6 +434,7 @@ export function App() {
         if (savedSettings.leftSidebarWidth !== undefined) setLeftSidebarWidth(savedSettings.leftSidebarWidth)
         if (savedSettings.rightSidebarWidth !== undefined) setRightSidebarWidth(savedSettings.rightSidebarWidth)
         if (savedSettings.showTodayNoteButton !== undefined) setShowTodayNoteButton(savedSettings.showTodayNoteButton)
+        if (savedSettings.fontFamily !== undefined) setFontFamily(savedSettings.fontFamily)
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY)
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !== defaultLlmSettings.providerName ||
@@ -500,7 +512,7 @@ export function App() {
       const activePathForStorage = vaultRoot.trim() ? activePath : ''
       saveUserSettings({ 
         vaultRoot: vaultRoot.trim(), activePath: activePathForStorage, activeView, activeCategory, selectedSearchCategories, llmSettings, defaultCategory,
-        leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton
+        leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton, fontFamily
       })
         .then(() => {
           window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim())
@@ -518,7 +530,7 @@ export function App() {
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton])
+  }, [activePath, activeView, activeCategory, selectedSearchCategories, llmSettings, settingsLoaded, vaultRoot, defaultCategory, leftSidebarVisible, rightSidebarVisible, leftSidebarWidth, rightSidebarWidth, showTodayNoteButton, fontFamily])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window)) return
@@ -1882,6 +1894,8 @@ export function App() {
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}
                 onBaseFontSizeChange={setBaseFontSize}
+                fontFamily={fontFamily}
+                onFontFamilyChange={setFontFamily}
                 onDefaultCategoryChange={setDefaultCategory}
                 onOpenVault={openVault}
                 onInitializeVault={initVault}

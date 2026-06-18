@@ -65,6 +65,7 @@ pub fn run() {
             commands::get_setting,
             commands::set_setting,
             commands::save_window_state,
+            commands::get_system_fonts,
             commands::build_llm_request_preview,
             commands::execute_llm_chat,
             commands::execute_llm_chat_stream

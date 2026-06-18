@@ -167,6 +167,10 @@ export async function saveWindowState(input: { width: number, height: number, x:
   return invoke<void>('save_window_state', { input })
 }
 
+export async function getSystemFonts(): Promise<string[]> {
+  return invoke<string[]>('get_system_fonts')
+}
+
 export function noteToMarkdown(note: Note): string {
   const tags = note.tags.map((tag) => `"${tag}"`).join(', ')
   const summary = note.summary ? `summary: "${escapeYamlString(note.summary)}"\n` : ''
