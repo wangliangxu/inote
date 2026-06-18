@@ -1308,7 +1308,14 @@ export function App() {
     }
     const title = '无标题'
     const fallbackCategory = categoryOptions.length > 0 ? categoryOptions[0].name : 'knowledge'
-    const category = defaultCategory || fallbackCategory
+    
+    let category = defaultCategory || fallbackCategory
+    if (activeView === 'category') {
+      category = activeCategory
+    } else if (activeView === 'search' && selectedSearchCategories.length === 1) {
+      category = selectedSearchCategories[0]
+    }
+    
     try {
       const note = await createNote({ vaultRoot: vaultRoot.trim(), title, category })
       setLinkVersion((current) => current + 1)
