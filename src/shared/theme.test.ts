@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyInitialTheme, getEffectiveTheme, isThemePreference, readStoredThemePreference } from './theme'
+import {
+  applyInitialTheme,
+  getEffectiveTheme,
+  getThemeDatasetValue,
+  isThemePreference,
+  readStoredThemePreference,
+} from './theme'
 
 describe('theme helpers', () => {
   it('defaults system preference to the current OS theme', () => {
@@ -48,4 +54,16 @@ describe('theme helpers', () => {
     expect(element.dataset.themePreference).toBe('system')
     expect(element.style.colorScheme).toBe('dark')
   })
+
+  it('maps color themes to light and dark dataset values', () => {
+    expect(getThemeDatasetValue('light', 'default')).toBe('light')
+    expect(getThemeDatasetValue('dark', 'default')).toBe('dark')
+    expect(getThemeDatasetValue('light', 'nord')).toBe('nord')
+    expect(getThemeDatasetValue('dark', 'nord')).toBe('nord-dark')
+    expect(getThemeDatasetValue('light', 'sepia')).toBe('sepia')
+    expect(getThemeDatasetValue('dark', 'sepia')).toBe('sepia-dark')
+    expect(getThemeDatasetValue('light', 'ocean')).toBe('ocean')
+    expect(getThemeDatasetValue('dark', 'ocean')).toBe('ocean-dark')
+  })
+
 })

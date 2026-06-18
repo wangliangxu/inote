@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Settings, Palette, Bot } from 'lucide-react'
 import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
-import type { EffectiveTheme, ThemePreference } from '../../shared/theme'
+import type { EffectiveTheme, ThemePreference, ColorTheme } from '../../shared/theme'
 import { getSystemFonts } from '../../shared/api'
 import { useTranslation } from 'react-i18next'
 import { useEffect } from 'react'
@@ -12,6 +12,7 @@ interface SettingsPanelProps {
   llmSettings: LlmProviderSettings
   themePreference: ThemePreference
   effectiveTheme: EffectiveTheme
+  colorTheme: ColorTheme
   baseFontSize: number
   fontFamily: string
   defaultCategory: string
@@ -21,6 +22,7 @@ interface SettingsPanelProps {
   onVaultRootChange: (path: string) => void
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onThemePreferenceChange: (preference: ThemePreference) => void
+  onColorThemeChange: (theme: ColorTheme) => void
   onBaseFontSizeChange: (size: number) => void
   onFontFamilyChange: (family: string) => void
   onDefaultCategoryChange: (category: string) => void
@@ -39,6 +41,7 @@ export function SettingsPanel({
   llmSettings,
   themePreference,
   effectiveTheme,
+  colorTheme,
   baseFontSize,
   fontFamily,
   defaultCategory,
@@ -48,6 +51,7 @@ export function SettingsPanel({
   onVaultRootChange,
   onLlmSettingsChange,
   onThemePreferenceChange,
+  onColorThemeChange,
   onBaseFontSizeChange,
   onFontFamilyChange,
   onDefaultCategoryChange,
@@ -75,50 +79,48 @@ export function SettingsPanel({
     onLlmSettingsChange({ ...llmSettings, ...patch })
   }
 
-  const tabButtonStyle = (isActive: boolean) => ({
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    background: isActive ? 'var(--accent, #0066cc)' : 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    color: isActive ? '#fff' : 'var(--text-secondary, #888)',
-    opacity: isActive ? 1 : 0.8,
-    minWidth: '64px'
-  })
-
   return (
-    <section className="settings-panel" style={{ display: 'flex', flexDirection: 'column', height: '560px', padding: 0 }}>
-      <header className="settings-window-header" style={{ borderBottom: 'none', position: 'relative', paddingTop: '16px', paddingLeft: '16px', paddingRight: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: '1.2em', fontWeight: 'bold', color: 'var(--text)', textAlign: 'center' }}>
+    <section className="settings-panel">
+      <header className="settings-window-header">
+        <h2>
           {t('settings.title')}
         </h2>
-        <button className="settings-close-button" type="button" onClick={onClose} aria-label={t('settings.close')} style={{ position: 'absolute', right: '16px', top: '16px' }}>
+        <button className="settings-close-button" type="button" onClick={onClose} aria-label={t('settings.close')}>
           x
         </button>
       </header>
 
-      <div className="settings-toolbar" style={{ display: 'flex', justifyContent: 'center', gap: '16px', padding: '12px 0 16px 0', borderBottom: '1px solid var(--border)' }}>
-        <button onClick={() => setActiveTab('general')} style={tabButtonStyle(activeTab === 'general')}>
-          <Settings size={22} />
-          <span style={{ fontSize: '11px', marginTop: '6px' }}>{t('settings.general')}</span>
+      <div className="settings-toolbar">
+        <button
+          className={activeTab === 'general' ? 'settings-tab-button active' : 'settings-tab-button'}
+          type="button"
+          onClick={() => setActiveTab('general')}
+        >
+          <Settings className="settings-tab-icon" size={22} />
+          <span>{t('settings.general')}</span>
         </button>
-        <button onClick={() => setActiveTab('appearance')} style={tabButtonStyle(activeTab === 'appearance')}>
-          <Palette size={22} />
-          <span style={{ fontSize: '11px', marginTop: '6px' }}>{t('settings.appearance')}</span>
+        <button
+          className={activeTab === 'appearance' ? 'settings-tab-button active' : 'settings-tab-button'}
+          type="button"
+          onClick={() => setActiveTab('appearance')}
+        >
+          <Palette className="settings-tab-icon" size={22} />
+          <span>{t('settings.appearance')}</span>
         </button>
-        <button onClick={() => setActiveTab('llm')} style={tabButtonStyle(activeTab === 'llm')}>
-          <Bot size={22} />
-          <span style={{ fontSize: '11px', marginTop: '6px' }}>{t('settings.llm')}</span>
+        <button
+          className={activeTab === 'llm' ? 'settings-tab-button active' : 'settings-tab-button'}
+          type="button"
+          onClick={() => setActiveTab('llm')}
+        >
+          <Bot className="settings-tab-icon" size={22} />
+          <span>{t('settings.llm')}</span>
         </button>
       </div>
 
-      <div className="setting-box" style={{ padding: '24px 32px', flex: 1, overflowY: 'auto' }}>
+      <div className="setting-box">
         {activeTab === 'general' && (
           <div className="settings-tab-content">
-            <label>
+            <label className="setting-label">
               {t('settings.vaultPath')}
               <input
                 className="setting-input"
@@ -127,7 +129,7 @@ export function SettingsPanel({
                 onChange={(event) => onVaultRootChange(event.target.value)}
               />
             </label>
-            <label>
+            <label className="setting-label">
               {t('settings.defaultCategory')}
               <select
                 className="setting-input"
@@ -142,7 +144,7 @@ export function SettingsPanel({
                 ))}
               </select>
             </label>
-            <label className="setting-checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px', marginTop: '12px' }}>
+            <label className="setting-checkbox-label">
               <input
                 type="checkbox"
                 checked={showTodayNoteButton}
@@ -150,7 +152,7 @@ export function SettingsPanel({
               />
               {t('settings.showTodayNoteButton')}
             </label>
-            <div className="action-row" style={{ marginTop: '16px' }}>
+            <div className="action-row">
               <button className="secondary-action" type="button" onClick={onOpenVault}>
                 {t('settings.openVault')}
               </button>
@@ -164,13 +166,13 @@ export function SettingsPanel({
                 {t('settings.rebuildIndex')}
               </button>
             </div>
-            <p className="settings-status" style={{ marginTop: '8px' }}>{status}</p>
+            <p className="settings-status">{status}</p>
           </div>
         )}
 
         {activeTab === 'appearance' && (
           <div className="settings-tab-content">
-            <label>
+            <label className="setting-label">
               {t('settings.language')}
               <select
                 className="setting-input"
@@ -181,8 +183,8 @@ export function SettingsPanel({
                 <option value="zh">简体中文</option>
               </select>
             </label>
-            <label>
-              {t('settings.theme')}
+            <label className="setting-label">
+              {t('settings.theme')} Mode
               <select
                 className="setting-input"
                 value={themePreference}
@@ -193,7 +195,20 @@ export function SettingsPanel({
                 <option value="dark">{t('settings.themeDark')}</option>
               </select>
             </label>
-            <label>
+            <label className="setting-label">
+              Color Theme
+              <select
+                className="setting-input"
+                value={colorTheme}
+                onChange={(event) => onColorThemeChange(event.target.value as ColorTheme)}
+              >
+                <option value="default">Default</option>
+                <option value="nord">Nord</option>
+                <option value="sepia">Sepia</option>
+                <option value="ocean">Ocean</option>
+              </select>
+            </label>
+            <label className="setting-label">
               {t('settings.fontSize')}
               <select
                 className="setting-input"
@@ -206,7 +221,7 @@ export function SettingsPanel({
                 <option value={20}>{t('settings.fontSizeXLarge')}</option>
               </select>
             </label>
-            <label>
+            <label className="setting-label">
               {t('settings.fontFamily') || 'Font Family'}
               <select
                 className="setting-input"
@@ -224,7 +239,7 @@ export function SettingsPanel({
 
         {activeTab === 'llm' && (
           <div className="settings-tab-content">
-            <label>
+            <label className="setting-label">
               {t('settings.providerName')}
               <input
                 className="setting-input"
@@ -232,7 +247,7 @@ export function SettingsPanel({
                 onChange={(event) => updateLlmSettings({ providerName: event.target.value })}
               />
             </label>
-            <label>
+            <label className="setting-label">
               {t('settings.apiBaseUrl')}
               <input
                 className="setting-input"
@@ -241,7 +256,7 @@ export function SettingsPanel({
                 onChange={(event) => updateLlmSettings({ apiBaseUrl: event.target.value })}
               />
             </label>
-            <label>
+            <label className="setting-label">
               {t('settings.apiKey')}
               <input
                 className="setting-input"
@@ -251,7 +266,7 @@ export function SettingsPanel({
                 onChange={(event) => updateLlmSettings({ apiKey: event.target.value })}
               />
             </label>
-            <label>
+            <label className="setting-label">
               {t('settings.model')}
               <input
                 className="setting-input"
@@ -260,7 +275,7 @@ export function SettingsPanel({
                 onChange={(event) => updateLlmSettings({ model: event.target.value })}
               />
             </label>
-            <p className="settings-status" style={{ marginTop: '8px' }}>
+            <p className="settings-status">
               {t('settings.apiKeysNote')}
             </p>
           </div>

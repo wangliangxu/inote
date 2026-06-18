@@ -41,7 +41,7 @@ const SettingsPanel = lazy(() => import('../features/settings/SettingsPanel').th
 const TagsPanel = lazy(() => import('../features/tags/TagsPanel').then(m => ({ default: m.TagsPanel })))
 const TodoDashboard = lazy(() => import('../features/todo/TodoDashboard').then(m => ({ default: m.TodoDashboard })))
 import { demoNotes } from '../shared/fixtures'
-import { getEffectiveTheme, readStoredThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../shared/theme'
+import { getEffectiveTheme, getThemeDatasetValue, readStoredThemePreference, readStoredColorTheme, THEME_PREFERENCE_KEY, COLOR_THEME_KEY, type ThemePreference, type ColorTheme } from '../shared/theme'
 import type { LlmProviderSettings, Note, NoteLinks, SaveState, SearchResult, WorkspaceView } from '../shared/types'
 import { hasNoteChanges } from '../shared/noteChanges'
 import { applyCurrentNoteOperations, getCreateNoteDraft } from '../features/agent/applyAgentOperations'
@@ -257,6 +257,10 @@ export function App() {
     if (typeof window === 'undefined') return 'system'
     return readStoredThemePreference(window.localStorage)
   })
+  const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
+    if (typeof window === 'undefined') return 'default'
+    return readStoredColorTheme(window.localStorage)
+  })
   const [defaultCategory, setDefaultCategory] = useState('knowledge')
   const [baseFontSize, setBaseFontSize] = useState<number>(() => {
     if (typeof window === 'undefined') return 16
@@ -343,9 +347,10 @@ export function App() {
 
   useLayoutEffect(() => {
     window.localStorage.setItem(THEME_PREFERENCE_KEY, themePreference)
+    window.localStorage.setItem(COLOR_THEME_KEY, colorTheme)
     window.localStorage.setItem(BASE_FONT_SIZE_KEY, baseFontSize.toString())
     window.localStorage.setItem(FONT_FAMILY_KEY, fontFamily)
-    document.documentElement.dataset.theme = effectiveTheme
+    document.documentElement.dataset.theme = getThemeDatasetValue(effectiveTheme, colorTheme)
     document.documentElement.dataset.themePreference = themePreference
     document.documentElement.style.colorScheme = effectiveTheme
     document.documentElement.style.setProperty('--font-size-base', `${baseFontSize}px`)
@@ -354,7 +359,7 @@ export function App() {
     } else {
       document.documentElement.style.removeProperty('--font-family-base')
     }
-  }, [effectiveTheme, themePreference, baseFontSize, fontFamily])
+  }, [effectiveTheme, themePreference, colorTheme, baseFontSize, fontFamily])
 
   const loadVaultFromDisk = useCallback(
     async (root: string, reason = 'Vault refreshed from disk.', preferredPath = '') => {
@@ -1908,6 +1913,7 @@ export function App() {
                 llmSettings={llmSettings}
                 themePreference={themePreference}
                 effectiveTheme={effectiveTheme}
+                colorTheme={colorTheme}
                 baseFontSize={baseFontSize}
                 defaultCategory={defaultCategory}
                 categories={categoryOptions}
@@ -1916,6 +1922,7 @@ export function App() {
                 onVaultRootChange={setVaultRoot}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}
+                onColorThemeChange={setColorTheme}
                 onBaseFontSizeChange={setBaseFontSize}
                 fontFamily={fontFamily}
                 onFontFamilyChange={setFontFamily}
