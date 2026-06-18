@@ -678,6 +678,7 @@ export function App() {
   useEffect(() => {
     const unlistenPromise = listen('inote://rebuild-index', async () => {
       if (!vaultRoot.trim()) return
+      await rebuildSearchIndex(vaultRoot.trim(), true)
       await refreshVaultFromDisk('Full index rebuilt.')
     })
     
@@ -1501,12 +1502,8 @@ export function App() {
       return
     }
     try {
-      await rebuildSearchIndex(vaultRoot.trim())
-      setLinkVersion((current) => current + 1)
-      if (query.trim()) {
-        setIndexedResults(await searchIndex({ vaultRoot: vaultRoot.trim(), query }))
-      }
-      setStatus('Search index rebuilt.')
+      await rebuildSearchIndex(vaultRoot.trim(), true)
+      await refreshVaultFromDisk('Search index rebuilt.')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }

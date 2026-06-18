@@ -133,7 +133,7 @@ pub fn scan_vault_and_rebuild_index(vault_root: String) -> Result<Vec<NoteMetada
     let exists = index_path.exists();
     let index = NoteIndex::open(&index_path)?;
     if exists {
-        index.get_all_notes()
+        index.lightweight_rebuild(vault.root())
     } else {
         let notes = vault.scan()?;
         index.full_rebuild(vault.root(), &notes)?;

@@ -24,7 +24,6 @@ pub struct NoteMetadata {
 #[derive(Debug, Clone, Deserialize, Default)]
 struct Frontmatter {
     title: Option<String>,
-    category: Option<String>,
     tags: Option<Vec<String>>,
     created: Option<String>,
     updated: Option<String>,
@@ -65,7 +64,7 @@ pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
     Ok(NoteMetadata {
         path: relative_path,
         title,
-        category: parsed.category.unwrap_or(category),
+        category,
         tags: parsed.tags.unwrap_or_default(),
         created_at,
         updated_at,
@@ -85,7 +84,7 @@ pub fn build_note(title: &str, category: &str, tags: &[String], date: &str, body
 
 pub fn build_note_with_dates(
     title: &str,
-    category: &str,
+    _category: &str,
     tags: &[String],
     created_at: &str,
     updated_at: &str,
@@ -97,7 +96,7 @@ pub fn build_note_with_dates(
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "---\ntitle: \"{title}\"\ncategory: \"{category}\"\ntags: [{tag_list}]\ncreated_at: {created_at}\nupdated_at: {updated_at}\n---\n\n{body}"
+        "---\ntitle: \"{title}\"\ntags: [{tag_list}]\ncreated_at: {created_at}\nupdated_at: {updated_at}\n---\n\n{body}"
     )
 }
 

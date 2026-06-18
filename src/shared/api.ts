@@ -178,7 +178,7 @@ export function noteToMarkdown(note: Note): string {
   const status = note.status ? `status: "${escapeYamlString(note.status)}"\n` : ''
   const priority = note.priority ? `priority: "${escapeYamlString(note.priority)}"\n` : ''
   const project = note.project ? `project: "${escapeYamlString(note.project)}"\n` : ''
-  return `---\ntitle: "${escapeYamlString(note.title)}"\ncategory: "${note.category}"\ntags: [${tags}]\ncreated_at: ${note.createdAt}\nupdated_at: ${note.updatedAt}\n${due}${status}${priority}${project}${summary}---\n\n${note.body}`
+  return `---\ntitle: "${escapeYamlString(note.title)}"\ntags: [${tags}]\ncreated_at: ${note.createdAt}\nupdated_at: ${note.updatedAt}\n${due}${status}${priority}${project}${summary}---\n\n${note.body}`
 }
 
 function escapeYamlString(value: string): string {
@@ -196,9 +196,6 @@ export function parseMarkdownWithFrontmatter(content: string): { body: string, m
   
   const titleMatch = yamlRaw.match(/^title:\s*"(.*?)"/m) || yamlRaw.match(/^title:\s*(.*?)$/m)
   if (titleMatch) metadata.title = titleMatch[1].replace(/\\"/g, '"').trim()
-  
-  const categoryMatch = yamlRaw.match(/^category:\s*"(.*?)"/m) || yamlRaw.match(/^category:\s*(.*?)$/m)
-  if (categoryMatch) metadata.category = categoryMatch[1].replace(/\\"/g, '"').trim()
   
   const tagsMatch = yamlRaw.match(/^tags:\s*\[(.*?)\]/m)
   if (tagsMatch) {
