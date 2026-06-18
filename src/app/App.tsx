@@ -768,6 +768,11 @@ export function App() {
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const initialScrollDoneRef = useRef(false)
 
+  // Reset rendered count when the view/category/search switch
+  useEffect(() => {
+    setRenderedCount(NOTES_PAGE_SIZE)
+  }, [activeView, activeCategory, query, selectedSearchCategories, vaultRoot])
+
   // Initial scroll to active note
   useEffect(() => {
     if (settingsLoaded && visibleNotes.length > 0 && !initialScrollDoneRef.current) {
@@ -788,11 +793,6 @@ export function App() {
       }
     }
   }, [settingsLoaded, visibleNotes, activePath, renderedCount, notes.length])
-
-  // Reset rendered count when the view/category/search switch
-  useEffect(() => {
-    setRenderedCount(NOTES_PAGE_SIZE)
-  }, [activeView, activeCategory, query, selectedSearchCategories, vaultRoot])
 
   // IntersectionObserver to load more notes when sentinel enters viewport
   useEffect(() => {
