@@ -696,6 +696,21 @@ export function App() {
     }
   }, [])
 
+  const saveActiveNoteRef = useRef(saveActiveNote)
+  useEffect(() => {
+    saveActiveNoteRef.current = saveActiveNote
+  }, [saveActiveNote])
+
+  useEffect(() => {
+    const unlistenPromise = listen('inote://save', () => {
+      saveActiveNoteRef.current()
+    })
+
+    return () => {
+      unlistenPromise.then((dispose) => dispose()).catch(() => {})
+    }
+  }, [])
+
   const visibleNotes = useMemo(() => {
     const isSpecialCategory = (note: Pick<Note, 'category' | 'path'>) =>
       note.category === 'archive' || note.category.startsWith('archive/') ||
@@ -1529,6 +1544,9 @@ export function App() {
             placeholder={t('app.searchPlaceholder')}
             value={query}
             onChange={(event) => {
+              if (query !== '' && event.target.value === '') {
+                initialScrollDoneRef.current = false
+              }
               setQuery(event.target.value)
               setActiveView('search')
             }}
@@ -1538,6 +1556,7 @@ export function App() {
               className="clear-search-btn"
               type="button"
               onClick={() => {
+                initialScrollDoneRef.current = false
                 setQuery('')
                 // Do not change view, it can remain in 'search' with empty results or whatever its behavior is.
               }}

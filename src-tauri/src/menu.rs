@@ -9,6 +9,8 @@ const EMPTY_TRASH_MENU_ID: &str = "empty-trash";
 const EMPTY_TRASH_EVENT: &str = "inote://empty-trash";
 const REBUILD_INDEX_MENU_ID: &str = "rebuild-index";
 const REBUILD_INDEX_EVENT: &str = "inote://rebuild-index";
+const SAVE_MENU_ID: &str = "save";
+const SAVE_EVENT: &str = "inote://save";
 
 pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app_handle.package_info();
@@ -99,6 +101,14 @@ pub fn build<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     )?,
                     #[cfg(not(target_os = "macos"))]
                     &PredefinedMenuItem::separator(app_handle)?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        SAVE_MENU_ID,
+                        "Save",
+                        true,
+                        Some("CmdOrCtrl+S"),
+                    )?,
+                    &PredefinedMenuItem::separator(app_handle)?,
                     &IconMenuItem::with_id_and_native_icon(
                         app_handle,
                         REBUILD_INDEX_MENU_ID,
@@ -156,5 +166,7 @@ pub fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         let _ = app.emit(EMPTY_TRASH_EVENT, ());
     } else if event.id() == REBUILD_INDEX_MENU_ID {
         let _ = app.emit(REBUILD_INDEX_EVENT, ());
+    } else if event.id() == SAVE_MENU_ID {
+        let _ = app.emit(SAVE_EVENT, ());
     }
 }
