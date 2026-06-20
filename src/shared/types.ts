@@ -88,6 +88,7 @@ export interface UserSettings {
   windowY?: number
   windowMaximized?: boolean
   showTodayNoteButton?: boolean
+  lockUpdateTime?: boolean
   fontFamily?: string
 }
 

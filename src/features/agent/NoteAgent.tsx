@@ -93,31 +93,33 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
   }
 
   return (
-    <div className="note-agent">
-      <div className="agent-scroll-area">
-        {error ? <p className="agent-error">{error}</p> : null}
+    <div className="note-agent flex h-full flex-col bg-base-200/40 text-base-content">
+      <div className="agent-scroll-area flex-1 space-y-3 overflow-y-auto p-3">
+        {error ? <p className="agent-error alert alert-error py-2 text-sm">{error}</p> : null}
         
         {result && (
           <>
             <p className="panel-title compact">Proposed Changes</p>
-            <div className="agent-change-list">
-              <p>{result.message || 'Review the proposed operations before applying.'}</p>
+            <div className="agent-change-list card border border-base-300 bg-base-100 shadow-sm">
+              <div className="card-body gap-3 p-3">
+              <p className="text-sm text-base-content/70">{result.message || 'Review the proposed operations before applying.'}</p>
               {result.operations.map((operation, index) => (
-                <div className="agent-change" key={`${operation.type}-${index}`}>
-                  <strong>{operation.type.replace(/_/g, ' ')}</strong>
+                <div className="agent-change rounded-lg border border-base-300 bg-base-200/50 p-3" key={`${operation.type}-${index}`}>
+                  <strong className="text-sm capitalize">{operation.type.replace(/_/g, ' ')}</strong>
                   {renderOperationDetails(operation)}
                 </div>
               ))}
+              </div>
             </div>
-            <div className="agent-footer">
-              <button type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
+            <div className="agent-footer flex items-center gap-2">
+              <button className="btn btn-primary btn-sm btn-square" type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
                 <Plus size={15} />
               </button>
-              <button type="button" onClick={createNote} disabled={!canCreate || status === 'applying'} title="Create note">
+              <button className="btn btn-outline btn-sm btn-square" type="button" onClick={createNote} disabled={!canCreate || status === 'applying'} title="Create note">
                 <FilePlus2 size={15} />
               </button>
-              <div style={{ flex: 1 }}></div>
-              <button type="button" onClick={() => setResult(null)} disabled={status === 'applying'} title="Discard">
+              <div className="flex-1"></div>
+              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={() => setResult(null)} disabled={status === 'applying'} title="Discard">
                 <X size={15} />
               </button>
             </div>
@@ -125,38 +127,38 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
         )}
 
         {agentProcess && (
-          <details className="agent-process-log" open={status === 'running'}>
-            <summary>Agent Process Log</summary>
-            <div className="agent-process-content">
-              <strong>System Prompt</strong>
+          <details className="agent-process-log collapse collapse-arrow border border-base-300 bg-base-100" open={status === 'running'}>
+            <summary className="collapse-title min-h-0 px-3 py-2 text-sm font-semibold">Agent Process Log</summary>
+            <div className="agent-process-content collapse-content grid gap-2 px-3 text-xs">
+              <strong className="text-base-content/60">System Prompt</strong>
               <pre>{agentProcess.prompt}</pre>
-              <strong>Context</strong>
+              <strong className="text-base-content/60">Context</strong>
               <pre>{agentProcess.context}</pre>
-              <strong>Raw Response</strong>
+              <strong className="text-base-content/60">Raw Response</strong>
               <pre>{agentProcess.rawResponse || 'Waiting for response...'}</pre>
             </div>
           </details>
         )}
       </div>
 
-      <div className="agent-input-wrapper">
+      <div className="agent-input-wrapper border-t border-base-300 bg-base-100 p-3">
         <textarea
-          className="agent-command"
+          className="agent-command textarea textarea-bordered min-h-24 w-full resize-none text-sm"
           aria-label="Note agent command"
           value={command}
           onChange={(event) => setCommand(event.target.value)}
           placeholder="Ask the agent to update this note or create a new one."
         />
-        <div className="agent-input-toolbar">
-          <details className="agent-quick-action-dropdown" data-no-drag>
-            <summary className="agent-quick-action-btn" title="Quick Actions">
+        <div className="agent-input-toolbar mt-2 flex items-center justify-between">
+          <details className="agent-quick-action-dropdown dropdown dropdown-top" data-no-drag>
+            <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title="Quick Actions">
               <Zap size={16} />
             </summary>
-            <div className="agent-quick-action-menu">
+            <div className="agent-quick-action-menu dropdown-content menu z-20 w-44 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
               {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
                 <button
                   key={action}
-                  className={activeAction === action ? 'active' : ''}
+                  className={activeAction === action ? 'active bg-primary/10 text-primary' : ''}
                   type="button"
                   onClick={(e) => {
                     setActiveAction(action)
@@ -172,7 +174,7 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
               ))}
             </div>
           </details>
-          <button className="agent-run-btn" title="Run agent" type="button" onClick={() => runAgent()} disabled={status === 'running' || status === 'applying'}>
+          <button className="agent-run-btn btn btn-primary btn-sm btn-square" title="Run agent" type="button" onClick={() => runAgent()} disabled={status === 'running' || status === 'applying'}>
             {status === 'running' ? <RefreshCw size={15} /> : <Send size={15} />}
           </button>
         </div>

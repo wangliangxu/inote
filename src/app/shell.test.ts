@@ -48,6 +48,38 @@ describe('startup shell', () => {
     expect(styles).toContain('height: auto')
   })
 
+  it('keeps the note card layout fixed and scrollable in the left sidebar', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
+
+    expect(app).toContain("isActive ? 'note-card active' : 'note-card'")
+    expect(app).toContain("noteListMode === 'cards' ? 'note-card-grid'")
+    expect(app).toContain('minmax(0, 1fr)')
+    expect(styles).toContain('grid-template-columns: repeat(auto-fill, 180px)')
+    expect(styles).toContain('height: 206px')
+  })
+
+  it('reserves native macOS traffic-light space in the title bar', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('pl-[82px]')
+    expect(app).toContain('max-[900px]:pl-[74px]')
+  })
+
+  it('gates the title bar Today note button behind the settings toggle', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('{showTodayNoteButton ? (')
+    expect(app).toContain("title={t('settings.todayNote')}")
+    expect(app).toContain(') : null}')
+  })
+
+  it('uses the primary color for the title bar create note button', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('className="btn btn-primary btn-sm btn-square" type="button" onClick={addCategoryNote}')
+  })
+
   it('enables the Tauri asset protocol for local markdown images', () => {
     const config = JSON.parse(readFileSync(resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'))
 

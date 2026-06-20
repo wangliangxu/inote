@@ -1,13 +1,13 @@
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type EffectiveTheme = 'light' | 'dark'
 
-export type ColorTheme = 'default' | 'forest' | 'graphite' | 'ember'
+export type ColorTheme = 'default' | 'corporate' | 'cupcake' | 'nord'
 
 export const COLOR_THEME_OPTIONS: readonly { value: ColorTheme; label: string }[] = [
   { value: 'default', label: 'Default' },
-  { value: 'forest', label: 'Forest' },
-  { value: 'graphite', label: 'Graphite' },
-  { value: 'ember', label: 'Ember' },
+  { value: 'corporate', label: 'Corporate / Business' },
+  { value: 'cupcake', label: 'Cupcake / Dracula' },
+  { value: 'nord', label: 'Nord / Dim' },
 ]
 
 export const THEME_PREFERENCE_KEY = 'inote.themePreference'
@@ -27,14 +27,15 @@ export function getEffectiveTheme(preference: ThemePreference, systemPrefersDark
 }
 
 export function getThemeDatasetValue(effectiveTheme: EffectiveTheme, colorTheme: ColorTheme): string {
-  if (colorTheme === 'default') {
-    return effectiveTheme === 'dark' ? 'dark' : 'light'
-  }
-  return effectiveTheme === 'dark' ? `${colorTheme}-dark` : colorTheme
+  if (colorTheme === 'default') return effectiveTheme === 'dark' ? 'dark' : 'light'
+  if (colorTheme === 'corporate') return effectiveTheme === 'dark' ? 'business' : 'corporate'
+  if (colorTheme === 'cupcake') return effectiveTheme === 'dark' ? 'dracula' : 'cupcake'
+  if (colorTheme === 'nord') return effectiveTheme === 'dark' ? 'dim' : 'nord'
+  return effectiveTheme === 'dark' ? 'dark' : 'light'
 }
 
 export function isDarkThemeDatasetValue(theme: string | undefined): boolean {
-  return theme === 'dark' || theme?.endsWith('-dark') === true
+  return ['dark', 'business', 'dracula', 'dim'].includes(theme || '')
 }
 
 export function readStoredThemePreference(localStorage: Pick<Storage, 'getItem'> | undefined): ThemePreference {

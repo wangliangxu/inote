@@ -27,6 +27,9 @@ pub struct UserSettings {
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
     pub window_maximized: Option<bool>,
+    pub show_today_note_button: Option<bool>,
+    pub lock_update_time: Option<bool>,
+    pub font_family: Option<String>,
 }
 
 impl Default for UserSettings {
@@ -53,6 +56,9 @@ impl Default for UserSettings {
             window_x: None,
             window_y: None,
             window_maximized: None,
+            show_today_note_button: None,
+            lock_update_time: None,
+            font_family: None,
         }
     }
 }
@@ -131,6 +137,15 @@ impl UserSettingsStore {
         if let Some(maximized) = self.get_value("window_maximized")? {
             settings.window_maximized = Some(maximized == "true");
         }
+        if let Some(val) = self.get_value("show_today_note_button")? {
+            settings.show_today_note_button = Some(val == "true");
+        }
+        if let Some(val) = self.get_value("lock_update_time")? {
+            settings.lock_update_time = Some(val == "true");
+        }
+        if let Some(val) = self.get_value("font_family")? {
+            settings.font_family = Some(val);
+        }
 
         if let Some(llm_settings) = self.get_value("llm_settings")? {
             let mut llm_settings: LlmProviderSettings = serde_json::from_str(&llm_settings)
@@ -160,6 +175,9 @@ impl UserSettingsStore {
         if let Some(x) = settings.window_x { self.set_value("window_x", &x.to_string())?; }
         if let Some(y) = settings.window_y { self.set_value("window_y", &y.to_string())?; }
         if let Some(m) = settings.window_maximized { self.set_value("window_maximized", if m { "true" } else { "false" })?; }
+        if let Some(val) = settings.show_today_note_button { self.set_value("show_today_note_button", if val { "true" } else { "false" })?; }
+        if let Some(val) = settings.lock_update_time { self.set_value("lock_update_time", if val { "true" } else { "false" })?; }
+        if let Some(val) = &settings.font_family { self.set_value("font_family", val)?; }
         
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
@@ -367,6 +385,9 @@ mod tests {
             window_x: Some(100),
             window_y: Some(100),
             window_maximized: Some(true),
+            show_today_note_button: Some(true),
+            lock_update_time: Some(true),
+            font_family: Some("Inter".to_string()),
         };
 
         store.save(&settings).unwrap();
@@ -403,6 +424,9 @@ mod tests {
             window_x: None,
             window_y: None,
             window_maximized: None,
+            show_today_note_button: None,
+            lock_update_time: None,
+            font_family: None,
         };
 
         store.save(&settings).unwrap();

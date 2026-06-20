@@ -1,282 +1,63 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark, corporate, business, cupcake, dracula, nord, dim;
+}
 
+/* ─── Bridge: map legacy CSS variables to DaisyUI v5 theme tokens ─── */
 :root {
+  /* Font sizing */
   --font-size-base: 16px;
   --font-size-24: calc(var(--font-size-base) * 1.5);
   --font-size-20: calc(var(--font-size-base) * 1.25);
   --font-size-17: calc(var(--font-size-base) * 1.0625);
+  --font-size-15: calc(var(--font-size-base) * 0.9375);
   --font-size-14: calc(var(--font-size-base) * 0.875);
   --font-size-13: calc(var(--font-size-base) * 0.8125);
   --font-size-12: calc(var(--font-size-base) * 0.75);
   --font-size-11: calc(var(--font-size-base) * 0.6875);
 
-  --bg-app: #f6f7f4;
-  --bg-panel: #ffffff;
-  --bg-sidebar: #eef1ea;
-  --bg-topbar: rgba(246, 247, 244, 0.96);
-  --bg-hover: #e7ebe2;
-  --bg-active: rgba(66, 107, 85, 0.12);
-  --text-main: #29302b;
-  --text-strong: #111714;
-  --text-secondary: #5d675f;
-  --text-muted: #7e887f;
-  --border-main: #d9ded5;
-  --border-hover: #bcc7ba;
-  --accent-main: #426b55;
-  --accent-danger: #c2413b;
-  --accent-warning: #b7791f;
-  --accent-info: #2f6f9f;
+  /* Background colors → DaisyUI v5 semantic colors */
+  --bg-app: var(--color-base-100);
+  --bg-panel: var(--color-base-100);
+  --bg-sidebar: var(--color-base-200);
+  --bg-topbar: color-mix(in oklch, var(--color-base-100) 96%, transparent);
+  --bg-hover: var(--color-base-300);
+  --bg-active: color-mix(in oklch, var(--color-primary) 12%, transparent);
 
-  --bg-warning-light: rgba(183, 121, 31, 0.12);
-  --text-warning-strong: #8a5a13;
-  --bg-pill-default: rgba(93, 103, 95, 0.1);
-  --bg-pill-dirty: rgba(183, 121, 31, 0.14);
-  --text-pill-dirty: #8a5a13;
-  --bg-pill-saving: rgba(47, 111, 159, 0.14);
-  --text-pill-saving: #24577d;
-  --bg-pill-saved: rgba(66, 107, 85, 0.14);
-  --text-pill-saved: #355944;
-  --bg-pill-error: rgba(194, 65, 59, 0.12);
+  /* Text colors */
+  --text-main: var(--color-base-content);
+  --text-strong: var(--color-base-content);
+  --text-secondary: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+  --text-muted: color-mix(in oklch, var(--color-base-content) 50%, transparent);
 
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: light;
+  /* Border colors */
+  --border-main: var(--color-base-300);
+  --border-hover: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+
+  /* Accent / semantic colors */
+  --accent-main: var(--color-primary);
+  --accent-danger: var(--color-error);
+  --accent-warning: var(--color-warning);
+  --accent-info: var(--color-info);
+
+  /* Status pill colors */
+  --bg-warning-light: color-mix(in oklch, var(--color-warning) 12%, transparent);
+  --text-warning-strong: var(--color-warning);
+  --bg-pill-default: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+  --bg-pill-dirty: color-mix(in oklch, var(--color-warning) 14%, transparent);
+  --text-pill-dirty: var(--color-warning);
+  --bg-pill-saving: color-mix(in oklch, var(--color-info) 14%, transparent);
+  --text-pill-saving: var(--color-info);
+  --bg-pill-saved: color-mix(in oklch, var(--color-success) 14%, transparent);
+  --text-pill-saved: var(--color-success);
+  --bg-pill-error: color-mix(in oklch, var(--color-error) 12%, transparent);
+
+  /* Typography */
   --font-family-base: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-family: var(--font-family-base);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-
-:root:is([data-theme="dark"], [data-theme$="-dark"]) {
-  --bg-app: #111411;
-  --bg-panel: #191d19;
-  --bg-sidebar: #161a16;
-  --bg-topbar: rgba(17, 20, 17, 0.96);
-  --bg-hover: #222821;
-  --bg-active: rgba(124, 181, 144, 0.18);
-  --text-main: #d8ded6;
-  --text-strong: #f4f7f2;
-  --text-secondary: #a9b3a7;
-  --text-muted: #7f8a7e;
-  --border-main: #2c332b;
-  --border-hover: #465143;
-  --accent-main: #7cb590;
-  --accent-danger: #ee8178;
-  --accent-warning: #e5b65f;
-  --accent-info: #7bb7dc;
-  --bg-warning-light: rgba(229, 182, 95, 0.14);
-  --text-warning-strong: #f1ca7a;
-  --bg-pill-default: rgba(169, 179, 167, 0.1);
-  --bg-pill-dirty: rgba(229, 182, 95, 0.14);
-  --text-pill-dirty: #f1ca7a;
-  --bg-pill-saving: rgba(123, 183, 220, 0.14);
-  --text-pill-saving: #9bcbed;
-  --bg-pill-saved: rgba(124, 181, 144, 0.16);
-  --text-pill-saved: #9fd0ad;
-  --bg-pill-error: rgba(238, 129, 120, 0.14);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: dark;
-}
-
-:root[data-theme="forest"] {
-  --bg-app: #f4f6f1;
-  --bg-panel: #ffffff;
-  --bg-sidebar: #e9eee4;
-  --bg-topbar: rgba(244, 246, 241, 0.96);
-  --bg-hover: #dde6d6;
-  --bg-active: rgba(49, 111, 81, 0.13);
-  --text-main: #26322a;
-  --text-strong: #111a15;
-  --text-secondary: #536155;
-  --text-muted: #768170;
-  --border-main: #d2dccb;
-  --border-hover: #b5c5ad;
-  --accent-main: #316f51;
-  --accent-danger: #bf4b43;
-  --accent-warning: #a66f1e;
-  --accent-info: #2e6d8f;
-  --bg-warning-light: rgba(166, 111, 30, 0.13);
-  --text-warning-strong: #7b5318;
-  --bg-pill-default: rgba(83, 97, 85, 0.1);
-  --bg-pill-dirty: rgba(166, 111, 30, 0.14);
-  --text-pill-dirty: #7b5318;
-  --bg-pill-saving: rgba(46, 109, 143, 0.14);
-  --text-pill-saving: #255873;
-  --bg-pill-saved: rgba(49, 111, 81, 0.14);
-  --text-pill-saved: #285b42;
-  --bg-pill-error: rgba(191, 75, 67, 0.13);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: light;
-}
-
-:root[data-theme="forest-dark"] {
-  --bg-app: #10150f;
-  --bg-panel: #171e16;
-  --bg-sidebar: #131a12;
-  --bg-topbar: rgba(16, 21, 15, 0.96);
-  --bg-hover: #202a1f;
-  --bg-active: rgba(116, 176, 133, 0.18);
-  --text-main: #d9e2d4;
-  --text-strong: #f5f8f2;
-  --text-secondary: #adbaa5;
-  --text-muted: #84917d;
-  --border-main: #2b3628;
-  --border-hover: #465742;
-  --accent-main: #74b085;
-  --accent-danger: #ee8178;
-  --accent-warning: #dfb45f;
-  --accent-info: #7bb9d4;
-  --bg-warning-light: rgba(223, 180, 95, 0.15);
-  --text-warning-strong: #edca7b;
-  --bg-pill-default: rgba(173, 186, 165, 0.1);
-  --bg-pill-dirty: rgba(223, 180, 95, 0.15);
-  --text-pill-dirty: #edca7b;
-  --bg-pill-saving: rgba(123, 185, 212, 0.15);
-  --text-pill-saving: #9fd0e2;
-  --bg-pill-saved: rgba(116, 176, 133, 0.16);
-  --text-pill-saved: #9ecfab;
-  --bg-pill-error: rgba(238, 129, 120, 0.14);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: dark;
-}
-
-:root[data-theme="graphite"] {
-  --bg-app: #f5f6f7;
-  --bg-panel: #ffffff;
-  --bg-sidebar: #eceff1;
-  --bg-topbar: rgba(245, 246, 247, 0.96);
-  --bg-hover: #e1e6e9;
-  --bg-active: rgba(70, 96, 119, 0.13);
-  --text-main: #27313a;
-  --text-strong: #111820;
-  --text-secondary: #53616c;
-  --text-muted: #78848c;
-  --border-main: #d6dde2;
-  --border-hover: #b9c4cc;
-  --accent-main: #466077;
-  --accent-danger: #bd4b4b;
-  --accent-warning: #a87522;
-  --accent-info: #2d7196;
-  --bg-warning-light: rgba(168, 117, 34, 0.13);
-  --text-warning-strong: #7c581b;
-  --bg-pill-default: rgba(83, 97, 108, 0.1);
-  --bg-pill-dirty: rgba(168, 117, 34, 0.14);
-  --text-pill-dirty: #7c581b;
-  --bg-pill-saving: rgba(45, 113, 150, 0.14);
-  --text-pill-saving: #245b78;
-  --bg-pill-saved: rgba(70, 96, 119, 0.13);
-  --text-pill-saved: #3a5368;
-  --bg-pill-error: rgba(189, 75, 75, 0.13);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: light;
-}
-
-:root[data-theme="graphite-dark"] {
-  --bg-app: #101316;
-  --bg-panel: #171c21;
-  --bg-sidebar: #13181d;
-  --bg-topbar: rgba(16, 19, 22, 0.96);
-  --bg-hover: #222a31;
-  --bg-active: rgba(132, 166, 194, 0.18);
-  --text-main: #d8e0e6;
-  --text-strong: #f4f7f9;
-  --text-secondary: #adb9c2;
-  --text-muted: #82909a;
-  --border-main: #2b343c;
-  --border-hover: #46545f;
-  --accent-main: #84a6c2;
-  --accent-danger: #ef8585;
-  --accent-warning: #e0b661;
-  --accent-info: #80bee0;
-  --bg-warning-light: rgba(224, 182, 97, 0.15);
-  --text-warning-strong: #edcc81;
-  --bg-pill-default: rgba(173, 185, 194, 0.1);
-  --bg-pill-dirty: rgba(224, 182, 97, 0.15);
-  --text-pill-dirty: #edcc81;
-  --bg-pill-saving: rgba(128, 190, 224, 0.15);
-  --text-pill-saving: #a8d7ed;
-  --bg-pill-saved: rgba(132, 166, 194, 0.16);
-  --text-pill-saved: #abc7dc;
-  --bg-pill-error: rgba(239, 133, 133, 0.14);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: dark;
-}
-
-:root[data-theme="ember"] {
-  --bg-app: #f7f4f0;
-  --bg-panel: #ffffff;
-  --bg-sidebar: #f0e9e2;
-  --bg-topbar: rgba(247, 244, 240, 0.96);
-  --bg-hover: #e8ddd3;
-  --bg-active: rgba(165, 80, 49, 0.13);
-  --text-main: #3a2f2b;
-  --text-strong: #1e1714;
-  --text-secondary: #665852;
-  --text-muted: #887a72;
-  --border-main: #dfd3c9;
-  --border-hover: #c8b5a8;
-  --accent-main: #a55031;
-  --accent-danger: #c24743;
-  --accent-warning: #ae711e;
-  --accent-info: #3f7191;
-  --bg-warning-light: rgba(174, 113, 30, 0.13);
-  --text-warning-strong: #815418;
-  --bg-pill-default: rgba(102, 88, 82, 0.1);
-  --bg-pill-dirty: rgba(174, 113, 30, 0.14);
-  --text-pill-dirty: #815418;
-  --bg-pill-saving: rgba(63, 113, 145, 0.14);
-  --text-pill-saving: #315b75;
-  --bg-pill-saved: rgba(111, 121, 78, 0.14);
-  --text-pill-saved: #56603e;
-  --bg-pill-error: rgba(194, 71, 67, 0.13);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: light;
-}
-
-:root[data-theme="ember-dark"] {
-  --bg-app: #17110f;
-  --bg-panel: #211916;
-  --bg-sidebar: #1c1512;
-  --bg-topbar: rgba(23, 17, 15, 0.96);
-  --bg-hover: #2d221e;
-  --bg-active: rgba(218, 129, 86, 0.18);
-  --text-main: #e5d9d2;
-  --text-strong: #fff6f0;
-  --text-secondary: #c5b2a8;
-  --text-muted: #9a8980;
-  --border-main: #382b26;
-  --border-hover: #57443c;
-  --accent-main: #da8156;
-  --accent-danger: #ee827b;
-  --accent-warning: #e2b45f;
-  --accent-info: #89b9d3;
-  --bg-warning-light: rgba(226, 180, 95, 0.15);
-  --text-warning-strong: #efca7e;
-  --bg-pill-default: rgba(197, 178, 168, 0.1);
-  --bg-pill-dirty: rgba(226, 180, 95, 0.15);
-  --text-pill-dirty: #efca7e;
-  --bg-pill-saving: rgba(137, 185, 211, 0.15);
-  --text-pill-saving: #add2e3;
-  --bg-pill-saved: rgba(154, 178, 112, 0.15);
-  --text-pill-saved: #c2d59d;
-  --bg-pill-error: rgba(238, 130, 123, 0.14);
-
-  color: var(--text-main);
-  background: var(--bg-app);
-  color-scheme: dark;
-}
-
 
 * {
   box-sizing: border-box;
@@ -1128,6 +909,17 @@ button {
   max-width: 100%;
 }
 
+.mdx-editor-wrapper .prose a {
+  color: var(--accent-main);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+
+.mdx-editor-wrapper .prose a:hover {
+  color: var(--text-strong);
+}
+
 .secondary-action {
   background: var(--bg-panel);
   border: 1px solid var(--border-hover);
@@ -1535,116 +1327,116 @@ button {
 
 /* ── Calendar dark mode ── */
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-nav-btn {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-nav-btn {
   background: var(--bg-hover);
   border-color: var(--border-main);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-nav-btn:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-nav-btn:hover {
   background: var(--bg-hover);
   border-color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-title-btn {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-title-btn {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-title-btn:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-title-btn:hover {
   background: var(--bg-hover);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-stats {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-stats {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-weekday {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-weekday {
   color: var(--text-muted);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day:hover {
   background: var(--bg-hover);
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.today {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.today {
   background: transparent;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.today .cal-day-num {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.today .cal-day-num {
   background: var(--accent-main);
   border-radius: 50%;
   color: var(--bg-app);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.selected {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.selected {
   background: rgba(100, 150, 220, 0.14);
   border-color: #6a9fd8;
   box-shadow: 0 0 0 2px rgba(100, 150, 220, 0.12);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.today.selected {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.today.selected {
   background: rgba(100, 150, 220, 0.14);
   border-color: #6a9fd8;
   box-shadow: 0 0 0 2px rgba(100, 150, 220, 0.12);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.heat-1 { background: rgba(124, 181, 144, 0.06); }
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.heat-2 { background: rgba(124, 181, 144, 0.12); }
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.heat-3 { background: rgba(124, 181, 144, 0.19); }
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.heat-4 { background: rgba(124, 181, 144, 0.27); }
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.heat-1 { background: rgba(124, 181, 144, 0.06); }
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.heat-2 { background: rgba(124, 181, 144, 0.12); }
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.heat-3 { background: rgba(124, 181, 144, 0.19); }
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.heat-4 { background: rgba(124, 181, 144, 0.27); }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.selected.heat-1,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.selected.heat-2,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.selected.heat-3,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day.selected.heat-4 {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.selected.heat-1,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.selected.heat-2,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.selected.heat-3,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day.selected.heat-4 {
   background: rgba(100, 150, 220, 0.14);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-dot {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-dot {
   background: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-dot-count {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-dot-count {
   color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day-detail {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day-detail {
   border-top-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-day-detail-header span {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-day-detail-header span {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-empty {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-empty {
   color: var(--text-muted);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-item {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-item {
   background: var(--bg-panel);
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-item:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-item:hover {
   border-color: var(--text-secondary);
   box-shadow: 0 4px 12px rgba(20, 22, 18, 0.6);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-main strong {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-main strong {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-main small {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-main small {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-meta span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .cal-note-meta time {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-meta span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .cal-note-meta time {
   color: var(--text-muted);
 }
 
@@ -2632,476 +2424,476 @@ button {
   padding: 24px;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .app-frame {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .app-frame {
   background: var(--bg-app);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-topbar {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-topbar {
   background: var(--bg-topbar);
   border-bottom-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-brand strong,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .workspace-title strong,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-row strong,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .context-section h3 {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-brand strong,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .workspace-title strong,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-row strong,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-section h3 {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-brand span:last-child,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .eyebrow,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .panel-title,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .workspace-stats,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .list-header,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-month-group h3,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-row span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-row small,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-row time,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card small,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card time,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .settings-status,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-facts dt,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata-editor span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .summary-text,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .link-group h4,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .link-group span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .link-group p,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .panel-heading span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .month-title span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .result-item span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .result-item time,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .result-item p,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-empty,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-change-list p {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-brand span:last-child,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .eyebrow,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .panel-title,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .workspace-stats,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .list-header,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-month-group h3,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-row span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-row small,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-row time,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card small,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card time,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .settings-status,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-facts dt,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata-editor span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .summary-text,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group h4,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group p,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .panel-heading span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .month-title span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .result-item span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .result-item time,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .result-item p,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-empty,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-change-list p {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .topbar-icon-button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-actions button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .secondary-action,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .context-actions button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .link-group button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-task-grid button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-list-tools button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-delete-action,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-menu button,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-footer button {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .topbar-icon-button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-actions button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .secondary-action,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-actions button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-task-grid button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list-tools button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-delete-action,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-menu button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-footer button {
   background: var(--bg-panel);
   border-color: var(--border-main);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .topbar-icon-button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-actions button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .secondary-action:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .context-actions button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .link-group button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-list-tools button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-menu button:hover,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-footer button:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .topbar-icon-button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-actions button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .secondary-action:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-actions button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list-tools button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-menu button:hover,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-footer button:hover {
   background: var(--bg-hover);
   border-color: var(--text-secondary);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .topbar-icon-button.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .window-actions button.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-list-tools button.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-row.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-task-grid button.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .secondary-action.active,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-menu button.active {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .topbar-icon-button.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-actions button.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list-tools button.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-row.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-task-grid button.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .secondary-action.active,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-menu button.active {
   background: rgba(124, 181, 144, 0.12);
   border-color: var(--accent-main);
   color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-bar {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-bar {
   background: var(--bg-app);
   border-top-color: var(--border-main);
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .settings-window-backdrop {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .settings-window-backdrop {
   background: rgba(20, 22, 18, 0.8);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .settings-window {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .settings-window {
   background: var(--bg-sidebar);
   border-color: var(--border-main);
   box-shadow: 0 28px 70px rgba(20, 22, 18, 0.8);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .settings-close-button {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .settings-close-button {
   background: var(--bg-hover);
   border-color: var(--border-main);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .settings-close-button:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .settings-close-button:hover {
   background: var(--bg-hover);
   border-color: var(--text-secondary);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.demo,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.loading,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata span {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.demo,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.loading,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata span {
   background: var(--bg-hover);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.dirty,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata .save-state.dirty {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.dirty,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata .save-state.dirty {
   background: rgba(200, 150, 40, 0.12);
   color: #d4aa40;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.saving,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata .save-state.saving {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.saving,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata .save-state.saving {
   background: rgba(56, 139, 253, 0.12);
   color: #6aacf5;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.saved,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata .save-state.saved {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.saved,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata .save-state.saved {
   background: rgba(61, 160, 67, 0.12);
   color: #6bc575;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .status-pill.error,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata .save-state.error {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .status-pill.error,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata .save-state.error {
   background: rgba(224, 96, 88, 0.12);
   color: #e06058;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .sidebar {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .sidebar {
   background: var(--bg-sidebar);
   border-right-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .sidebar-resizer {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .sidebar-resizer {
   background: var(--bg-sidebar);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .sidebar-resizer:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .sidebar-resizer:hover {
   background: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .sidebar-resizer::before {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .sidebar-resizer::before {
   background: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .context-panel {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-panel {
   background: var(--bg-app);
   border-left-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-list,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .list-header {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .list-header {
   background: var(--bg-sidebar);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .workspace-topbar {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .workspace-topbar {
   background: var(--bg-topbar);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .editor {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .editor {
   background: var(--bg-panel);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .workspace-topbar,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .editor-header,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-list {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .workspace-topbar,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .editor-header,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list {
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .clear-search-btn:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .clear-search-btn:hover {
   background: var(--bg-hover);
   color: var(--text-strong);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .command-box,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter-menu,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .search-input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .setting-input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .result-item,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .month-item,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .setting-box,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .context-section,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata-editor input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .metadata-editor select,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-box textarea,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-box pre,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-change,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-change pre {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .command-box,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter-menu,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .search-input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .setting-input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .result-item,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .month-item,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .setting-box,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-section,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata-editor input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .metadata-editor select,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-box textarea,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-box pre,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-change,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-change pre {
   background: var(--bg-panel);
   border-color: var(--border-main);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .command-box input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .markdown-input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) textarea,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) input,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) select {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .command-box input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .markdown-input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) textarea,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) input,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) select {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter summary {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter summary {
   border-right-color: var(--border-main);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter summary::after {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter summary::after {
   border-top-color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter-menu label {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter-menu label {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter-menu label:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter-menu label:hover {
   background: var(--bg-hover);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-check {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-check {
   color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .category-filter-menu small {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .category-filter-menu small {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover {
   background: var(--bg-sidebar);
   border-color: var(--border-main);
   box-shadow: 0 24px 60px rgba(10, 12, 10, 0.4);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-header,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-footer {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-header,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-footer {
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-title h2 {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-title h2 {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-count {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-count {
   background: var(--bg-hover);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-close {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-close {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-close:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-close:hover {
   background: var(--bg-hover);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-filter-box {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-filter-box {
   background: var(--bg-app);
   border-color: var(--border-main);
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-filter-box:focus-within {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-filter-box:focus-within {
   border-color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-filter-box input {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-filter-box input {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-sort-toggle button {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-sort-toggle button {
   background: var(--bg-panel);
   border-color: var(--border-main);
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-sort-toggle button:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-sort-toggle button:hover {
   background: var(--bg-hover);
   border-color: var(--text-muted);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-sort-toggle button.active {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-sort-toggle button.active {
   background: rgba(124, 181, 144, 0.12);
   border-color: var(--accent-main);
   color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-empty,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-popover-footer,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-note-header span {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-empty,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-popover-footer,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-note-header span {
   color: var(--text-muted);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-note-section {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-note-section {
   border-top-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tags-note-header h3 {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tags-note-header h3 {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip {
   background: var(--bg-panel);
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip:hover {
   background: var(--bg-hover);
   border-color: var(--accent-main);
   box-shadow: 0 2px 8px rgba(124, 181, 144, 0.1);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip-name {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip-name {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip-count {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip-count {
   background: var(--bg-app);
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip.active {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip.active {
   background: var(--accent-main);
   border-color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip.active .tag-chip-name,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip.active .tag-chip-count {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip.active .tag-chip-name,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip.active .tag-chip-count {
   color: var(--bg-app);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-chip.active .tag-chip-count {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-chip.active .tag-chip-count {
   background: rgba(28, 30, 26, 0.15);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card-select {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card-select {
   background: var(--bg-panel);
   border-color: var(--border-main);
   box-shadow: 0 1px 2px rgba(20, 22, 18, 0.8);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card:hover .note-card-select {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card:hover .note-card-select {
   border-color: var(--text-secondary);
   box-shadow: 0 8px 18px rgba(20, 22, 18, 0.8);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card.active .note-card-select {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card.active .note-card-select {
   background: rgba(124, 181, 144, 0.08);
   border-color: var(--accent-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-card strong {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-card strong {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .note-delete-action:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-delete-action:hover {
   background: #e06058;
   border-color: #e06058;
   color: #ffffff;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .markdown-preview {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .markdown-preview {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .markdown-preview blockquote {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .markdown-preview blockquote {
   border-left-color: #4a4b42;
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .markdown-preview code,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .markdown-preview pre {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .markdown-preview code,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .markdown-preview pre {
   background: #262821;
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .tag-strip span,
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .scope-pill {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .tag-strip span,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .scope-pill {
   background: rgba(124, 181, 144, 0.12);
   color: var(--accent-main);
   border: 1px solid rgba(124, 181, 144, 0.25);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-action {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-action {
   background: #3d6b4e;
   color: #ffffff;
   border-color: #4a8060;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .llm-box pre.llm-error {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-box pre.llm-error {
   border-color: #e06058;
   color: #e8837c;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-error {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-error {
   color: #e8837c;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-input-wrapper {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-input-wrapper {
   background: var(--bg-panel);
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-input-toolbar {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-input-toolbar {
   background: var(--bg-sidebar);
   border-top-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-btn {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-btn {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-btn:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-btn:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-quick-action-menu {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-quick-action-menu {
   background: var(--bg-sidebar);
   border-color: var(--border-main);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-run-btn {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-run-btn {
   background: #3d6b4e;
   color: #fff;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .operation-details .detail-key {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .operation-details .detail-key {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .operation-details .detail-value {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .operation-details .detail-value {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-process-log {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-process-log {
   background: #23251e;
   border-color: var(--border-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-process-log summary {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-process-log summary {
   color: var(--text-main);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-process-log summary:hover {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-process-log summary:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-process-content strong {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-process-content strong {
   color: var(--text-secondary);
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .agent-process-content pre {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .agent-process-content pre {
   background: var(--bg-app);
   border-color: var(--border-main);
   color: var(--text-main);
@@ -3205,7 +2997,7 @@ button {
 }
 
 /* === MDXEditor Dark Mode Overrides === */
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .mdx-editor-wrapper,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .mdx-editor-wrapper,
 body.dark-theme .mdxeditor-toolbar {
   background-color: var(--bg-sidebar) !important;
   color: var(--text-main) !important;
@@ -3283,7 +3075,12 @@ body.dark-theme .cm-content {
 
 body.dark-theme .cm-cursor,
 body.dark-theme .cm-dropCursor {
-  border-left-color: var(--border-main) !important;
+  border-left-color: var(--text-main) !important;
+}
+
+/* Fix for rich-text caret in dark mode */
+body.dark-theme .mdx-editor-main [contenteditable="true"] {
+  caret-color: var(--text-main) !important;
 }
 
 /* === Code Block Toolbar: show on hover only ===
@@ -3302,13 +3099,164 @@ body.dark-theme .cm-dropCursor {
   pointer-events: auto;
 }
 
+/* === daisyUI migration compatibility layer === */
+.settings-window.modal-box {
+  background: var(--color-base-100);
+  max-width: none;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.settings-window .settings-panel {
+  background: var(--color-base-100);
+  height: 100%;
+}
+
+.settings-window-header h2 {
+  left: auto;
+  position: static;
+  transform: none;
+}
+
+.settings-toolbar.tabs {
+  border-bottom: 0;
+  display: grid;
+  gap: 4px;
+  justify-content: stretch;
+  padding: 4px;
+}
+
+.settings-tab-button.tab {
+  border: 1px solid transparent;
+  flex-direction: row;
+  min-height: auto;
+  min-width: 0;
+}
+
+.settings-tab-button.tab-active {
+  border-color: var(--color-primary);
+}
+
+.settings-window .setting-box {
+  padding: 20px;
+}
+
+.setting-label.form-control,
+.setting-checkbox-label.label {
+  color: var(--color-base-content);
+  margin: 0;
+}
+
+.setting-label .setting-input.input,
+.setting-label .setting-input.select {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+  margin: 0;
+}
+
+.settings-status.alert {
+  color: inherit;
+  margin: 0;
+}
+
+.tags-popover.card {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+  border-radius: var(--radius-box, 1rem);
+  max-width: none;
+  min-width: 0;
+}
+
+.tags-filter-box.input {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+  padding: 0 12px;
+}
+
+.tags-sort-toggle.join {
+  gap: 0;
+}
+
+.tags-sort-toggle .btn,
+.tag-chip.btn {
+  border-color: var(--color-base-300);
+}
+
+.tag-chip.btn {
+  transform: none;
+}
+
+.tag-chip.btn .tag-chip-name,
+.tag-chip.btn .tag-chip-count {
+  color: inherit;
+}
+
+.tag-chip.btn .tag-chip-count {
+  background: color-mix(in oklch, currentColor 12%, transparent);
+}
+
+.cal-note-item.btn {
+  flex-direction: row;
+  text-transform: none;
+}
+
+.agent-input-wrapper {
+  background: var(--color-base-100);
+  border: 0;
+  border-radius: 0;
+}
+
+.agent-command.textarea {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  padding: 12px;
+}
+
+.agent-input-toolbar {
+  background: transparent;
+  border-top: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.agent-quick-action-btn.btn,
+.agent-run-btn.btn,
+.agent-footer .btn {
+  border-radius: var(--radius-field, 0.5rem);
+}
+
+.agent-quick-action-menu.dropdown-content {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+}
+
+.agent-quick-action-menu.dropdown-content button {
+  width: 100%;
+}
+
+.agent-change-list.card,
+.agent-change {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+}
+
+.agent-process-log.collapse {
+  background: var(--color-base-100);
+  border-color: var(--color-base-300);
+}
+
+.agent-process-log.collapse summary {
+  padding: 8px 12px;
+}
+
 /* === Dark mode text selection === */
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .mdx-editor-wrapper ::selection {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .mdx-editor-wrapper ::selection {
   background: rgba(124, 181, 144, 0.30);
   color: #ffffff;
 }
 
-:root:is([data-theme="dark"], [data-theme$="-dark"]) .mdx-editor-wrapper ::-moz-selection {
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .mdx-editor-wrapper ::-moz-selection {
   background: rgba(124, 181, 144, 0.30);
   color: #ffffff;
 }

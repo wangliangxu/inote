@@ -55,14 +55,14 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
   }
 
   return (
-    <div className="tags-popover">
-      <div className="tags-popover-header">
-        <div className="tags-popover-title">
-          <h2>{t('tags.title')}</h2>
-          <span className="tags-popover-count">{allTags.length}</span>
+    <div className="tags-popover card bg-base-100 text-base-content shadow-2xl">
+      <div className="tags-popover-header flex items-center justify-between border-b border-base-300 px-5 py-4">
+        <div className="tags-popover-title flex items-center gap-2">
+          <h2 className="m-0 text-lg font-bold">{t('tags.title')}</h2>
+          <span className="tags-popover-count badge badge-primary badge-sm">{allTags.length}</span>
         </div>
         <button
-          className="tags-popover-close"
+          className="tags-popover-close btn btn-ghost btn-sm btn-circle"
           type="button"
           onClick={onClose}
           aria-label={t('tags.close')}
@@ -71,20 +71,21 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
         </button>
       </div>
 
-      <div className="tags-popover-toolbar">
-        <div className="tags-filter-box">
-          <Search size={14} />
+      <div className="tags-popover-toolbar flex items-center gap-2 px-5 py-4">
+        <label className="tags-filter-box input input-bordered input-sm flex flex-1 items-center gap-2">
+          <Search size={14} className="text-base-content/50" />
           <input
+            className="grow"
             type="text"
             placeholder={t('tags.filterPlaceholder')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             autoFocus
           />
-        </div>
-        <div className="tags-sort-toggle">
+        </label>
+        <div className="tags-sort-toggle join">
           <button
-            className={sortMode === 'frequency' ? 'active' : ''}
+            className={`join-item btn btn-sm btn-square ${sortMode === 'frequency' ? 'active btn-primary' : 'btn-ghost'}`}
             type="button"
             onClick={() => setSortMode('frequency')}
             title={t('tags.sortByFrequency')}
@@ -93,7 +94,7 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
             <TrendingDown size={14} />
           </button>
           <button
-            className={sortMode === 'alpha' ? 'active' : ''}
+            className={`join-item btn btn-sm btn-square ${sortMode === 'alpha' ? 'active btn-primary' : 'btn-ghost'}`}
             type="button"
             onClick={() => setSortMode('alpha')}
             title={t('tags.sortByAlpha')}
@@ -104,45 +105,45 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
         </div>
       </div>
 
-      <div className="tags-cloud">
+      <div className="tags-cloud flex flex-wrap gap-2 overflow-y-auto px-5 pb-4">
         {filteredTags.length === 0 ? (
-          <p className="tags-empty">
+          <p className="tags-empty text-sm text-base-content/60">
             {filter.trim() ? t('tags.noMatch') : t('tags.noTags')}
           </p>
         ) : (
           filteredTags.map((tag) => (
             <button
               key={tag.name}
-              className={`tag-chip ${selectedTag === tag.name ? 'active' : ''}`}
+              className={`tag-chip btn btn-sm rounded-full ${selectedTag === tag.name ? 'active btn-primary' : 'btn-outline'}`}
               type="button"
               onClick={() => handleTagClick(tag.name)}
             >
-              <span className="tag-chip-name">#{tag.name}</span>
-              <span className="tag-chip-count">{tag.count}</span>
+              <span className="tag-chip-name truncate">#{tag.name}</span>
+              <span className="tag-chip-count badge badge-sm">{tag.count}</span>
             </button>
           ))
         )}
       </div>
 
       {selectedTag && (
-        <div className="tags-note-section">
-          <div className="tags-note-header">
-            <h3>#{selectedTag}</h3>
-            <span>{t('tags.notesCount', { count: selectedNotes.length })}</span>
+        <div className="tags-note-section border-t border-base-300 px-5 py-4">
+          <div className="tags-note-header mb-3 flex items-center justify-between gap-3">
+            <h3 className="m-0 truncate text-sm font-bold">#{selectedTag}</h3>
+            <span className="badge badge-ghost">{t('tags.notesCount', { count: selectedNotes.length })}</span>
           </div>
-          <div className="cal-note-list tags-note-list">
+          <div className="cal-note-list tags-note-list grid max-h-56 gap-2 overflow-y-auto">
             {selectedNotes.map((note) => (
               <button
-                className="cal-note-item tags-note-item"
+                className="cal-note-item tags-note-item btn h-auto justify-start rounded-lg border border-base-300 bg-base-100 px-3 py-2 text-left hover:bg-base-200"
                 key={note.path}
                 type="button"
                 onClick={() => handleNoteClick(note.path)}
               >
-                <div className="cal-note-main">
-                  <strong>{note.title}</strong>
-                  {note.summary && <small>{note.summary}</small>}
+                <div className="cal-note-main min-w-0 flex-1">
+                  <strong className="block truncate text-sm">{note.title}</strong>
+                  {note.summary && <small className="block truncate text-xs text-base-content/60">{note.summary}</small>}
                 </div>
-                <div className="cal-note-meta">
+                <div className="cal-note-meta ml-auto flex shrink-0 flex-col items-end gap-0.5 text-xs text-base-content/50">
                   <span>{note.category}</span>
                   <time>{note.updatedAt}</time>
                 </div>
@@ -153,7 +154,7 @@ export function TagsPanel({ notes, onSelectNote, onClose }: TagsPanelProps) {
       )}
 
       {!selectedTag && (
-        <div className="tags-popover-footer">
+        <div className="tags-popover-footer flex items-center gap-2 border-t border-base-300 px-5 py-3 text-xs text-base-content/60">
           <span>{t('tags.tagsCount', { count: allTags.length })}</span>
           <span>·</span>
           <span>{t('tags.taggedNotesCount', { count: totalTaggedNotes })}</span>

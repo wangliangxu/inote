@@ -61,26 +61,28 @@ describe('theme helpers', () => {
   it('maps color themes to light and dark dataset values', () => {
     expect(getThemeDatasetValue('light', 'default')).toBe('light')
     expect(getThemeDatasetValue('dark', 'default')).toBe('dark')
-    expect(getThemeDatasetValue('light', 'forest')).toBe('forest')
-    expect(getThemeDatasetValue('dark', 'forest')).toBe('forest-dark')
-    expect(getThemeDatasetValue('light', 'graphite')).toBe('graphite')
-    expect(getThemeDatasetValue('dark', 'graphite')).toBe('graphite-dark')
-    expect(getThemeDatasetValue('light', 'ember')).toBe('ember')
-    expect(getThemeDatasetValue('dark', 'ember')).toBe('ember-dark')
+    expect(getThemeDatasetValue('light', 'corporate')).toBe('corporate')
+    expect(getThemeDatasetValue('dark', 'corporate')).toBe('business')
+    expect(getThemeDatasetValue('light', 'cupcake')).toBe('cupcake')
+    expect(getThemeDatasetValue('dark', 'cupcake')).toBe('dracula')
+    expect(getThemeDatasetValue('light', 'nord')).toBe('nord')
+    expect(getThemeDatasetValue('dark', 'nord')).toBe('dim')
   })
 
   it('accepts the redesigned color themes and rejects removed themes', () => {
     expect(isColorTheme('default')).toBe(true)
-    expect(isColorTheme('forest')).toBe(true)
-    expect(isColorTheme('graphite')).toBe(true)
-    expect(isColorTheme('ember')).toBe(true)
-    expect(isColorTheme('nord')).toBe(false)
+    expect(isColorTheme('corporate')).toBe(true)
+    expect(isColorTheme('cupcake')).toBe(true)
+    expect(isColorTheme('nord')).toBe(true)
+    expect(isColorTheme('forest')).toBe(false)
+    expect(isColorTheme('graphite')).toBe(false)
+    expect(isColorTheme('ember')).toBe(false)
     expect(isColorTheme('sepia')).toBe(false)
     expect(isColorTheme('ocean')).toBe(false)
   })
 
   it('reads removed stored color themes as default', () => {
-    const storage = new Map<string, string>([['inote.colorTheme', 'nord']])
+    const storage = new Map<string, string>([['inote.colorTheme', 'forest']])
     const localStorage = {
       getItem: (key: string) => storage.get(key) ?? null,
     } as Storage
@@ -90,11 +92,13 @@ describe('theme helpers', () => {
 
   it('detects default and custom dark dataset themes', () => {
     expect(isDarkThemeDatasetValue('dark')).toBe(true)
-    expect(isDarkThemeDatasetValue('forest-dark')).toBe(true)
-    expect(isDarkThemeDatasetValue('graphite-dark')).toBe(true)
-    expect(isDarkThemeDatasetValue('ember-dark')).toBe(true)
+    expect(isDarkThemeDatasetValue('business')).toBe(true)
+    expect(isDarkThemeDatasetValue('dracula')).toBe(true)
+    expect(isDarkThemeDatasetValue('dim')).toBe(true)
     expect(isDarkThemeDatasetValue('light')).toBe(false)
-    expect(isDarkThemeDatasetValue('forest')).toBe(false)
+    expect(isDarkThemeDatasetValue('corporate')).toBe(false)
+    expect(isDarkThemeDatasetValue('cupcake')).toBe(false)
+    expect(isDarkThemeDatasetValue('nord')).toBe(false)
   })
 
 })

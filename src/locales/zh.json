@@ -60,6 +60,7 @@
     "fontSizeXLarge": "特大号",
     "themeFollowSystem": "跟随系统",
     "showTodayNoteButton": "显示今日笔记按钮",
+    "lockUpdateTime": "锁定更新时间",
     "fontFamily": "字体设置",
     "fontFamilyDefault": "系统默认"
   },
