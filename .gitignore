@@ -2,5 +2,6 @@ node_modules/
 dist/
 src-tauri/target/
 .superpowers/
+.worktrees/
 .DS_Store
 *.log
