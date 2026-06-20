@@ -96,3 +96,55 @@ export interface UserSettings {
 export interface LlmChatResponse {
   content: string
 }
+
+export type AgentTurnStatus = 'running' | 'ready' | 'applied' | 'discarded' | 'failed'
+
+export interface AgentSession {
+  id: string
+  notePath: string
+  noteTitle: string
+  createdAt: string
+  updatedAt: string
+  turns: AgentTurn[]
+  operationEvents: AgentOperationEvent[]
+  lastUndoSnapshot?: AgentUndoSnapshot | null
+}
+
+export interface AgentTurn {
+  id: string
+  sessionId: string
+  notePath: string
+  command: string
+  action?: string | null
+  prompt: string
+  contextSummary: string
+  rawResponse: string
+  parsedResultJson?: string | null
+  status: AgentTurnStatus
+  error?: string | null
+  createdAt: string
+  completedAt?: string | null
+}
+
+export interface AgentOperationEvent {
+  id: string
+  sessionId: string
+  turnId: string
+  notePath: string
+  operationTypes: string[]
+  changedFields: string[]
+  createdNotePath?: string | null
+  appliedAt: string
+}
+
+export interface AgentUndoSnapshot {
+  id: string
+  sessionId: string
+  eventId: string
+  notePath: string
+  noteBeforeMarkdown: string
+  noteBeforePath: string
+  activePathAfterApply: string
+  createdNotePath?: string | null
+  createdAt: string
+}

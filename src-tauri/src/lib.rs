@@ -17,11 +17,17 @@ pub fn run() {
                 if let Ok(store) = crate::settings::UserSettingsStore::open(&db_path) {
                     if let Ok(settings) = store.load() {
                         if let Some(window) = app.get_webview_window("main") {
-                            if let (Some(w), Some(h)) = (settings.window_width, settings.window_height) {
-                                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w as f64, h as f64)));
+                            if let (Some(w), Some(h)) =
+                                (settings.window_width, settings.window_height)
+                            {
+                                let _ = window.set_size(tauri::Size::Logical(
+                                    tauri::LogicalSize::new(w as f64, h as f64),
+                                ));
                             }
                             if let (Some(x), Some(y)) = (settings.window_x, settings.window_y) {
-                                let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x as f64, y as f64)));
+                                let _ = window.set_position(tauri::Position::Logical(
+                                    tauri::LogicalPosition::new(x as f64, y as f64),
+                                ));
                             }
                             if let Some(true) = settings.window_maximized {
                                 let _ = window.maximize();
@@ -69,7 +75,12 @@ pub fn run() {
             commands::get_system_fonts,
             commands::build_llm_request_preview,
             commands::execute_llm_chat,
-            commands::execute_llm_chat_stream
+            commands::execute_llm_chat_stream,
+            commands::load_agent_session,
+            commands::record_agent_turn,
+            commands::record_agent_operation_event,
+            commands::load_last_agent_undo_snapshot,
+            commands::clear_last_agent_undo_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("failed to run iNote");

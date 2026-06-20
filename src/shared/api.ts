@@ -1,5 +1,16 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
-import type { LlmChatResponse, LlmProviderSettings, Note, NoteLinks, SearchResult, UserSettings } from './types'
+import type {
+  AgentOperationEvent,
+  AgentSession,
+  AgentTurn,
+  AgentUndoSnapshot,
+  LlmChatResponse,
+  LlmProviderSettings,
+  Note,
+  NoteLinks,
+  SearchResult,
+  UserSettings,
+} from './types'
 
 interface WriteNoteInput {
   vaultRoot: string
@@ -53,6 +64,29 @@ interface LlmChatInput {
   settings: LlmProviderSettings
   prompt: string
   context: string
+}
+
+interface LoadAgentSessionInput {
+  vaultRoot: string
+  notePath: string
+}
+
+interface RecordAgentTurnInput {
+  vaultRoot: string
+  noteTitle: string
+  turn: AgentTurn
+}
+
+interface RecordAgentOperationEventInput {
+  vaultRoot: string
+  noteTitle?: string | null
+  event: AgentOperationEvent
+  undoSnapshot?: AgentUndoSnapshot | null
+}
+
+interface AgentUndoSnapshotInput {
+  vaultRoot: string
+  notePath: string
 }
 
 export async function scanVault(vaultRoot: string): Promise<Note[]> {
@@ -145,6 +179,26 @@ export async function executeLlmChatStream(input: LlmChatInput, onChunk: (chunk:
     onChunk(message)
   }
   return invoke<void>('execute_llm_chat_stream', { input, onChunk: channel })
+}
+
+export async function loadAgentSession(input: LoadAgentSessionInput): Promise<AgentSession | null> {
+  return invoke<AgentSession | null>('load_agent_session', { input })
+}
+
+export async function recordAgentTurn(input: RecordAgentTurnInput): Promise<void> {
+  return invoke<void>('record_agent_turn', { input })
+}
+
+export async function recordAgentOperationEvent(input: RecordAgentOperationEventInput): Promise<void> {
+  return invoke<void>('record_agent_operation_event', { input })
+}
+
+export async function loadLastAgentUndoSnapshot(input: AgentUndoSnapshotInput): Promise<AgentUndoSnapshot | null> {
+  return invoke<AgentUndoSnapshot | null>('load_last_agent_undo_snapshot', { input })
+}
+
+export async function clearLastAgentUndoSnapshot(input: AgentUndoSnapshotInput): Promise<void> {
+  return invoke<void>('clear_last_agent_undo_snapshot', { input })
 }
 
 export async function loadUserSettings(): Promise<UserSettings> {
