@@ -287,6 +287,7 @@ impl AgentSessionStore {
                 ],
             )
             .map_err(|error| format!("failed to record agent turn: {error}"))?;
+        self.enforce_turn_retention(&turn.session_id, DEFAULT_TURN_RETENTION)?;
         Ok(())
     }
 
@@ -335,14 +336,19 @@ impl AgentSessionStore {
     }
 
     pub fn store_undo_snapshot(&self, snapshot: &AgentUndoSnapshot) -> Result<(), String> {
-        self.conn
+        let transaction = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| format!("failed to start agent undo snapshot transaction: {error}"))?;
+
+        transaction
             .execute(
                 "DELETE FROM agent_undo_snapshots WHERE note_path = ?1",
                 params![snapshot.note_path],
             )
             .map_err(|error| format!("failed to replace previous undo snapshot: {error}"))?;
 
-        self.conn
+        transaction
             .execute(
                 "
                 INSERT INTO agent_undo_snapshots (
@@ -371,6 +377,10 @@ impl AgentSessionStore {
                 ],
             )
             .map_err(|error| format!("failed to store agent undo snapshot: {error}"))?;
+
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit agent undo snapshot: {error}"))?;
         Ok(())
     }
 
@@ -730,7 +740,61 @@ mod tests {
     }
 
     #[test]
-    fn retention_keeps_latest_twenty_turns_in_ascending_chronological_order_after_cleanup() {
+    fn failed_undo_snapshot_replacement_keeps_existing_snapshot() {
+        let store = store();
+        let session_id = "session-1";
+        let note_path = "knowledge/example.md";
+        let other_note_path = "knowledge/other.md";
+        store
+            .upsert_session(session_id, note_path, "Example", "2026-06-20T09:00:00Z")
+            .unwrap();
+        let turn = sample_turn("turn-1", session_id, note_path, "2026-06-20T09:05:00Z");
+        store.record_turn(&turn).unwrap();
+        let event = sample_event(session_id, &turn.id, note_path);
+        store.record_operation_event(&event).unwrap();
+        let existing = sample_snapshot(
+            "snapshot-existing",
+            session_id,
+            &event.id,
+            note_path,
+            "Existing body",
+            "2026-06-20T10:00:00Z",
+        );
+        let conflicting_other_note_snapshot = sample_snapshot(
+            "snapshot-conflict",
+            session_id,
+            &event.id,
+            other_note_path,
+            "Other body",
+            "2026-06-20T10:01:00Z",
+        );
+        let conflicting_replacement = sample_snapshot(
+            "snapshot-conflict",
+            session_id,
+            &event.id,
+            note_path,
+            "Replacement body",
+            "2026-06-20T10:02:00Z",
+        );
+
+        store.store_undo_snapshot(&existing).unwrap();
+        store
+            .store_undo_snapshot(&conflicting_other_note_snapshot)
+            .unwrap();
+
+        let error = store
+            .store_undo_snapshot(&conflicting_replacement)
+            .unwrap_err();
+
+        assert!(error.contains("failed to store agent undo snapshot"));
+        assert_eq!(
+            store.load_last_undo_snapshot(note_path).unwrap(),
+            Some(existing)
+        );
+    }
+
+    #[test]
+    fn record_turn_keeps_latest_twenty_turns_in_ascending_chronological_order() {
         let store = store();
         let session_id = "session-1";
         let note_path = "knowledge/example.md";
@@ -747,10 +811,6 @@ mod tests {
             );
             store.record_turn(&turn).unwrap();
         }
-
-        store
-            .enforce_turn_retention(session_id, DEFAULT_TURN_RETENTION)
-            .unwrap();
 
         let session = store.load_session(note_path).unwrap().unwrap();
         let turn_ids: Vec<_> = session.turns.iter().map(|turn| turn.id.as_str()).collect();
