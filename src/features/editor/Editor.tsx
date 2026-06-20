@@ -172,7 +172,8 @@ export function Editor({
   }, [tocNumbering])
 
   const [activeHeadingIndex, setActiveHeadingIndex] = useState<number>(-1)
-
+  const activeHeadingIndexRef = useRef(activeHeadingIndex)
+  useEffect(() => { activeHeadingIndexRef.current = activeHeadingIndex }, [activeHeadingIndex])
 
   // Auto-scroll TOC when active heading changes
   useEffect(() => {
@@ -225,6 +226,9 @@ export function Editor({
 
     return result
   }, [normalizedMarkdown])
+
+  const headingsRef = useRef(headings)
+  useEffect(() => { headingsRef.current = headings }, [headings])
 
   // Helper: find the active heading index from a 0-based line index
   const findActiveHeadingFromLine = useCallback((lineIndex: number) => {
@@ -365,11 +369,42 @@ export function Editor({
   const realmRef = useRef<any>(null)
   const previousModeRef = useRef<string>(savedViewMode)
   const currentViewModeRef = useRef<string>(savedViewMode)
+  const contextToSync = useRef<{ text: string, offset: number } | null>(null)
 
   const realmTrackerPlugin = useMemo(() => realmPlugin({
     init: (realm) => {
       realmRef.current = realm
       realm.sub(viewMode$, (mode: string) => {
+        const oldMode = currentViewModeRef.current
+        
+        // --- Save Cursor Context ---
+        if (oldMode === 'rich-text') {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0 && selection.anchorNode) {
+            const text = selection.anchorNode.textContent || ''
+            const offset = selection.anchorOffset || 0
+            if (text.trim()) {
+              contextToSync.current = { text: text.trim(), offset }
+            } else {
+              contextToSync.current = null
+            }
+          }
+        } else if (oldMode === 'source' || oldMode === 'diff') {
+          const view = getCmEditorView()
+          if (view) {
+            const cursor = view.state.selection.main.head
+            const line = view.state.doc.lineAt(cursor)
+            const snippet = line.text.replace(/[*_#`~\[\]()>=-]/g, '').trim()
+            if (snippet.length > 2) {
+              const textBeforeCursor = line.text.substring(0, cursor - line.from)
+              const offset = textBeforeCursor.replace(/[*_#`~\[\]()>=-]/g, '').trimStart().length
+              contextToSync.current = { text: snippet, offset }
+            } else {
+              contextToSync.current = null
+            }
+          }
+        }
+
         currentViewModeRef.current = mode
         if (!metadataPanelOpenRef.current) {
           localStorage.setItem('mdxeditor-view-mode', mode)
@@ -379,9 +414,117 @@ export function Editor({
           localStorage.setItem('mdxeditor-view-mode', mode)
           setSetting('mdxeditor-view-mode', mode).catch(console.error)
         }
+
+        // --- Restore Cursor Context ---
+        const syncContext = contextToSync.current
+        
+        let attempts = 0
+        const tryRestore = () => {
+          attempts++
+          if (mode === 'source' || mode === 'diff') {
+            const view = getCmEditorView()
+            if (view && syncContext) {
+              const { text, offset } = syncContext
+              const docText = view.state.doc.toString()
+              let idx = docText.indexOf(text)
+              if (idx === -1 && text.length > 10) {
+                idx = docText.indexOf(text.substring(0, 10))
+              }
+              if (idx !== -1) {
+                view.dispatch({
+                  selection: { anchor: idx + Math.min(offset, text.length) },
+                  scrollIntoView: true
+                })
+                view.focus()
+              }
+            } else if (attempts < 10) {
+              setTimeout(tryRestore, 50)
+            }
+          } else if (mode === 'rich-text') {
+            const richTextArea = document.querySelector('.mdx-editor-main [contenteditable="true"]')
+            // Wait until the editor has mounted and contains text
+            if (richTextArea && richTextArea.textContent?.trim().length) {
+              let foundBlock: Element | null = null
+              
+              if (syncContext) {
+                const { text } = syncContext
+                const blocks = Array.from(richTextArea.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, pre, blockquote'))
+                for (const block of blocks) {
+                  const blockText = block.textContent || ''
+                  if (text && blockText.includes(text)) {
+                    foundBlock = block
+                    break
+                  }
+                  if (text.length > 5 && blockText.includes(text.substring(0, 10))) {
+                    foundBlock = block
+                    break
+                  }
+                }
+              }
+
+              if (foundBlock) {
+                try {
+                  foundBlock.scrollIntoView({ behavior: 'auto', block: 'center' })
+                  const walker = document.createTreeWalker(foundBlock, NodeFilter.SHOW_TEXT, null)
+                  let node: Node | null
+                  let currentOffset = 0
+                  const targetOffset = syncContext?.offset || 0
+                  let targetNode: Node | null = null
+                  let targetNodeOffset = 0
+                  let lastNode: Node | null = null
+                  
+                  while ((node = walker.nextNode())) {
+                    lastNode = node
+                    const nodeLength = node.nodeValue?.length || 0
+                    if (currentOffset + nodeLength >= targetOffset) {
+                      targetNode = node
+                      targetNodeOffset = targetOffset - currentOffset
+                      break
+                    }
+                    currentOffset += nodeLength
+                  }
+                  
+                  if (!targetNode && lastNode) {
+                    targetNode = lastNode
+                    targetNodeOffset = lastNode.nodeValue?.length || 0
+                  }
+                  
+                  if (targetNode) {
+                    const sel = window.getSelection()
+                    const range = document.createRange()
+                    range.setStart(targetNode, targetNodeOffset)
+                    range.collapse(true)
+                    sel?.removeAllRanges()
+                    sel?.addRange(range)
+                  }
+                } catch (e) {
+                  console.error('Failed to restore lexical cursor:', e)
+                }
+              } else {
+                // Fallback to active heading if text match failed
+                const headingIdx = activeHeadingIndexRef.current
+                if (headingIdx >= 0 && headingsRef.current[headingIdx]) {
+                  const h = headingsRef.current[headingIdx]
+                  const hElements = richTextArea.querySelectorAll(`h${h.level}`)
+                  const normalizedText = h.text.replace(/\s+/g, ' ')
+                  for (let i = 0; i < hElements.length; i++) {
+                    if (hElements[i].textContent?.trim().replace(/\s+/g, ' ') === normalizedText) {
+                      hElements[i].scrollIntoView({ behavior: 'auto', block: 'start' })
+                      break
+                    }
+                  }
+                }
+              }
+            } else if (attempts < 15) {
+              setTimeout(tryRestore, 50)
+            }
+          }
+        }
+        
+        setTimeout(tryRestore, 50)
       })
     }
-  }), [])
+  }), [getCmEditorView])
 
   useEffect(() => {
     if (metadataPanelOpen) {
