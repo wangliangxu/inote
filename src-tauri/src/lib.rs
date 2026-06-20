@@ -1,3 +1,4 @@
+pub mod agent_session;
 pub mod commands;
 pub mod indexer;
 pub mod llm;
