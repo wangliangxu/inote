@@ -36,18 +36,61 @@ export function parseAgentResult(raw: string): AgentResult {
 }
 
 function parseJsonObject(raw: string): any {
-  const trimmed = raw.trim()
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
-  const candidate = fenced ? fenced[1].trim() : trimmed
+  let processed = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+
   try {
-    const parsed = JSON.parse(candidate)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('object')
-    }
-    return parsed
-  } catch {
-    throw new Error('Agent response was not valid JSON.')
+    return parseCandidate(processed)
+  } catch (e1) {}
+
+  let unfenced = processed
+  if (unfenced.startsWith('```')) {
+    const lines = unfenced.split('\n')
+    if (lines[0].startsWith('```')) lines.shift()
+    if (lines.length > 0 && lines[lines.length - 1].trim() === '```') lines.pop()
+    unfenced = lines.join('\n').trim()
+    try {
+      return parseCandidate(unfenced)
+    } catch (e2) {}
   }
+
+  const lines = processed.split('\n')
+  let insideBlock = false
+  let currentBlock: string[] = []
+  for (const line of lines) {
+    if (!insideBlock && line.trim().startsWith('```json')) {
+      insideBlock = true
+      currentBlock = []
+    } else if (insideBlock && line.trim() === '```') {
+      insideBlock = false
+      try {
+        return parseCandidate(currentBlock.join('\n').trim())
+      } catch (e3) {}
+    } else if (insideBlock) {
+      currentBlock.push(line)
+    }
+  }
+
+  const firstBrace = processed.indexOf('{')
+  const lastBrace = processed.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+    const candidate = processed.slice(firstBrace, lastBrace + 1)
+    try {
+      return parseCandidate(candidate)
+    } catch (e4) {
+      const errorMessage = e4 instanceof Error ? e4.message : String(e4)
+      throw new Error(`Agent response was not valid JSON. Parse error: ${errorMessage}`)
+    }
+  }
+
+  throw new Error('Agent response was not valid JSON. No JSON object found.')
+}
+
+function parseCandidate(candidate: string): any {
+  const parsed = JSON.parse(candidate)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Parsed result is not a JSON object.')
+  }
+  return parsed
 }
 
 function validateOperation(value: any): AgentOperation {

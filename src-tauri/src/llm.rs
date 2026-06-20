@@ -8,6 +8,7 @@ pub struct LlmProviderSettings {
     pub api_base_url: String,
     pub api_key: String,
     pub model: String,
+    pub max_context_length: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -171,6 +172,7 @@ mod tests {
             api_base_url: "https://api.example.com/v1/".to_string(),
             api_key: "secret".to_string(),
             model: "model-a".to_string(),
+            max_context_length: Some(10000),
         }
     }
 

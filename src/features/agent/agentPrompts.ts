@@ -6,9 +6,10 @@ interface BuildAgentPromptInput {
   note: Note
   notes: Note[]
   action?: QuickAgentAction
+  maxContextLength?: number
 }
 
-export function buildAgentPrompt({ command, note, notes, action }: BuildAgentPromptInput): { prompt: string, context: string } {
+export function buildAgentPrompt({ command, note, notes, action, maxContextLength }: BuildAgentPromptInput): { prompt: string, context: string } {
   return {
     prompt: [
       'You are iNote Note Agent. Return only valid JSON and no Markdown wrapper.',
@@ -31,7 +32,7 @@ export function buildAgentPrompt({ command, note, notes, action }: BuildAgentPro
       `Existing categories: ${unique(notes.map((item) => item.category)).join(', ') || 'none'}`,
       `Existing tags: ${unique(notes.flatMap((item) => item.tags)).join(', ') || 'none'}`,
       '',
-      note.body.slice(0, 6000),
+      note.body.slice(0, maxContextLength ?? 10000),
     ].filter((line) => line !== '').join('\n'),
   }
 }

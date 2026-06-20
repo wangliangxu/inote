@@ -31,6 +31,7 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
   const [agentProcess, setAgentProcess] = useState<{ prompt: string, context: string, rawResponse?: string } | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
   const [status, setStatus] = useState<'idle' | 'running' | 'applying' | 'error'>('idle')
+  const [isProcessLogOpen, setIsProcessLogOpen] = useState(false)
   const [error, setError] = useState('')
 
   const canApplyCurrent = useMemo(() => result ? hasCurrentNoteWrite(result.operations) : false, [result])
@@ -47,7 +48,8 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
 
     try {
       setStatus('running')
-      const request = buildAgentPrompt({ command: nextCommand, note, notes, action: nextAction })
+      setIsProcessLogOpen(true)
+      const request = buildAgentPrompt({ command: nextCommand, note, notes, action: nextAction, maxContextLength: settings.maxContextLength })
       setAgentProcess({ prompt: request.prompt, context: request.context, rawResponse: '' })
       
       let fullResponse = ''
@@ -62,6 +64,7 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
 
       setResult(parseAgentResult(fullResponse))
       setStatus('idle')
+      setIsProcessLogOpen(false)
     } catch (err) {
       setStatus('error')
       setError(err instanceof Error ? err.message : String(err))
@@ -97,6 +100,34 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
       <div className="agent-scroll-area flex-1 space-y-3 overflow-y-auto p-3">
         {error ? <p className="agent-error alert alert-error py-2 text-sm">{error}</p> : null}
         
+        {agentProcess && (
+          <details 
+            className="agent-process-log collapse collapse-arrow border border-base-300 bg-base-100" 
+            open={isProcessLogOpen}
+            onToggle={(e) => setIsProcessLogOpen(e.currentTarget.open)}
+          >
+            <summary className="collapse-title min-h-0 px-3 py-2 text-sm font-semibold">Agent Process Log</summary>
+            <div className="agent-process-content collapse-content px-0 pb-0">
+              <div className="max-h-96 overflow-y-auto px-3 pb-3 pt-0 grid gap-2 text-xs">
+                <details className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-200/30">
+                  <summary className="collapse-title min-h-0 px-3 py-2 text-xs font-semibold text-base-content/70">System Prompt</summary>
+                  <div className="collapse-content px-3 pb-3">
+                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.prompt}</pre>
+                  </div>
+                </details>
+                <details className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-200/30">
+                  <summary className="collapse-title min-h-0 px-3 py-2 text-xs font-semibold text-base-content/70">Context</summary>
+                  <div className="collapse-content px-3 pb-3">
+                    <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.context}</pre>
+                  </div>
+                </details>
+                <strong className="mt-1 px-1 text-base-content/60">Raw Response</strong>
+                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.rawResponse || 'Waiting for response...'}</pre>
+              </div>
+            </div>
+          </details>
+        )}
+
         {result && (
           <>
             <p className="panel-title compact">Proposed Changes</p>
@@ -124,20 +155,6 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
               </button>
             </div>
           </>
-        )}
-
-        {agentProcess && (
-          <details className="agent-process-log collapse collapse-arrow border border-base-300 bg-base-100" open={status === 'running'}>
-            <summary className="collapse-title min-h-0 px-3 py-2 text-sm font-semibold">Agent Process Log</summary>
-            <div className="agent-process-content collapse-content grid gap-2 px-3 text-xs">
-              <strong className="text-base-content/60">System Prompt</strong>
-              <pre>{agentProcess.prompt}</pre>
-              <strong className="text-base-content/60">Context</strong>
-              <pre>{agentProcess.context}</pre>
-              <strong className="text-base-content/60">Raw Response</strong>
-              <pre>{agentProcess.rawResponse || 'Waiting for response...'}</pre>
-            </div>
-          </details>
         )}
       </div>
 

@@ -298,6 +298,16 @@ export function SettingsPanel({
                   onChange={(event) => updateLlmSettings({ model: event.target.value })}
                 />
               </label>
+              <label className="setting-label form-control grid gap-2">
+                <span className="label-text font-semibold">{t('settings.maxContextLength') || 'Max Input Length'}</span>
+                <input
+                  className="setting-input input input-bordered w-full"
+                  type="number"
+                  placeholder="10000"
+                  value={llmSettings.maxContextLength || 10000}
+                  onChange={(event) => updateLlmSettings({ maxContextLength: parseInt(event.target.value, 10) || 10000 })}
+                />
+              </label>
               <p className="settings-status alert alert-warning alert-soft py-2 text-sm">
                 {t('settings.apiKeysNote')}
               </p>

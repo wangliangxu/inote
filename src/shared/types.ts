@@ -68,6 +68,7 @@ export interface LlmProviderSettings {
   apiBaseUrl: string
   apiKey: string
   model: string
+  maxContextLength?: number
 }
 
 export interface UserSettings {
