@@ -570,6 +570,7 @@ mod tests {
                 api_base_url: "https://api.example.com/v1".to_string(),
                 api_key: "secret".to_string(),
                 model: "model-a".to_string(),
+                max_context_length: Some(10000),
             },
             prompt: "Summarize".to_string(),
             context: "Note".to_string(),

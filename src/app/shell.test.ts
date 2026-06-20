@@ -52,8 +52,8 @@ describe('startup shell', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
     const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
 
-    expect(app).toContain("isActive ? 'note-card active' : 'note-card'")
-    expect(app).toContain("noteListMode === 'cards' ? 'note-card-grid'")
+    expect(app).toMatch(/isActive \? ["']note-card active["'] : ["']note-card["']/)
+    expect(app).toMatch(/noteListMode === ["']cards["'] \? ["']note-card-grid["']/)
     expect(app).toContain('minmax(0, 1fr)')
     expect(styles).toContain('grid-template-columns: repeat(auto-fill, 180px)')
     expect(styles).toContain('height: 206px')
@@ -70,14 +70,14 @@ describe('startup shell', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
     expect(app).toContain('{showTodayNoteButton ? (')
-    expect(app).toContain("title={t('settings.todayNote')}")
+    expect(app).toMatch(/title=\{t\(["']settings\.todayNote["']\)\}/)
     expect(app).toContain(') : null}')
   })
 
   it('uses the primary color for the title bar create note button', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
-    expect(app).toContain('className="btn btn-primary btn-sm btn-square" type="button" onClick={addCategoryNote}')
+    expect(app).toMatch(/className=["']btn btn-primary btn-sm btn-square["'][\s\S]*?type=["']button["'][\s\S]*?onClick=\{addCategoryNote\}/)
   })
 
   it('enables the Tauri asset protocol for local markdown images', () => {

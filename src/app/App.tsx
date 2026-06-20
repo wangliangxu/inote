@@ -2037,7 +2037,7 @@ export function App() {
           style={{ WebkitAppRegion: "no-drag" } as any}
         >
           <button
-            className="btn btn-ghost btn-sm btn-square"
+            className="btn btn-primary btn-sm btn-square"
             type="button"
             onClick={addCategoryNote}
             title={t("app.createNote")}
