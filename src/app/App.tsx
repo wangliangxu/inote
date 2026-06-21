@@ -657,9 +657,9 @@ export function App() {
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY);
         const hasStoredLlmSettings =
           savedSettings.llmSettings.providerName !==
-            defaultLlmSettings.providerName ||
+          defaultLlmSettings.providerName ||
           savedSettings.llmSettings.apiBaseUrl !==
-            defaultLlmSettings.apiBaseUrl ||
+          defaultLlmSettings.apiBaseUrl ||
           savedSettings.llmSettings.apiKey !== defaultLlmSettings.apiKey ||
           savedSettings.llmSettings.model !== defaultLlmSettings.model;
         if (!hasStoredLlmSettings && savedLlmSettings) {
@@ -824,7 +824,7 @@ export function App() {
           y: Math.round(logicalPos.y),
           maximized: isMaximized,
         });
-      } catch {}
+      } catch { }
     };
 
     const debouncedSave = () => {
@@ -868,7 +868,7 @@ export function App() {
 
     return () => {
       disposed = true;
-      unlistenPromise.then((dispose) => dispose()).catch(() => {});
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
       stopVaultWatcher().catch(() => {
         // Ignore when not running inside Tauri.
       });
@@ -953,7 +953,7 @@ export function App() {
     });
 
     return () => {
-      unlistenPromise.then((dispose) => dispose()).catch(() => {});
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
   }, [vaultRoot, safeConfirm]);
 
@@ -965,7 +965,7 @@ export function App() {
     });
 
     return () => {
-      unlistenPromise.then((dispose) => dispose()).catch(() => {});
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
   }, [vaultRoot, refreshVaultFromDisk]);
 
@@ -975,7 +975,7 @@ export function App() {
     });
 
     return () => {
-      unlistenPromise.then((dispose) => dispose()).catch(() => {});
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
   }, []);
 
@@ -990,7 +990,7 @@ export function App() {
     });
 
     return () => {
-      unlistenPromise.then((dispose) => dispose()).catch(() => {});
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
   }, []);
 
@@ -1036,9 +1036,9 @@ export function App() {
       return getTodayNote(notes)
         ? [getTodayNote(notes)!]
         : sortByUpdatedDesc(notes.filter((n) => !isSpecialCategory(n))).slice(
-            0,
-            5,
-          );
+          0,
+          5,
+        );
     if (activeView === "category")
       return filterNotesByCategory(notes, activeCategory);
     if (activeView === "todo") {
@@ -1259,13 +1259,13 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              ...metadata,
-              body,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
-              isDirty: true,
-            }
+            ...note,
+            ...metadata,
+            body,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1277,11 +1277,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              title,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            title,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1293,11 +1293,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              createdAt,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            createdAt,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1309,10 +1309,10 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              updatedAt,
-              isDirty: true,
-            }
+            ...note,
+            updatedAt,
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1324,11 +1324,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              due,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            due,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1340,11 +1340,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              status,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            status,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1386,11 +1386,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              priority,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            priority,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1402,11 +1402,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              project,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            project,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -1423,11 +1423,11 @@ export function App() {
       current.map((note) =>
         note.path === activeNote.path
           ? {
-              ...note,
-              tags,
-              updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
-              isDirty: true,
-            }
+            ...note,
+            tags,
+            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            isDirty: true,
+          }
           : note,
       ),
     );
@@ -2110,7 +2110,7 @@ export function App() {
           e.preventDefault();
           getCurrentWindow()
             .startDragging()
-            .catch(() => {});
+            .catch(() => { });
         }}
       >
         <div
@@ -2180,13 +2180,13 @@ export function App() {
           style={{ WebkitAppRegion: "no-drag" } as any}
         >
           <button
-            className="btn btn-primary btn-sm btn-square"
+            className="btn btn-ghost btn-sm btn-square"
             type="button"
             onClick={addCategoryNote}
             title={t("app.createNote")}
             aria-label={t("app.createNote")}
           >
-            <Pencil size={18} />
+            <Pencil size={18} className="text-accent" />
           </button>
 
           {showTodayNoteButton ? (
@@ -2197,7 +2197,7 @@ export function App() {
               title={t("settings.todayNote")}
               aria-label={t("settings.todayNote")}
             >
-              <FilePlus2 size={18} />
+              <FilePlus2 size={18} className="text-accent" />
             </button>
           ) : null}
 
@@ -2265,9 +2265,8 @@ export function App() {
       <div
         className="flex-1 grid min-h-0 overflow-hidden bg-base-100"
         style={{
-          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${
-            rightSidebarVisible ? `5px ${rightSidebarWidth}px` : "0 0"
-          }`,
+          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${rightSidebarVisible ? `5px ${rightSidebarWidth}px` : "0 0"
+            }`,
         }}
       >
         <aside
