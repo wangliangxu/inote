@@ -1127,23 +1127,16 @@ export function App() {
     }
   }, [settingsLoaded, visibleNotes, activePath, renderedCount, notes.length]);
 
-  // IntersectionObserver to load more notes when sentinel enters viewport
-  useEffect(() => {
-    const sentinel = loadMoreRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setRenderedCount((current) =>
-            Math.min(current + NOTES_PAGE_SIZE, visibleNotes.length),
-          );
-        }
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [visibleNotes.length]);
+  const handleNoteListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 400) {
+      if (renderedCount < visibleNotes.length) {
+        setRenderedCount((current) =>
+          Math.min(current + NOTES_PAGE_SIZE, visibleNotes.length),
+        );
+      }
+    }
+  }, [renderedCount, visibleNotes.length]);
 
   const visibleNoteGroups = useMemo(() => {
     const sliced = visibleNotes.slice(0, renderedCount);
@@ -1205,6 +1198,32 @@ export function App() {
       }))
       .sort((a, b) => b.month.localeCompare(a.month));
   }, [visibleNotes, renderedCount, activeView]);
+
+  const handleNoteListKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      if (visibleNotes.length === 0) return;
+      const currentIndex = visibleNotes.findIndex((n) => n.path === activePath);
+      if (currentIndex === -1) {
+        setActivePath(visibleNotes[0].path);
+        return;
+      }
+      
+      let nextIndex = currentIndex;
+      if ((e.key === "ArrowDown" || e.key === "ArrowRight") && currentIndex < visibleNotes.length - 1) {
+        nextIndex = currentIndex + 1;
+      } else if ((e.key === "ArrowUp" || e.key === "ArrowLeft") && currentIndex > 0) {
+        nextIndex = currentIndex - 1;
+      }
+
+      if (nextIndex !== currentIndex) {
+        if (nextIndex >= renderedCount) {
+          setRenderedCount((current) => Math.min(current + NOTES_PAGE_SIZE, visibleNotes.length));
+        }
+        setActivePath(visibleNotes[nextIndex].path);
+      }
+    }
+  }, [visibleNotes, activePath, renderedCount]);
 
   useEffect(() => {
     if (!vaultRoot.trim() || !query.trim()) {
@@ -2422,6 +2441,9 @@ export function App() {
           </div>
           <div
             className={`note-list flex-1 min-h-0 overflow-y-auto px-2 py-2 flex flex-col gap-2 ${noteListMode}`}
+            tabIndex={0}
+            onKeyDown={handleNoteListKeyDown}
+            onScroll={handleNoteListScroll}
           >
             {visibleNoteGroups.map((group) => {
               const header = (
@@ -2478,13 +2500,6 @@ export function App() {
                 </section>
               );
             })}
-            {renderedCount < visibleNotes.length && (
-              <div
-                ref={loadMoreRef}
-                className="load-more-sentinel"
-                aria-hidden="true"
-              />
-            )}
           </div>
         </aside>
         <div
