@@ -43,4 +43,16 @@ describe('buildAgentPrompt', () => {
     expect(prompt.context).toContain('Existing tags: ai, inote')
     expect(prompt.prompt).toContain('Create a related note')
   })
+
+  it('includes compact session summary when provided', () => {
+    const request = buildAgentPrompt({
+      command: 'Follow up',
+      note,
+      notes: [note],
+      sessionSummary: 'Recent agent session for Example:\n- ready: Summarize -> Added summary',
+    })
+
+    expect(request.context).toContain('Recent agent session for Example')
+    expect(request.context.indexOf('Recent agent session')).toBeLessThan(request.context.indexOf('Current note:'))
+  })
 })

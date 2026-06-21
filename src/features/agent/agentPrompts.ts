@@ -7,9 +7,10 @@ interface BuildAgentPromptInput {
   notes: Note[]
   action?: QuickAgentAction
   maxContextLength?: number
+  sessionSummary?: string
 }
 
-export function buildAgentPrompt({ command, note, notes, action, maxContextLength }: BuildAgentPromptInput): { prompt: string, context: string } {
+export function buildAgentPrompt({ command, note, notes, action, maxContextLength, sessionSummary }: BuildAgentPromptInput): { prompt: string, context: string } {
   return {
     prompt: [
       'You are iNote Note Agent. Return only valid JSON and no Markdown wrapper.',
@@ -21,6 +22,8 @@ export function buildAgentPrompt({ command, note, notes, action, maxContextLengt
       `User command: ${command.trim() || actionInstruction(action)}`,
     ].filter(Boolean).join('\n'),
     context: [
+      sessionSummary?.trim() ? sessionSummary.trim() : '',
+      sessionSummary?.trim() ? '' : '',
       'Current note:',
       `Title: ${note.title}`,
       `Path: ${note.path}`,
@@ -33,7 +36,7 @@ export function buildAgentPrompt({ command, note, notes, action, maxContextLengt
       `Existing tags: ${unique(notes.flatMap((item) => item.tags)).join(', ') || 'none'}`,
       '',
       note.body.slice(0, maxContextLength ?? 10000),
-    ].filter((line) => line !== '').join('\n'),
+    ].filter((line, index, all) => line !== '' || all[index - 1] !== '').join('\n'),
   }
 }
 
