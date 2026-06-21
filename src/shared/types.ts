@@ -148,3 +148,32 @@ export interface AgentUndoSnapshot {
   createdNotePath?: string | null
   createdAt: string
 }
+
+export type ReviewGroupKind = 'metadata' | 'body_append' | 'body_replace' | 'create_note' | 'suggestion' | 'risk'
+
+export interface ReviewPlan {
+  id: string
+  turnId: string
+  message: string
+  groups: ReviewGroup[]
+  canApply: boolean
+  highRisk: boolean
+}
+
+export interface ReviewGroup {
+  id: string
+  operationIndexes: number[]
+  kind: ReviewGroupKind
+  title: string
+  summary: string
+  items: ReviewItem[]
+  selected: boolean
+  requiresConfirmation?: boolean
+}
+
+export interface ReviewItem {
+  label: string
+  before?: string
+  after?: string
+  previewMarkdown?: string
+}
