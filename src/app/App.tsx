@@ -1787,6 +1787,10 @@ export function App() {
     }
   }
 
+  async function undoLastAgentApply() {
+    setStatus("Agent undo will be available after operation snapshots are wired.");
+  }
+
   async function addFolder() {
     if (!vaultRoot.trim()) {
       setStatus("Open a real vault before creating folders.");
@@ -2438,9 +2442,11 @@ export function App() {
                 <NoteAgent
                   note={activeNote}
                   notes={notes}
+                  vaultRoot={vaultRoot}
                   settings={llmSettings}
                   onApplyCurrentNote={applyAgentCurrentNote}
                   onCreateNote={createAgentNote}
+                  onUndoLastApply={undoLastAgentApply}
                 />
               </Suspense>
             </>

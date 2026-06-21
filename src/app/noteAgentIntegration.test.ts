@@ -26,4 +26,15 @@ describe('note agent integration', () => {
     expect(app).toContain('await saveNoteWithPathSync(applied.note')
     expect(app).toContain('moveNote({')
   })
+
+  it('wires persisted NoteAgent workbench props', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const agent = readFileSync(resolve(__dirname, '../features/agent/NoteAgent.tsx'), 'utf8')
+
+    expect(app).toContain('vaultRoot={vaultRoot}')
+    expect(app).toContain('onUndoLastApply={undoLastAgentApply}')
+    expect(agent).toContain('loadAgentSession')
+    expect(agent).toContain('buildReviewPlan')
+    expect(agent).toContain('Review Plan')
+  })
 })

@@ -1,19 +1,22 @@
-import { useMemo, useState } from 'react'
-import type { AgentOperation } from './agentTypes'
+import { useEffect, useMemo, useState } from 'react'
 import { FilePlus2, ListChecks, Plus, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
-import { executeLlmChat, executeLlmChatStream } from '../../shared/api'
-import type { LlmProviderSettings, Note } from '../../shared/types'
+import { executeLlmChatStream, loadAgentSession, recordAgentTurn } from '../../shared/api'
+import type { AgentSession, LlmProviderSettings, Note, ReviewPlan } from '../../shared/types'
 import { buildAgentPrompt } from './agentPrompts'
 import { parseAgentResult } from './agentParser'
 import { hasCreateNoteWrite, hasCurrentNoteWrite } from './applyAgentOperations'
 import type { AgentResult, QuickAgentAction } from './agentTypes'
+import { buildReviewPlan, getSelectedOperations } from './agentReviewPlan'
+import { buildAgentSessionSummary } from './agentSessionSummary'
 
 interface NoteAgentProps {
   note: Note
   notes: Note[]
+  vaultRoot: string
   settings: LlmProviderSettings
-  onApplyCurrentNote: (result: AgentResult) => Promise<void>
-  onCreateNote: (result: AgentResult) => Promise<void>
+  onApplyCurrentNote: (result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) => Promise<void>
+  onCreateNote: (result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) => Promise<void>
+  onUndoLastApply: () => Promise<void>
 }
 
 const quickActions: Array<{ action: QuickAgentAction, label: string, icon: typeof Sparkles, command: string }> = [
@@ -25,57 +28,145 @@ const quickActions: Array<{ action: QuickAgentAction, label: string, icon: typeo
   { action: 'create_related', label: 'Related', icon: FilePlus2, command: 'Create a related note that links back to the current note.' },
 ]
 
-export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateNote }: NoteAgentProps) {
+function makeId(prefix: string): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+}
+
+function nowIso(): string {
+  return new Date().toISOString()
+}
+
+export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote, onCreateNote, onUndoLastApply }: NoteAgentProps) {
   const [command, setCommand] = useState('Update tags and summary for this note.')
   const [activeAction, setActiveAction] = useState<QuickAgentAction | undefined>()
   const [agentProcess, setAgentProcess] = useState<{ prompt: string, context: string, rawResponse?: string } | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
+  const [session, setSession] = useState<AgentSession | null>(null)
+  const [reviewPlan, setReviewPlan] = useState<ReviewPlan | null>(null)
+  const [stage, setStage] = useState<'idle' | 'preparing' | 'requesting' | 'receiving' | 'parsing' | 'ready'>('idle')
+  const [activeTurnSessionId, setActiveTurnSessionId] = useState('')
   const [status, setStatus] = useState<'idle' | 'running' | 'applying' | 'error'>('idle')
   const [isProcessLogOpen, setIsProcessLogOpen] = useState(false)
   const [error, setError] = useState('')
 
-  const canApplyCurrent = useMemo(() => result ? hasCurrentNoteWrite(result.operations) : false, [result])
-  const canCreate = useMemo(() => result ? hasCreateNoteWrite(result.operations) : false, [result])
+  const selectedOperationIndexes = useMemo(() => reviewPlan?.groups
+    .filter((group) => group.selected)
+    .flatMap((group) => group.operationIndexes) ?? [], [reviewPlan])
+  const selectedOperations = useMemo(
+    () => result && reviewPlan ? getSelectedOperations(result.operations, reviewPlan.groups) : [],
+    [result, reviewPlan],
+  )
+  const selectedCurrentOperationIndexes = useMemo(() => selectedOperationIndexes.filter((index) => {
+    const operation = result?.operations[index]
+    return operation?.type === 'update_current_note' || operation?.type === 'append_to_current_note' || operation?.type === 'replace_current_note_body'
+  }), [result, selectedOperationIndexes])
+  const selectedCreateOperationIndexes = useMemo(() => selectedOperationIndexes.filter((index) => result?.operations[index]?.type === 'create_note'), [result, selectedOperationIndexes])
+  const canApplyCurrent = useMemo(() => hasCurrentNoteWrite(selectedOperations), [selectedOperations])
+  const canCreate = useMemo(() => hasCreateNoteWrite(selectedOperations), [selectedOperations])
+
+  useEffect(() => {
+    let cancelled = false
+    setSession(null)
+    setReviewPlan(null)
+    setResult(null)
+    setStage('idle')
+    if (!vaultRoot.trim()) return
+    loadAgentSession({ vaultRoot, notePath: note.path })
+      .then((loaded) => {
+        if (!cancelled) setSession(loaded)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [vaultRoot, note.path])
 
   async function runAgent(nextAction = activeAction, nextCommand = command) {
     setError('')
     setResult(null)
+    setReviewPlan(null)
     if (!settings.apiKey.trim()) {
       setStatus('error')
+      setStage('idle')
       setError('Add an LLM API key in Settings first.')
       return
     }
 
     try {
       setStatus('running')
+      const turnId = makeId('turn')
+      const sessionId = session?.id ?? makeId('session')
+      setActiveTurnSessionId(sessionId)
+      setStage('preparing')
       setIsProcessLogOpen(true)
-      const request = buildAgentPrompt({ command: nextCommand, note, notes, action: nextAction, maxContextLength: settings.maxContextLength })
+      const request = buildAgentPrompt({
+        command: nextCommand,
+        note,
+        notes,
+        action: nextAction,
+        maxContextLength: settings.maxContextLength,
+        sessionSummary: buildAgentSessionSummary(session),
+      })
       setAgentProcess({ prompt: request.prompt, context: request.context, rawResponse: '' })
       
       let fullResponse = ''
+      setStage('requesting')
       await executeLlmChatStream({
         settings,
         prompt: request.prompt,
         context: request.context,
       }, (chunk) => {
+        setStage('receiving')
         fullResponse += chunk
         setAgentProcess(prev => prev ? { ...prev, rawResponse: fullResponse } : null)
       })
 
-      setResult(parseAgentResult(fullResponse))
+      setStage('parsing')
+      const parsed = parseAgentResult(fullResponse)
+      const plan = buildReviewPlan(note, parsed, turnId)
+      const completedAt = nowIso()
+      setResult(parsed)
+      setReviewPlan(plan)
+      await recordAgentTurn({
+        vaultRoot,
+        noteTitle: note.title,
+        turn: {
+          id: turnId,
+          sessionId,
+          notePath: note.path,
+          command: nextCommand,
+          action: nextAction ?? null,
+          prompt: request.prompt,
+          contextSummary: request.context.slice(0, 1200),
+          rawResponse: fullResponse,
+          parsedResultJson: JSON.stringify(parsed),
+          status: 'ready',
+          error: null,
+          createdAt: completedAt,
+          completedAt,
+        },
+      })
+      setSession(await loadAgentSession({ vaultRoot, notePath: note.path }))
+      setStage('ready')
       setStatus('idle')
       setIsProcessLogOpen(false)
     } catch (err) {
       setStatus('error')
+      setStage('idle')
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
   async function applyCurrent() {
-    if (!result) return
+    if (!result || !reviewPlan) return
     setStatus('applying')
     try {
-      await onApplyCurrentNote(result)
+      await onApplyCurrentNote(result, selectedCurrentOperationIndexes, reviewPlan.turnId, activeTurnSessionId || session?.id || '')
       setStatus('idle')
     } catch (err) {
       setStatus('error')
@@ -84,10 +175,10 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
   }
 
   async function createNote() {
-    if (!result) return
+    if (!result || !reviewPlan) return
     setStatus('applying')
     try {
-      await onCreateNote(result)
+      await onCreateNote(result, selectedCreateOperationIndexes, reviewPlan.turnId, activeTurnSessionId || session?.id || '')
       setStatus('idle')
     } catch (err) {
       setStatus('error')
@@ -128,20 +219,12 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
           </details>
         )}
 
-        {result && (
+        {renderSessionTimeline(session)}
+        {stage !== 'idle' ? renderStage(stage) : null}
+        {renderReviewPlan(reviewPlan, toggleReviewGroup)}
+
+        {reviewPlan && (
           <>
-            <p className="panel-title compact">Proposed Changes</p>
-            <div className="agent-change-list card border border-base-300 bg-base-100 shadow-sm">
-              <div className="card-body gap-3 p-3">
-              <p className="text-sm text-base-content/70">{result.message || 'Review the proposed operations before applying.'}</p>
-              {result.operations.map((operation, index) => (
-                <div className="agent-change rounded-lg border border-base-300 bg-base-200/50 p-3" key={`${operation.type}-${index}`}>
-                  <strong className="text-sm capitalize">{operation.type.replace(/_/g, ' ')}</strong>
-                  {renderOperationDetails(operation)}
-                </div>
-              ))}
-              </div>
-            </div>
             <div className="agent-footer flex items-center gap-2">
               <button className="btn btn-primary btn-sm btn-square" type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
                 <Plus size={15} />
@@ -150,7 +233,10 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
                 <FilePlus2 size={15} />
               </button>
               <div className="flex-1"></div>
-              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={() => setResult(null)} disabled={status === 'applying'} title="Discard">
+              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={onUndoLastApply} disabled={status === 'applying'} title="Undo last agent apply">
+                <RefreshCw size={15} />
+              </button>
+              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={() => { setResult(null); setReviewPlan(null); setStage('idle') }} disabled={status === 'applying'} title="Discard">
                 <X size={15} />
               </button>
             </div>
@@ -198,45 +284,77 @@ export function NoteAgent({ note, notes, settings, onApplyCurrentNote, onCreateN
       </div>
     </div>
   )
+
+  function toggleReviewGroup(groupId: string) {
+    setReviewPlan((current) => current
+      ? { ...current, groups: current.groups.map((group) => group.id === groupId ? { ...group, selected: !group.selected } : group) }
+      : current)
+  }
 }
 
-function renderOperationDetails(operation: AgentOperation) {
-  switch (operation.type) {
-    case 'update_current_note':
-      return (
-        <div className="operation-details">
-          {Object.entries(operation.patch).map(([key, value]) => (
-            <div key={key} className="detail-row">
-              <span className="detail-key">{key}:</span>
-              <span className="detail-value">{Array.isArray(value) ? value.join(', ') : String(value)}</span>
-            </div>
-          ))}
-        </div>
-      )
-    case 'append_to_current_note':
-    case 'replace_current_note_body':
-    case 'suggest_only':
-      return (
-        <div className="operation-details">
-          <pre>{operation.markdown}</pre>
-        </div>
-      )
-    case 'create_note':
-      return (
-        <div className="operation-details">
-          <div className="detail-row"><span className="detail-key">Title:</span> <span className="detail-value">{operation.note.title}</span></div>
-          <div className="detail-row"><span className="detail-key">Category:</span> <span className="detail-value">{operation.note.category}</span></div>
-          {operation.note.tags && operation.note.tags.length > 0 && (
-            <div className="detail-row"><span className="detail-key">Tags:</span> <span className="detail-value">{operation.note.tags.join(', ')}</span></div>
-          )}
-          {operation.note.summary && (
-            <div className="detail-row"><span className="detail-key">Summary:</span> <span className="detail-value">{operation.note.summary}</span></div>
-          )}
-          <div className="detail-row"><span className="detail-key">Body:</span></div>
-          <pre>{operation.note.body}</pre>
-        </div>
-      )
-    default:
-      return <pre>{JSON.stringify(operation, null, 2)}</pre>
+function renderStage(stage: string) {
+  const stages = ['preparing', 'requesting', 'receiving', 'parsing', 'ready']
+  return (
+    <div className="agent-stage-list" aria-label="Agent progress">
+      {stages.map((item) => (
+        <span key={item} className={stage === item ? 'active' : ''}>{item}</span>
+      ))}
+    </div>
+  )
+}
+
+function renderSessionTimeline(session: AgentSession | null) {
+  if (!session || (session.turns.length === 0 && session.operationEvents.length === 0)) {
+    return <p className="agent-empty text-sm text-base-content/60">No saved agent session for this note yet.</p>
   }
+  return (
+    <div className="agent-timeline">
+      {session.turns.slice(-5).map((turn) => (
+        <details key={turn.id} className="agent-timeline-item">
+          <summary>{turn.command}</summary>
+          <p>{turn.status}{turn.error ? `: ${turn.error}` : ''}</p>
+        </details>
+      ))}
+      {session.operationEvents.slice(-3).map((event) => (
+        <div key={event.id} className="agent-timeline-item applied">
+          Applied {event.operationTypes.join(', ')}: {event.changedFields.join(', ') || 'note'}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function renderReviewPlan(plan: ReviewPlan | null, onToggleGroup: (id: string) => void) {
+  if (!plan) return null
+  return (
+    <>
+      <p className="panel-title compact">Review Plan</p>
+      <div className="agent-review-plan">
+        <p>{plan.message || 'Review the proposed changes before applying.'}</p>
+        {plan.groups.map((group) => (
+          <div key={group.id} className={`agent-review-group ${group.kind}`}>
+            <label>
+              <input
+                type="checkbox"
+                checked={group.selected}
+                disabled={group.kind === 'risk' || group.kind === 'suggestion'}
+                onChange={() => onToggleGroup(group.id)}
+              />
+              <strong>{group.title}</strong>
+            </label>
+            <small>{group.summary}</small>
+            {group.items.map((item) => (
+              <div className="agent-review-item" key={`${group.id}-${item.label}`}>
+                <span>{item.label}</span>
+                {item.before !== undefined || item.after !== undefined ? (
+                  <code>{item.before ?? ''} -&gt; {item.after ?? ''}</code>
+                ) : null}
+                {item.previewMarkdown ? <pre>{item.previewMarkdown}</pre> : null}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
+  )
 }

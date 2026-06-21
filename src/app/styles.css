@@ -2396,6 +2396,111 @@ button {
   white-space: pre-wrap;
 }
 
+.agent-stage-list {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.agent-stage-list span {
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field, 0.5rem);
+  color: var(--color-base-content);
+  font-size: 10px;
+  overflow: hidden;
+  padding: 5px 4px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-stage-list span.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+.agent-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-timeline-item {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box, 0.5rem);
+  font-size: var(--font-size-12);
+  padding: 8px;
+}
+
+.agent-timeline-item summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.agent-timeline-item p {
+  margin: 6px 0 0;
+}
+
+.agent-timeline-item.applied {
+  color: var(--color-success);
+}
+
+.agent-review-plan {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-review-plan > p {
+  color: var(--text-muted);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.agent-review-group {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box, 0.5rem);
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.agent-review-group.risk,
+.agent-review-group.body_replace {
+  border-color: color-mix(in srgb, var(--color-warning) 65%, var(--color-base-300));
+}
+
+.agent-review-group label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.agent-review-group small {
+  color: var(--color-base-content);
+  opacity: 0.7;
+}
+
+.agent-review-item {
+  display: grid;
+  font-size: var(--font-size-12);
+  gap: 4px;
+}
+
+.agent-review-item code,
+.agent-review-item pre {
+  background: var(--color-base-200);
+  border-radius: var(--radius-field, 0.5rem);
+  font-size: 11px;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
 .agent-empty {
   color: var(--text-secondary);
   font-size: var(--font-size-13);
