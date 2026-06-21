@@ -37,4 +37,15 @@ describe('note agent integration', () => {
     expect(agent).toContain('buildReviewPlan')
     expect(agent).toContain('Review Plan')
   })
+
+  it('records agent operation events and supports current-note undo wiring', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('recordAgentOperationEvent')
+    expect(app).toContain('loadLastAgentUndoSnapshot')
+    expect(app).toContain('clearLastAgentUndoSnapshot')
+    expect(app).toContain('noteBeforeMarkdown: noteToMarkdown(activeNote)')
+    expect(app).toContain('noteTitle: saved.title')
+    expect(app).toContain('Undo is not available for created notes yet.')
+  })
 })

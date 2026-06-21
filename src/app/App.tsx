@@ -78,6 +78,8 @@ import {
   type ColorTheme,
 } from "../shared/theme";
 import type {
+  AgentOperationEvent,
+  AgentUndoSnapshot,
   LlmProviderSettings,
   Note,
   NoteLinks,
@@ -94,12 +96,14 @@ import {
 import type { AgentResult } from "../features/agent/agentTypes";
 import {
   archiveNote,
+  clearLastAgentUndoSnapshot,
   createFolder,
   createNote,
   createTodayNote,
   deleteNote,
   emptyTrash,
   getNoteLinks,
+  loadLastAgentUndoSnapshot,
   initializeVault,
   moveNote,
   noteToMarkdown,
@@ -115,6 +119,7 @@ import {
   startVaultWatcher,
   stopVaultWatcher,
   parseMarkdownWithFrontmatter,
+  recordAgentOperationEvent,
   getSetting,
 } from "../shared/api";
 import {
@@ -318,6 +323,17 @@ function localDateString(date = new Date()): string {
     date.getTime() - date.getTimezoneOffset() * 60_000,
   );
   return localDate.toISOString().slice(0, 10);
+}
+
+function makeAgentId(prefix: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+}
+
+function nowIsoString(): string {
+  return new Date().toISOString();
 }
 
 function getFilenameForTitle(title: string) {
@@ -1539,13 +1555,18 @@ export function App() {
     });
   }
 
-  async function applyAgentCurrentNote(result: AgentResult, selectedOperationIndexes?: number[]) {
+  async function applyAgentCurrentNote(
+    result: AgentResult,
+    selectedOperationIndexes: number[],
+    turnId: string,
+    sessionId: string,
+  ) {
     if (!activeNote || !vaultRoot.trim()) {
       setStatus("Open a real vault before applying agent changes.");
       return;
     }
 
-    const selectedOperations = selectedOperationIndexes?.length
+    const selectedOperations = selectedOperationIndexes.length
       ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
       : result.operations;
     const applied = applyCurrentNoteOperations(
@@ -1553,9 +1574,41 @@ export function App() {
       selectedOperations,
       lockUpdateTime ? activeNote.updatedAt : localDateString(),
     );
+    const eventId = makeAgentId("event");
+    const now = nowIsoString();
+    const event: AgentOperationEvent = {
+      id: eventId,
+      sessionId,
+      turnId,
+      notePath: activeNote.path,
+      operationTypes: selectedOperations.map((operation) => operation.type),
+      changedFields: applied.changedFields,
+      createdNotePath: null,
+      appliedAt: now,
+    };
+    const undoSnapshot: AgentUndoSnapshot = {
+      id: makeAgentId("undo"),
+      sessionId: event.sessionId,
+      eventId,
+      notePath: activeNote.path,
+      noteBeforeMarkdown: noteToMarkdown(activeNote),
+      noteBeforePath: activeNote.path,
+      activePathAfterApply: activeNote.path,
+      createdNotePath: null,
+      createdAt: now,
+    };
+
     setIsSaving(true);
     try {
       const saved = await saveNoteWithPathSync(applied.note);
+      const savedEvent = { ...event, notePath: saved.path };
+      const savedSnapshot = { ...undoSnapshot, notePath: saved.path, activePathAfterApply: saved.path };
+      await recordAgentOperationEvent({
+        vaultRoot: vaultRoot.trim(),
+        noteTitle: saved.title,
+        event: savedEvent,
+        undoSnapshot: savedSnapshot,
+      });
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
         current.map((note) => (note.path === activeNote.path ? saved : note)),
@@ -1738,13 +1791,18 @@ export function App() {
     }
   }
 
-  async function createAgentNote(result: AgentResult, selectedOperationIndexes?: number[]) {
+  async function createAgentNote(
+    result: AgentResult,
+    selectedOperationIndexes: number[],
+    turnId: string,
+    sessionId: string,
+  ) {
     if (!vaultRoot.trim()) {
       setStatus("Open a real vault before creating notes.");
       return;
     }
 
-    const selectedOperations = selectedOperationIndexes?.length
+    const selectedOperations = selectedOperationIndexes.length
       ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
       : result.operations;
     const draft = getCreateNoteDraft(selectedOperations);
@@ -1770,6 +1828,21 @@ export function App() {
         path: created.path,
         content: noteToMarkdown(noteToSave),
       });
+      await recordAgentOperationEvent({
+        vaultRoot: vaultRoot.trim(),
+        noteTitle: activeNote?.title ?? saved.title,
+        event: {
+          id: makeAgentId("event"),
+          sessionId,
+          turnId,
+          notePath: activeNote?.path ?? saved.path,
+          operationTypes: selectedOperations.map((operation) => operation.type),
+          changedFields: [],
+          createdNotePath: saved.path,
+          appliedAt: nowIsoString(),
+        },
+        undoSnapshot: null,
+      });
       setLinkVersion((current) => current + 1);
       setNotes((current) => [
         saved,
@@ -1788,7 +1861,61 @@ export function App() {
   }
 
   async function undoLastAgentApply() {
-    setStatus("Agent undo will be available after operation snapshots are wired.");
+    if (!activeNote || !vaultRoot.trim()) {
+      setStatus("Open a real vault before undoing agent changes.");
+      return;
+    }
+    try {
+      const snapshot = await loadLastAgentUndoSnapshot({
+        vaultRoot: vaultRoot.trim(),
+        notePath: activeNote.path,
+      });
+      if (!snapshot) {
+        setStatus("No agent apply snapshot is available for this note.");
+        return;
+      }
+      if (snapshot.createdNotePath) {
+        setStatus("Undo is not available for created notes yet.");
+        return;
+      }
+
+      let restorePath = snapshot.noteBeforePath;
+      if (activeNote.path !== snapshot.noteBeforePath) {
+        const moved = await moveNote({
+          vaultRoot: vaultRoot.trim(),
+          from: activeNote.path,
+          to: snapshot.noteBeforePath,
+        });
+        restorePath = moved.path;
+      }
+      const restored = await writeNote({
+        vaultRoot: vaultRoot.trim(),
+        path: restorePath,
+        content: snapshot.noteBeforeMarkdown,
+      });
+      await clearLastAgentUndoSnapshot({
+        vaultRoot: vaultRoot.trim(),
+        notePath: activeNote.path,
+      });
+      if (restorePath !== activeNote.path) {
+        await clearLastAgentUndoSnapshot({
+          vaultRoot: vaultRoot.trim(),
+          notePath: restorePath,
+        });
+      }
+      setLinkVersion((current) => current + 1);
+      setNotes((current) =>
+        current.map((note) => (note.path === activeNote.path ? restored : note)),
+      );
+      setActivePath(restored.path);
+      setActiveCategory(restored.category);
+      setSaveError(false);
+      setStatus(`Undid last agent apply for ${restored.path}.`);
+    } catch (error) {
+      setSaveError(true);
+      setStatus(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   }
 
   async function addFolder() {
