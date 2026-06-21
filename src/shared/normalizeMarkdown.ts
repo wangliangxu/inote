@@ -82,6 +82,7 @@ export const noOverEscapeExtension = {
 export const EDITOR_TO_MARKDOWN_OPTIONS = {
   bullet: '-' as const,
   listItemIndent: 'one' as const,
+  incrementListMarker: true,
   // Force links to use [text](url) format instead of <url> autolinks.
   // MDXEditor's MDX parser treats `<` as JSX tag start, so autolinks like
   // <user@example.com> cause "Unexpected character `@`" parse errors.

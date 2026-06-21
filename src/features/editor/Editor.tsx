@@ -5,6 +5,7 @@ import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting } from '../../
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
+import { orderedListStartPlugin } from './orderedListStartPlugin'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
 import {
@@ -651,6 +652,7 @@ export function Editor({
   const plugins = useMemo(() => [
     headingsPlugin(),
     listsPlugin(),
+    orderedListStartPlugin(),
     quotePlugin(),
     thematicBreakPlugin(),
     markdownShortcutPlugin(),
