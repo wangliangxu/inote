@@ -88,6 +88,7 @@ import type {
 import { hasNoteChanges } from "../shared/noteChanges";
 import {
   applyCurrentNoteOperations,
+  filterOperationsByIndexes,
   getCreateNoteDraft,
 } from "../features/agent/applyAgentOperations";
 import type { AgentResult } from "../features/agent/agentTypes";
@@ -1477,42 +1478,7 @@ export function App() {
         }
       }
 
-      const expectedFilename = `${getFilenameForTitle(noteToSave.title)}.md`;
-      let expectedPath = noteToSave.category
-        ? `${noteToSave.category}/${expectedFilename}`
-        : expectedFilename;
-      expectedPath = expectedPath.replace(/\/+/g, "/");
-
-      let finalPath = noteToSave.path;
-
-      if (noteToSave.path !== expectedPath) {
-        try {
-          const moved = await moveNote({
-            vaultRoot: vaultRoot.trim(),
-            from: noteToSave.path,
-            to: expectedPath,
-          });
-          finalPath = moved.path;
-        } catch (error) {
-          const newExpectedPath = expectedPath.replace(
-            /\.md$/,
-            `-${Math.floor(1000 + Math.random() * 9000)}.md`,
-          );
-          const moved = await moveNote({
-            vaultRoot: vaultRoot.trim(),
-            from: noteToSave.path,
-            to: newExpectedPath,
-          });
-          finalPath = moved.path;
-        }
-        noteToSave.path = finalPath;
-      }
-
-      const saved = await writeNote({
-        vaultRoot: vaultRoot.trim(),
-        path: finalPath,
-        content: noteToMarkdown(noteToSave),
-      });
+      const saved = await saveNoteWithPathSync(noteToSave);
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
         current.map((note) => (note.path === activeNote.path ? saved : note)),
@@ -1532,28 +1498,71 @@ export function App() {
     }
   }
 
-  async function applyAgentCurrentNote(result: AgentResult) {
+  async function saveNoteWithPathSync(note: Note): Promise<Note> {
+    let noteToSave = { ...note };
+
+    const expectedFilename = `${getFilenameForTitle(noteToSave.title)}.md`;
+    let expectedPath = noteToSave.category
+      ? `${noteToSave.category}/${expectedFilename}`
+      : expectedFilename;
+    expectedPath = expectedPath.replace(/\/+/g, "/");
+
+    let finalPath = noteToSave.path;
+
+    if (noteToSave.path !== expectedPath) {
+      try {
+        const moved = await moveNote({
+          vaultRoot: vaultRoot.trim(),
+          from: noteToSave.path,
+          to: expectedPath,
+        });
+        finalPath = moved.path;
+      } catch {
+        const newExpectedPath = expectedPath.replace(
+          /\.md$/,
+          `-${Math.floor(1000 + Math.random() * 9000)}.md`,
+        );
+        const moved = await moveNote({
+          vaultRoot: vaultRoot.trim(),
+          from: noteToSave.path,
+          to: newExpectedPath,
+        });
+        finalPath = moved.path;
+      }
+      noteToSave.path = finalPath;
+    }
+
+    return writeNote({
+      vaultRoot: vaultRoot.trim(),
+      path: finalPath,
+      content: noteToMarkdown(noteToSave),
+    });
+  }
+
+  async function applyAgentCurrentNote(result: AgentResult, selectedOperationIndexes?: number[]) {
     if (!activeNote || !vaultRoot.trim()) {
       setStatus("Open a real vault before applying agent changes.");
       return;
     }
 
+    const selectedOperations = selectedOperationIndexes?.length
+      ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
+      : result.operations;
     const applied = applyCurrentNoteOperations(
       activeNote,
-      result.operations,
+      selectedOperations,
       lockUpdateTime ? activeNote.updatedAt : localDateString(),
     );
     setIsSaving(true);
     try {
-      const saved = await writeNote({
-        vaultRoot: vaultRoot.trim(),
-        path: applied.note.path,
-        content: noteToMarkdown(applied.note),
-      });
+      const saved = await saveNoteWithPathSync(applied.note);
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
         current.map((note) => (note.path === activeNote.path ? saved : note)),
       );
+      if (activeNote.path !== saved.path) {
+        setActivePath(saved.path);
+      }
       setActiveCategory(saved.category);
       setSaveError(false);
       setStatus(`Agent updated ${applied.changedFields.join(", ") || "note"}.`);
@@ -1729,13 +1738,16 @@ export function App() {
     }
   }
 
-  async function createAgentNote(result: AgentResult) {
+  async function createAgentNote(result: AgentResult, selectedOperationIndexes?: number[]) {
     if (!vaultRoot.trim()) {
       setStatus("Open a real vault before creating notes.");
       return;
     }
 
-    const draft = getCreateNoteDraft(result.operations);
+    const selectedOperations = selectedOperationIndexes?.length
+      ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
+      : result.operations;
+    const draft = getCreateNoteDraft(selectedOperations);
     try {
       const created = await createNote({
         vaultRoot: vaultRoot.trim(),

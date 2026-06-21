@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Note } from '../../shared/types'
-import { applyCurrentNoteOperations, getCreateNoteDraft } from './applyAgentOperations'
+import { applyCurrentNoteOperations, filterOperationsByIndexes, getCreateNoteDraft } from './applyAgentOperations'
 
 const baseNote: Note = {
   path: 'knowledge/old.md',
@@ -74,5 +74,20 @@ describe('getCreateNoteDraft', () => {
       { type: 'create_note', note: { title: 'A', category: 'knowledge', body: 'A' } },
       { type: 'create_note', note: { title: 'B', category: 'knowledge', body: 'B' } },
     ])).toThrow('Only one note can be created at a time.')
+  })
+})
+
+describe('filterOperationsByIndexes', () => {
+  it('filters operations by selected indexes while preserving order', () => {
+    const operations = [
+      { type: 'update_current_note', patch: { summary: 'New' } },
+      { type: 'suggest_only', markdown: 'Suggestion' },
+      { type: 'append_to_current_note', markdown: 'Appendix' },
+    ] as const
+
+    expect(filterOperationsByIndexes([...operations], [2, 0])).toEqual([
+      { type: 'update_current_note', patch: { summary: 'New' } },
+      { type: 'append_to_current_note', markdown: 'Appendix' },
+    ])
   })
 })

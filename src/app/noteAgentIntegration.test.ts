@@ -18,4 +18,12 @@ describe('note agent integration', () => {
     expect(styles).toContain('.agent-change-list')
     expect(styles).toContain('.agent-footer')
   })
+
+  it('shares save path behavior between manual save and agent apply', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('async function saveNoteWithPathSync')
+    expect(app).toContain('await saveNoteWithPathSync(applied.note')
+    expect(app).toContain('moveNote({')
+  })
 })

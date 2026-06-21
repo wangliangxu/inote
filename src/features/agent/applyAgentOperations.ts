@@ -56,6 +56,11 @@ export function hasCreateNoteWrite(operations: AgentOperation[]): boolean {
   return operations.some((operation) => operation.type === 'create_note')
 }
 
+export function filterOperationsByIndexes<T extends AgentOperation>(operations: T[], indexes: number[]): T[] {
+  const selected = new Set(indexes)
+  return operations.filter((_, index) => selected.has(index))
+}
+
 function appendMarkdown(body: string, markdown: string): string {
   const left = body.trimEnd()
   const right = markdown.trim()
