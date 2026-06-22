@@ -66,6 +66,8 @@ interface EditorProps {
   onNavigateLink?: (path: string) => void
 }
 
+export const MDXEDITOR_SUPPRESS_HTML_PROCESSING = true
+
 const TagsInput = memo(function TagsInput({ tags, onChange }: { tags: string[], onChange: (value: string) => void }) {
   const [value, setValue] = useState(tags.join(', '))
 
@@ -763,6 +765,7 @@ export function Editor({
             contentEditableClassName="prose"
             plugins={plugins}
             toMarkdownOptions={EDITOR_TO_MARKDOWN_OPTIONS}
+            suppressHtmlProcessing={MDXEDITOR_SUPPRESS_HTML_PROCESSING}
           />
         </div>
         {tocPanelOpen && (

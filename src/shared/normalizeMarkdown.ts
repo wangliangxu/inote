@@ -34,10 +34,10 @@ const fromOptions: FromMarkdownOptions = {
  *
  * In GFM-compatible renderers, intra-word underscores (`foo_bar`) never trigger
  * emphasis, so escaping them as `foo\_bar` is unnecessary and produces noisy
- * diffs in source/diff mode. The same applies to `*` in many practical cases
- * but we leave it alone for now since it IS ambiguous more often.
+ * diffs in source/diff mode. With MDXEditor's HTML processing disabled, `<`
+ * is also ordinary text and should stay readable in saved notes.
  */
-const SUPPRESSED_PHRASING_CHARS = new Set(['_'])
+const SUPPRESSED_PHRASING_CHARS = new Set(['_', '<'])
 
 /**
  * A custom text handler that temporarily filters `state.unsafe` before calling
@@ -50,9 +50,13 @@ function textHandlerNoOverEscape(node: any, _parent: any, state: any, info: any)
   state.unsafe = originalUnsafe.filter((pattern: any) => {
     // Remove phrasing-level escape rules for suppressed characters.
     // Keep atBreak rules (line-start `_` can start a thematic break).
+    const inPhrasing =
+      pattern.inConstruct === 'phrasing' ||
+      (Array.isArray(pattern.inConstruct) && pattern.inConstruct.includes('phrasing'))
+
     if (
       SUPPRESSED_PHRASING_CHARS.has(pattern.character) &&
-      pattern.inConstruct === 'phrasing' &&
+      inPhrasing &&
       !pattern.atBreak
     ) {
       return false
