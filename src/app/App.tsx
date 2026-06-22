@@ -203,7 +203,7 @@ const NoteCardItem = memo(function NoteCardItem({
   return (
     <div ref={ref} className={isActive ? "note-card active" : "note-card"}>
       <button
-        className={`note-card-select card bg-base-100 shadow-sm border border-base-200/50 hover:shadow-md hover:-translate-y-0.5 transition-all w-full text-left focus:outline-none ${isActive ? "ring-2 ring-primary bg-primary/5 border-primary/20" : ""}`}
+        className={`note-card-select card bg-base-100 shadow-sm border border-base-200/50 hover:shadow-md hover:-translate-y-0.5 w-full text-left focus:outline-none ${isActive ? "ring-2 ring-primary bg-primary/5 border-primary/20 transition-none" : "transition-all"}`}
         type="button"
         onClick={() => onSelect(note.path)}
       >
@@ -258,7 +258,7 @@ const NoteRowItem = memo(function NoteRowItem({
   return (
     <div ref={ref}>
       <button
-        className={`flex flex-col w-full text-left px-3 py-2 rounded-lg hover:bg-base-200 transition-colors focus:outline-none ${isActive ? "bg-primary/10 text-primary" : ""}`}
+        className={`flex flex-col w-full text-left px-3 py-2 rounded-lg focus:outline-none transition-none ${isActive ? "bg-primary/10 text-primary" : ""}`}
         type="button"
         onClick={() => onSelect(note.path)}
       >
@@ -275,11 +275,11 @@ const NoteRowItem = memo(function NoteRowItem({
             />
           )}
         </div>
-        <div className="flex items-center justify-between gap-2 w-full mt-0.5">
-          <small className="text-xs text-base-content/50 truncate flex-1">
+        <div className="flex flex-col items-start w-full mt-0.5 gap-1">
+          <small className="text-xs text-base-content/50 break-words whitespace-normal line-clamp-2 w-full text-left">
             {noteExcerpt(note)}
           </small>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-end gap-2 w-full shrink-0">
             {"due" in note && note.due && (
               <span
                 className="flex items-center gap-1 text-[10px] bg-warning/10 text-warning px-1 rounded-full"
