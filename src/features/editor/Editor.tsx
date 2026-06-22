@@ -40,6 +40,7 @@ import {
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
 import { EditorView } from '@codemirror/view'
+import { installTableCellBackspaceGuard } from './tableCellBackspacePlugin'
 
 interface EditorProps {
   vaultRoot?: string
@@ -123,6 +124,14 @@ export function Editor({
 }: EditorProps) {
   const { t } = useTranslation()
   const editorRef = useRef<MDXEditorMethods>(null)
+  const editorWrapperRef = useRef<HTMLDivElement>(null)
+
+  // Prevent Backspace/Delete in empty table cells from freezing the editor
+  useEffect(() => {
+    const el = editorWrapperRef.current
+    if (!el) return
+    return installTableCellBackspaceGuard(el)
+  }, [note.path]) // re-install when the note changes (editor re-mounts)
 
   // Pre-normalize the markdown body so it matches MDXEditor's canonical output.
   // This prevents spurious diffs (bullet chars, list spacing, table formatting)
@@ -754,7 +763,7 @@ export function Editor({
         </div>
       </header>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
-        <div className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div ref={editorWrapperRef} className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <MDXEditor
             ref={editorRef}
             key={note.path} // Force re-mount on note change so internal state resets
