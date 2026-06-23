@@ -62,7 +62,11 @@
     "showTodayNoteButton": "Show Today Note Button",
     "lockUpdateTime": "Lock Update Time",
     "fontFamily": "Font Family",
-    "fontFamilyDefault": "System Default"
+    "fontFamilyDefault": "System Default",
+    "vaultPath": "Vault Path",
+    "themeMode": "Theme Mode",
+    "colorTheme": "Color Theme",
+    "maxContextLength": "Max Input Length"
   },
   "todo": {
     "title": "To-Do Dashboard",
@@ -145,6 +149,8 @@
     "noBacklinks": "No backlinks.",
     "outgoing": "Outgoing",
     "noOutgoingLinks": "No outgoing links.",
-    "words": "words"
+    "words": "words",
+    "toc": "Table of Contents",
+    "toggleNumbering": "Toggle Numbering"
   }
 }

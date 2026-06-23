@@ -62,7 +62,11 @@
     "showTodayNoteButton": "显示今日笔记按钮",
     "lockUpdateTime": "锁定更新时间",
     "fontFamily": "字体设置",
-    "fontFamilyDefault": "系统默认"
+    "fontFamilyDefault": "系统默认",
+    "vaultPath": "笔记库路径",
+    "themeMode": "主题模式",
+    "colorTheme": "颜色主题",
+    "maxContextLength": "最大输入长度"
   },
   "todo": {
     "title": "待办事项仪表盘",
@@ -145,6 +149,8 @@
     "noBacklinks": "无反向链接。",
     "outgoing": "传出链接",
     "noOutgoingLinks": "无传出链接。",
-    "words": "词"
+    "words": "词",
+    "toc": "目录",
+    "toggleNumbering": "切换编号"
   }
 }

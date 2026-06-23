@@ -208,7 +208,7 @@ export function SettingsPanel({
                 </select>
               </label>
               <label className="setting-label form-control grid gap-2">
-                <span className="label-text font-semibold">{t('settings.theme')} Mode</span>
+                <span className="label-text font-semibold">{t('settings.themeMode') || 'Theme Mode'}</span>
                 <select
                   className="setting-input select select-bordered w-full"
                   value={themePreference}
@@ -220,7 +220,7 @@ export function SettingsPanel({
                 </select>
               </label>
               <label className="setting-label form-control grid gap-2">
-                <span className="label-text font-semibold">Color Theme</span>
+                <span className="label-text font-semibold">{t('settings.colorTheme') || 'Color Theme'}</span>
                 <select
                   className="setting-input select select-bordered w-full"
                   value={colorTheme}
