@@ -621,7 +621,17 @@ fn extract_markdown_links(
             break;
         };
         let label = after_label[..label_end].trim();
-        let target = after_bracket[1..target_end + 1].trim();
+        let mut target = after_bracket[1..target_end + 1].trim();
+
+        // Strip angle brackets: [text](<url>) → url
+        if target.starts_with('<') && target.ends_with('>') {
+            target = target[1..target.len() - 1].trim();
+        }
+        // Strip surrounding double quotes: [text]("url") → url
+        else if target.starts_with('"') && target.ends_with('"') && target.len() >= 2 {
+            target = target[1..target.len() - 1].trim();
+        }
+
         if let Some(target_path) = resolver.resolve_markdown(source_path, target) {
             links.push(ExtractedLink {
                 target_path,
@@ -769,5 +779,34 @@ mod tests {
             .any(|link| link.target_path == "projects/linked.md"));
         assert_eq!(backlinks.len(), 1);
         assert_eq!(backlinks[0].source_path, "knowledge/source.md");
+    }
+
+    #[test]
+    fn rebuild_extracts_angle_bracket_and_quoted_url_links() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note(
+                "knowledge/source.md",
+                "---\ntitle: Source Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nAngle bracket [POI](< ./POI更新策略.md>) and quoted [POI2](\"./POI更新策略.md\").",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "knowledge/POI更新策略.md",
+                "---\ntitle: POI更新策略\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nPOI body.",
+            )
+            .unwrap();
+
+        let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
+        index.full_rebuild(vault.root(), &vault.scan().unwrap()).unwrap();
+
+        let outgoing = index.outgoing_links("knowledge/source.md").unwrap();
+        let backlinks = index.backlinks("knowledge/POI更新策略.md").unwrap();
+
+        assert_eq!(outgoing.len(), 2, "expected 2 outgoing links, got: {outgoing:?}");
+        assert!(outgoing.iter().all(|link| link.target_path == "knowledge/POI更新策略.md"));
+        assert_eq!(backlinks.len(), 2, "expected 2 backlinks, got: {backlinks:?}");
+        assert!(backlinks.iter().all(|link| link.source_path == "knowledge/source.md"));
     }
 }

@@ -37,7 +37,7 @@ const fromOptions: FromMarkdownOptions = {
  * diffs in source/diff mode. With MDXEditor's HTML processing disabled, `<`
  * is also ordinary text and should stay readable in saved notes.
  */
-const SUPPRESSED_PHRASING_CHARS = new Set(['_', '<'])
+const SUPPRESSED_PHRASING_CHARS = new Set(['_', '<', '[', ']', '(', ')'])
 
 /**
  * A custom text handler that temporarily filters `state.unsafe` before calling
@@ -116,6 +116,14 @@ export function normalizeMarkdownBody(body: string): string {
   if (!body.trim()) return body
 
   try {
+    // Convert [text]("url") to [text](<url>) before parsing.
+    // Some editors/tools wrap link URLs in quotes, but CommonMark treats
+    // "..." inside () as a title attribute, not a URL. The angle-bracket
+    // form <url> is the standard way to include spaces/special chars in URLs.
+    body = body.replace(/\[([^\]]*)\]\("([^"]+)"\)/g, (_match, text, url) => {
+      return `[${text}](<${url}>)`
+    })
+
     const tree = fromMarkdown(body, fromOptions)
 
     // MDXEditor's LexicalListVisitor hardcodes spread=false on all lists/items,
