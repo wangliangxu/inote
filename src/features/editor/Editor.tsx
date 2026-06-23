@@ -934,12 +934,6 @@ export function Editor({
             </section>
             <section className="context-section">
               <p className="panel-title">
-                <Sparkles size={14} /> {t('editor.summary')}
-              </p>
-              <p className="summary-text">{note.summary ?? note.body.replace(/^# .*\n?/, '').trim().slice(0, 180)}</p>
-            </section>
-            <section className="context-section">
-              <p className="panel-title">
                 <Link2 size={14} /> {t('editor.links')}
               </p>
               <div className="link-group">
