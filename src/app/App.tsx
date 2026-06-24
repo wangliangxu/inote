@@ -1545,6 +1545,19 @@ export function App() {
     let finalPath = noteToSave.path;
 
     if (noteToSave.path !== expectedPath) {
+      const currentFilename = noteToSave.path.split('/').pop() || '';
+      const currentName = currentFilename.replace(/\.md$/, '');
+      const isUntitledLike = /^(?:untitled|无标题|note)(?:-\d+)?$/i.test(currentName) || /^\d{14}-\d{4}$/.test(currentName);
+      
+      if (!isUntitledLike) {
+        expectedPath = noteToSave.category
+          ? `${noteToSave.category}/${currentFilename}`
+          : currentFilename;
+        expectedPath = expectedPath.replace(/\/+/g, "/");
+      }
+    }
+
+    if (noteToSave.path !== expectedPath) {
       try {
         const moved = await moveNote({
           vaultRoot: vaultRoot.trim(),
