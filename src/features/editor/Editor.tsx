@@ -347,6 +347,16 @@ export function Editor({
       const richTextArea = editorContainer.querySelector('[contenteditable="true"]')
       if (richTextArea) {
         const elements = richTextArea.querySelectorAll(`h${level}`)
+        const sameLevelHeadings = headings.filter(h => h.level === level)
+        const elementIndex = sameLevelHeadings.findIndex(h => h.lineIndex === lineIndex)
+        
+        if (elementIndex >= 0 && elementIndex < elements.length) {
+          elements[elementIndex].scrollIntoView({ behavior: 'smooth', block: 'start' })
+          setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+          return
+        }
+        
+        // Fallback: try text matching if indexing somehow failed
         const normalizedText = text.replace(/\s+/g, ' ')
         for (let i = 0; i < elements.length; i++) {
           if (elements[i].textContent?.trim().replace(/\s+/g, ' ') === normalizedText) {
@@ -771,7 +781,7 @@ export function Editor({
             markdown={normalizedMarkdown}
             onChange={onChange}
             readOnly={previewMode}
-            contentEditableClassName="prose"
+            contentEditableClassName="prose max-w-none"
             plugins={plugins}
             toMarkdownOptions={EDITOR_TO_MARKDOWN_OPTIONS}
             suppressHtmlProcessing={MDXEDITOR_SUPPRESS_HTML_PROCESSING}

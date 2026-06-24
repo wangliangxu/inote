@@ -2,6 +2,7 @@
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark, corporate, business, cupcake, dracula, nord, dim;
 }
+@plugin "@tailwindcss/typography";
 
 /* ─── Bridge: map legacy CSS variables to DaisyUI v5 theme tokens ─── */
 :root {
