@@ -313,6 +313,9 @@ impl NoteIndex {
             
         let like_query = format!("%{}%", clean_query.replace('%', "\\%").replace('_', "\\_"));
 
+        let mut results = Vec::new();
+        let mut seen_paths = std::collections::HashSet::new();
+
         let mut stmt = self
             .conn
             .prepare(
@@ -332,34 +335,40 @@ impl NoteIndex {
         let rows = stmt
             .query_map(params![fts_query], |row| self.search_row(row))
             .map_err(|error| format!("failed to run fts search: {error}"))?;
-        let mut results = rows
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("failed to read search rows: {error}"))?;
+            
+        for row in rows.flatten() {
+            if seen_paths.insert(row.path.clone()) {
+                results.push(row);
+            }
+        }
 
-        if results.is_empty() {
-            let mut fallback = self
-                .conn
-                .prepare(
-                    "
-                    SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.summary,
-                           substr(search_index.body, 1, 180) AS excerpt
-                    FROM search_index
-                    JOIN notes n ON n.path = search_index.path
-                    WHERE n.title LIKE ?1 ESCAPE '\\'
-                       OR n.category LIKE ?1 ESCAPE '\\'
-                       OR search_index.body LIKE ?1 ESCAPE '\\'
-                       OR search_index.tags LIKE ?1 ESCAPE '\\'
-                       OR search_index.summary LIKE ?1 ESCAPE '\\'
-                    ORDER BY n.updated_at DESC, n.title ASC
-                    LIMIT 50
-                    ",
-                )
-                .map_err(|error| format!("failed to prepare fallback search: {error}"))?;
-            results = fallback
-                .query_map(params![like_query], |row| self.search_row(row))
-                .map_err(|error| format!("failed to run fallback search: {error}"))?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("failed to read fallback rows: {error}"))?;
+        let mut fallback = self
+            .conn
+            .prepare(
+                "
+                SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.summary,
+                       substr(search_index.body, 1, 180) AS excerpt
+                FROM search_index
+                JOIN notes n ON n.path = search_index.path
+                WHERE n.title LIKE ?1 ESCAPE '\\'
+                   OR n.category LIKE ?1 ESCAPE '\\'
+                   OR search_index.body LIKE ?1 ESCAPE '\\'
+                   OR search_index.tags LIKE ?1 ESCAPE '\\'
+                   OR search_index.summary LIKE ?1 ESCAPE '\\'
+                ORDER BY n.updated_at DESC, n.title ASC
+                LIMIT 50
+                ",
+            )
+            .map_err(|error| format!("failed to prepare fallback search: {error}"))?;
+            
+        let fallback_rows = fallback
+            .query_map(params![like_query], |row| self.search_row(row))
+            .map_err(|error| format!("failed to run fallback search: {error}"))?;
+            
+        for row in fallback_rows.flatten() {
+            if seen_paths.insert(row.path.clone()) {
+                results.push(row);
+            }
         }
 
         Ok(results)
@@ -431,7 +440,8 @@ impl NoteIndex {
                   title,
                   body,
                   tags,
-                  summary
+                  summary,
+                  tokenize='trigram'
                 );
                 ",
             )
