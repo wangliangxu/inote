@@ -121,6 +121,10 @@ export async function readNote(vaultRoot: string, path: string): Promise<Note> {
   return invoke<Note>('read_note', { vaultRoot, path })
 }
 
+export async function checkFileExists(vaultRoot: string, relativePath: string): Promise<boolean> {
+  return invoke<boolean>('check_file_exists', { vaultRoot, relativePath })
+}
+
 export async function initializeVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('initialize_vault', { vaultRoot })
 }

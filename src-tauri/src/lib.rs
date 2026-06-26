@@ -11,6 +11,7 @@ pub mod watcher;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             use tauri::Manager;
             if let Ok(db_path) = crate::commands::settings_db_path(app.handle()) {
@@ -56,6 +57,7 @@ pub fn run() {
             commands::stop_vault_watcher,
             commands::initialize_vault,
             commands::read_note,
+            commands::check_file_exists,
             commands::write_note,
             commands::create_inbox_note,
             commands::create_today_note,

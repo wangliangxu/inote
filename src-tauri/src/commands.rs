@@ -219,6 +219,12 @@ pub fn read_note(vault_root: String, path: String) -> Result<NoteMetadata, Strin
 }
 
 #[tauri::command]
+pub fn check_file_exists(vault_root: String, relative_path: String) -> bool {
+    let full = Path::new(&vault_root).join(&relative_path);
+    full.is_file()
+}
+
+#[tauri::command]
 pub fn write_note(input: WriteNoteInput) -> Result<NoteMetadata, String> {
     let vault = Vault::new(&input.vault_root)?;
     let note = vault.write_note(&input.path, &input.content)?;

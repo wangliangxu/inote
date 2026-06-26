@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect, useRef, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Note, SaveState, NoteLinks } from '../../shared/types'
-import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting } from '../../shared/api'
+import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting, checkFileExists } from '../../shared/api'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
@@ -132,6 +133,90 @@ export function Editor({
     if (!el) return
     return installTableCellBackspaceGuard(el)
   }, [note.path]) // re-install when the note changes (editor re-mounts)
+
+  // Intercept link clicks in rich-text mode:
+  // - HTTP(S) links → open in the system browser
+  // - .md file links → navigate to the note if the file exists in the vault
+  useEffect(() => {
+    const el = editorWrapperRef.current
+    if (!el) return
+
+    const handleLinkClick = async (e: MouseEvent) => {
+      // Walk up from click target to find an <a> element
+      let target = e.target as HTMLElement | null
+      while (target && target !== el) {
+        if (target.tagName === 'A') break
+        target = target.parentElement
+      }
+      if (!target || target.tagName !== 'A') return
+
+      const anchor = target as HTMLAnchorElement
+      const href = anchor.getAttribute('href')
+      if (!href) return
+
+      // Only intercept in rich-text contenteditable, not in CodeMirror/source mode
+      const richTextArea = el.querySelector('[contenteditable="true"]')
+      if (!richTextArea || !richTextArea.contains(anchor)) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      // HTTP(S) links → open in system browser
+      if (/^https?:\/\//i.test(href)) {
+        try {
+          await openUrl(href)
+        } catch (err) {
+          console.error('Failed to open URL in system browser:', err)
+        }
+        return
+      }
+
+      // .md file links → navigate within the app
+      if (href.endsWith('.md')) {
+        // Resolve relative path based on current note's directory
+        const noteDir = note.path.includes('/')
+          ? note.path.substring(0, note.path.lastIndexOf('/'))
+          : ''
+        const resolvedPath = href.startsWith('/')
+          ? href.slice(1) // Absolute path from vault root — strip leading /
+          : noteDir
+            ? `${noteDir}/${href}`
+            : href
+
+        // Normalize: collapse '..' and '.' segments
+        const parts = resolvedPath.split('/')
+        const normalized: string[] = []
+        for (const part of parts) {
+          if (part === '.' || part === '') continue
+          if (part === '..') { normalized.pop(); continue }
+          normalized.push(part)
+        }
+        const finalPath = normalized.join('/')
+
+        try {
+          const exists = await checkFileExists(vaultRoot, finalPath)
+          if (exists) {
+            onNavigateLink?.(finalPath)
+          } else {
+            console.warn('Linked .md file not found in vault:', finalPath)
+          }
+        } catch (err) {
+          console.error('Failed to check file existence:', err)
+        }
+        return
+      }
+
+      // Other links (mailto:, etc.) → try opening in system browser
+      try {
+        await openUrl(href)
+      } catch (err) {
+        console.error('Failed to open link:', err)
+      }
+    }
+
+    el.addEventListener('click', handleLinkClick)
+    return () => el.removeEventListener('click', handleLinkClick)
+  }, [note.path, vaultRoot, onNavigateLink])
 
   // Pre-normalize the markdown body so it matches MDXEditor's canonical output.
   // This prevents spurious diffs (bullet chars, list spacing, table formatting)
