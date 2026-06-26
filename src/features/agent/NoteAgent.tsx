@@ -1,12 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
-import { FilePlus2, ListChecks, Plus, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
-import { executeLlmChatStream, loadAgentSession, recordAgentTurn } from '../../shared/api'
-import type { AgentSession, LlmProviderSettings, Note, ReviewPlan } from '../../shared/types'
+import { useEffect, useState } from 'react'
+import {
+  executeLlmChatStream,
+  loadAgentConversation,
+  recordAgentMessages,
+  recordAgentTurn,
+  updateAgentMessage,
+} from '../../shared/api'
+import type { AgentConversation, AgentMessage, LlmProviderSettings, Note, ReviewPlan } from '../../shared/types'
+import { AgentComposer } from './AgentComposer'
+import { AgentConversationView } from './AgentConversationView'
+import {
+  buildAssistantResultMessage,
+  buildErrorMessage,
+  buildReviewPlanMessage,
+  buildStatusMessage,
+  buildUserCommandMessage,
+  getRecentMeaningfulMessages,
+} from './agentConversation'
+import { decodeAssistantResultPayload, decodeReviewPlanPayload, encodeReviewPlanPayload } from './agentMessagePayloads'
 import { buildAgentPrompt } from './agentPrompts'
 import { parseAgentResult } from './agentParser'
-import { hasCreateNoteWrite, hasCurrentNoteWrite } from './applyAgentOperations'
 import type { AgentResult, QuickAgentAction } from './agentTypes'
-import { buildReviewPlan, getSelectedOperations } from './agentReviewPlan'
+import { buildReviewPlan } from './agentReviewPlan'
 import { buildAgentSessionSummary } from './agentSessionSummary'
 
 interface NoteAgentProps {
@@ -19,14 +34,7 @@ interface NoteAgentProps {
   onUndoLastApply: () => Promise<void>
 }
 
-const quickActions: Array<{ action: QuickAgentAction, label: string, icon: typeof Sparkles, command: string }> = [
-  { action: 'summarize', label: 'Summary', icon: Sparkles, command: 'Update the summary for the current note.' },
-  { action: 'suggest_tags', label: 'Tags', icon: Tags, command: 'Suggest and apply concise tags for the current note.' },
-  { action: 'clean_metadata', label: 'YAML', icon: Wand2, command: 'Clean the current note metadata.' },
-  { action: 'extract_tasks', label: 'Tasks', icon: ListChecks, command: 'Extract action items and append them to the current note.' },
-  { action: 'continue_writing', label: 'Continue', icon: RefreshCw, command: 'Continue writing the current note.' },
-  { action: 'create_related', label: 'Related', icon: FilePlus2, command: 'Create a related note that links back to the current note.' },
-]
+type AgentStatus = 'idle' | 'running' | 'applying' | 'error'
 
 function makeId(prefix: string): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -39,44 +47,54 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+function collectResultsByTurn(messages: AgentMessage[]): Record<string, AgentResult> {
+  return messages.reduce<Record<string, AgentResult>>((results, message) => {
+    if (message.kind !== 'assistant_result' || !message.turnId) return results
+    const details = decodeAssistantResultPayload(message.payloadJson)
+    if (!details) return results
+    try {
+      results[message.turnId] = JSON.parse(details.parsedResultJson) as AgentResult
+    } catch {
+      return results
+    }
+    return results
+  }, {})
+}
+
+function getSelectedIndexes(plan: ReviewPlan, kind: 'current' | 'create'): number[] {
+  return plan.groups
+    .filter((group) => group.selected)
+    .filter((group) => (
+      kind === 'create'
+        ? group.kind === 'create_note'
+        : group.kind !== 'create_note' && group.kind !== 'risk' && group.kind !== 'suggestion'
+    ))
+    .flatMap((group) => group.operationIndexes)
+}
+
 export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote, onCreateNote, onUndoLastApply }: NoteAgentProps) {
   const [command, setCommand] = useState('Update tags and summary for this note.')
   const [activeAction, setActiveAction] = useState<QuickAgentAction | undefined>()
-  const [agentProcess, setAgentProcess] = useState<{ prompt: string, context: string, rawResponse?: string } | null>(null)
-  const [result, setResult] = useState<AgentResult | null>(null)
-  const [session, setSession] = useState<AgentSession | null>(null)
-  const [reviewPlan, setReviewPlan] = useState<ReviewPlan | null>(null)
-  const [stage, setStage] = useState<'idle' | 'preparing' | 'requesting' | 'receiving' | 'parsing' | 'ready'>('idle')
-  const [activeTurnSessionId, setActiveTurnSessionId] = useState('')
-  const [status, setStatus] = useState<'idle' | 'running' | 'applying' | 'error'>('idle')
-  const [isProcessLogOpen, setIsProcessLogOpen] = useState(false)
+  const [conversation, setConversation] = useState<AgentConversation | null>(null)
+  const [messages, setMessages] = useState<AgentMessage[]>([])
+  const [resultsByTurn, setResultsByTurn] = useState<Record<string, AgentResult>>({})
+  const [status, setStatus] = useState<AgentStatus>('idle')
   const [error, setError] = useState('')
-
-  const selectedOperationIndexes = useMemo(() => reviewPlan?.groups
-    .filter((group) => group.selected)
-    .flatMap((group) => group.operationIndexes) ?? [], [reviewPlan])
-  const selectedOperations = useMemo(
-    () => result && reviewPlan ? getSelectedOperations(result.operations, reviewPlan.groups) : [],
-    [result, reviewPlan],
-  )
-  const selectedCurrentOperationIndexes = useMemo(() => selectedOperationIndexes.filter((index) => {
-    const operation = result?.operations[index]
-    return operation?.type === 'update_current_note' || operation?.type === 'append_to_current_note' || operation?.type === 'replace_current_note_body'
-  }), [result, selectedOperationIndexes])
-  const selectedCreateOperationIndexes = useMemo(() => selectedOperationIndexes.filter((index) => result?.operations[index]?.type === 'create_note'), [result, selectedOperationIndexes])
-  const canApplyCurrent = useMemo(() => hasCurrentNoteWrite(selectedOperations), [selectedOperations])
-  const canCreate = useMemo(() => hasCreateNoteWrite(selectedOperations), [selectedOperations])
 
   useEffect(() => {
     let cancelled = false
-    setSession(null)
-    setReviewPlan(null)
-    setResult(null)
-    setStage('idle')
-    if (!vaultRoot.trim()) return
-    loadAgentSession({ vaultRoot, notePath: note.path })
+    setConversation(null)
+    setMessages([])
+    setResultsByTurn({})
+    setError('')
+    const vault = vaultRoot.trim()
+    if (!vault) return
+    loadAgentConversation({ vaultRoot: vault, notePath: note.path, messageLimit: 60 })
       .then((loaded) => {
-        if (!cancelled) setSession(loaded)
+        if (cancelled) return
+        setConversation(loaded)
+        setMessages(getRecentMeaningfulMessages(loaded.messages, 5))
+        setResultsByTurn(collectResultsByTurn(loaded.messages))
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -86,54 +104,101 @@ export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote
     }
   }, [vaultRoot, note.path])
 
+  function appendLocalMessages(nextMessages: AgentMessage[]) {
+    setMessages((current) => [...current, ...nextMessages])
+  }
+
+  function upsertLocalMessage(nextMessage: AgentMessage) {
+    setMessages((current) => {
+      const index = current.findIndex((message) => message.id === nextMessage.id)
+      if (index === -1) return [...current, nextMessage]
+      return current.map((message) => message.id === nextMessage.id ? nextMessage : message)
+    })
+  }
+
+  function getCurrentSessionId(): string {
+    return conversation?.session?.id ?? makeId('session')
+  }
+
+  async function refreshConversation() {
+    const vault = vaultRoot.trim()
+    if (!vault) return
+    const loaded = await loadAgentConversation({ vaultRoot: vault, notePath: note.path, messageLimit: 60 })
+    setConversation(loaded)
+    setMessages(getRecentMeaningfulMessages(loaded.messages, 5))
+    setResultsByTurn(collectResultsByTurn(loaded.messages))
+  }
+
   async function runAgent(nextAction = activeAction, nextCommand = command) {
     setError('')
-    setResult(null)
-    setReviewPlan(null)
+    const vault = vaultRoot.trim()
+    if (!vault) {
+      setStatus('error')
+      setError('Open a real vault before running the note agent.')
+      return
+    }
     if (!settings.apiKey.trim()) {
       setStatus('error')
-      setStage('idle')
       setError('Add an LLM API key in Settings first.')
       return
     }
 
+    const turnId = makeId('turn')
+    const sessionId = getCurrentSessionId()
+    const createdAt = nowIso()
+    const userMessage = buildUserCommandMessage({
+      id: makeId('message'),
+      sessionId,
+      notePath: note.path,
+      turnId,
+      now: createdAt,
+      command: nextCommand,
+      action: nextAction ?? null,
+    })
+    let statusMessage = buildStatusMessage({
+      id: makeId('message'),
+      sessionId,
+      notePath: note.path,
+      turnId,
+      now: createdAt,
+      text: 'Reading current note context...',
+      status: 'streaming',
+    })
+
     try {
       setStatus('running')
-      const turnId = makeId('turn')
-      const sessionId = session?.id ?? makeId('session')
-      setActiveTurnSessionId(sessionId)
-      setStage('preparing')
-      setIsProcessLogOpen(true)
+      appendLocalMessages([userMessage, statusMessage])
+      await recordAgentMessages({ vaultRoot: vault, messages: [userMessage, statusMessage] })
+
       const request = buildAgentPrompt({
         command: nextCommand,
         note,
         notes,
         action: nextAction,
         maxContextLength: settings.maxContextLength,
-        sessionSummary: buildAgentSessionSummary(session),
-      })
-      setAgentProcess({ prompt: request.prompt, context: request.context, rawResponse: '' })
-      
-      let fullResponse = ''
-      setStage('requesting')
-      await executeLlmChatStream({
-        settings,
-        prompt: request.prompt,
-        context: request.context,
-      }, (chunk) => {
-        setStage('receiving')
-        fullResponse += chunk
-        setAgentProcess(prev => prev ? { ...prev, rawResponse: fullResponse } : null)
+        sessionSummary: buildAgentSessionSummary(conversation?.session ?? null),
       })
 
-      setStage('parsing')
+      statusMessage = { ...statusMessage, text: 'Asking the model...', updatedAt: nowIso() }
+      upsertLocalMessage(statusMessage)
+      await updateAgentMessage({ vaultRoot: vault, message: statusMessage })
+
+      let fullResponse = ''
+      await executeLlmChatStream({ settings, prompt: request.prompt, context: request.context }, (chunk) => {
+        fullResponse += chunk
+        statusMessage = { ...statusMessage, text: 'Receiving response...', updatedAt: nowIso() }
+        upsertLocalMessage(statusMessage)
+      })
+
+      statusMessage = { ...statusMessage, text: 'Parsing response...', updatedAt: nowIso() }
+      upsertLocalMessage(statusMessage)
+      await updateAgentMessage({ vaultRoot: vault, message: statusMessage })
+
       const parsed = parseAgentResult(fullResponse)
       const plan = buildReviewPlan(note, parsed, turnId)
       const completedAt = nowIso()
-      setResult(parsed)
-      setReviewPlan(plan)
       await recordAgentTurn({
-        vaultRoot,
+        vaultRoot: vault,
         noteTitle: note.title,
         turn: {
           id: turnId,
@@ -147,26 +212,118 @@ export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote
           parsedResultJson: JSON.stringify(parsed),
           status: 'ready',
           error: null,
-          createdAt: completedAt,
+          createdAt,
           completedAt,
         },
       })
-      setSession(await loadAgentSession({ vaultRoot, notePath: note.path }))
-      setStage('ready')
+
+      const readyStatus = { ...statusMessage, text: 'Review plan ready.', status: 'ready' as const, updatedAt: completedAt }
+      const resultMessage = buildAssistantResultMessage({
+        id: makeId('message'),
+        sessionId,
+        notePath: note.path,
+        turnId,
+        now: completedAt,
+        text: parsed.message || 'I prepared a review plan for this note.',
+        details: {
+          prompt: request.prompt,
+          context: request.context,
+          rawResponse: fullResponse,
+          parsedResultJson: JSON.stringify(parsed),
+        },
+      })
+      const reviewMessage = buildReviewPlanMessage({
+        id: makeId('message'),
+        sessionId,
+        notePath: note.path,
+        turnId,
+        now: completedAt,
+        text: plan.message || 'Review the proposed changes before applying.',
+        reviewPlan: plan,
+      })
+
+      upsertLocalMessage(readyStatus)
+      appendLocalMessages([resultMessage, reviewMessage])
+      setResultsByTurn((current) => ({ ...current, [turnId]: parsed }))
+      await recordAgentMessages({ vaultRoot: vault, messages: [readyStatus, resultMessage, reviewMessage] })
+      await refreshConversation()
       setStatus('idle')
-      setIsProcessLogOpen(false)
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err)
+      const message = buildErrorMessage({
+        id: makeId('message'),
+        sessionId,
+        notePath: note.path,
+        turnId,
+        now: nowIso(),
+        text,
+      })
+      appendLocalMessages([message])
+      await recordAgentMessages({ vaultRoot: vault, messages: [message] }).catch(() => undefined)
+      setStatus('error')
+      setError(text)
+    }
+  }
+
+  function toggleReviewGroup(messageId: string, groupId: string) {
+    const vault = vaultRoot.trim()
+    let nextMessage: AgentMessage | null = null
+    setMessages((current) => current.map((message) => {
+      if (message.id !== messageId || message.kind !== 'review_plan') return message
+      const plan = decodeReviewPlanPayload(message.payloadJson)
+      if (!plan) return message
+      const nextPlan = {
+        ...plan,
+        groups: plan.groups.map((group) => group.id === groupId ? { ...group, selected: !group.selected } : group),
+      }
+      nextMessage = { ...message, payloadJson: encodeReviewPlanPayload(nextPlan), updatedAt: nowIso() }
+      return nextMessage
+    }))
+    if (vault && nextMessage) {
+      updateAgentMessage({ vaultRoot: vault, message: nextMessage }).catch((err) => {
+        setError(err instanceof Error ? err.message : String(err))
+      })
+    }
+  }
+
+  async function markReviewMessage(message: AgentMessage, text: string) {
+    const vault = vaultRoot.trim()
+    const nextMessage = { ...message, text, status: 'applied' as const, updatedAt: nowIso() }
+    upsertLocalMessage(nextMessage)
+    if (vault) await updateAgentMessage({ vaultRoot: vault, message: nextMessage })
+  }
+
+  async function applyCurrent(message: AgentMessage, plan: ReviewPlan) {
+    const result = resultsByTurn[plan.turnId]
+    if (!result) {
+      setStatus('error')
+      setError('The parsed agent result for this review is no longer available.')
+      return
+    }
+    setStatus('applying')
+    try {
+      await onApplyCurrentNote(result, getSelectedIndexes(plan, 'current'), plan.turnId, message.sessionId)
+      await markReviewMessage(message, 'Review applied.')
+      await refreshConversation()
+      setStatus('idle')
     } catch (err) {
       setStatus('error')
-      setStage('idle')
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  async function applyCurrent() {
-    if (!result || !reviewPlan) return
+  async function createNote(message: AgentMessage, plan: ReviewPlan) {
+    const result = resultsByTurn[plan.turnId]
+    if (!result) {
+      setStatus('error')
+      setError('The parsed agent result for this review is no longer available.')
+      return
+    }
     setStatus('applying')
     try {
-      await onApplyCurrentNote(result, selectedCurrentOperationIndexes, reviewPlan.turnId, activeTurnSessionId || session?.id || '')
+      await onCreateNote(result, getSelectedIndexes(plan, 'create'), plan.turnId, message.sessionId)
+      await markReviewMessage(message, 'Review applied.')
+      await refreshConversation()
       setStatus('idle')
     } catch (err) {
       setStatus('error')
@@ -174,11 +331,20 @@ export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote
     }
   }
 
-  async function createNote() {
-    if (!result || !reviewPlan) return
+  async function discardReview(message: AgentMessage) {
+    try {
+      await markReviewMessage(message, 'Review discarded.')
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function undoFromMessage() {
     setStatus('applying')
     try {
-      await onCreateNote(result, selectedCreateOperationIndexes, reviewPlan.turnId, activeTurnSessionId || session?.id || '')
+      await onUndoLastApply()
+      await refreshConversation()
       setStatus('idle')
     } catch (err) {
       setStatus('error')
@@ -190,171 +356,27 @@ export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote
     <div className="note-agent flex h-full flex-col bg-base-200/40 text-base-content">
       <div className="agent-scroll-area flex-1 space-y-3 overflow-y-auto p-3">
         {error ? <p className="agent-error alert alert-error py-2 text-sm">{error}</p> : null}
-        
-        {agentProcess && (
-          <details 
-            className="agent-process-log collapse collapse-arrow border border-base-300 bg-base-100" 
-            open={isProcessLogOpen}
-            onToggle={(e) => setIsProcessLogOpen(e.currentTarget.open)}
-          >
-            <summary className="collapse-title min-h-0 px-3 py-2 text-sm font-semibold">Agent Process Log</summary>
-            <div className="agent-process-content collapse-content px-0 pb-0">
-              <div className="max-h-96 overflow-y-auto px-3 pb-3 pt-0 grid gap-2 text-xs">
-                <details className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-200/30">
-                  <summary className="collapse-title min-h-0 px-3 py-2 text-xs font-semibold text-base-content/70">System Prompt</summary>
-                  <div className="collapse-content px-3 pb-3">
-                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.prompt}</pre>
-                  </div>
-                </details>
-                <details className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-200/30">
-                  <summary className="collapse-title min-h-0 px-3 py-2 text-xs font-semibold text-base-content/70">Context</summary>
-                  <div className="collapse-content px-3 pb-3">
-                    <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.context}</pre>
-                  </div>
-                </details>
-                <strong className="mt-1 px-1 text-base-content/60">Raw Response</strong>
-                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded bg-base-200 p-2">{agentProcess.rawResponse || 'Waiting for response...'}</pre>
-              </div>
-            </div>
-          </details>
-        )}
-
-        {renderSessionTimeline(session)}
-        {stage !== 'idle' ? renderStage(stage) : null}
-        {renderReviewPlan(reviewPlan, toggleReviewGroup)}
-
-        {reviewPlan && (
-          <>
-            <div className="agent-footer flex items-center gap-2">
-              <button className="btn btn-primary btn-sm btn-square" type="button" onClick={applyCurrent} disabled={!canApplyCurrent || status === 'applying'} title="Apply to current note">
-                <Plus size={15} />
-              </button>
-              <button className="btn btn-outline btn-sm btn-square" type="button" onClick={createNote} disabled={!canCreate || status === 'applying'} title="Create note">
-                <FilePlus2 size={15} />
-              </button>
-              <div className="flex-1"></div>
-              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={onUndoLastApply} disabled={status === 'applying'} title="Undo last agent apply">
-                <RefreshCw size={15} />
-              </button>
-              <button className="btn btn-ghost btn-sm btn-square" type="button" onClick={() => { setResult(null); setReviewPlan(null); setStage('idle') }} disabled={status === 'applying'} title="Discard">
-                <X size={15} />
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="agent-input-wrapper border-t border-base-300 bg-base-100 p-3">
-        <textarea
-          className="agent-command textarea textarea-bordered min-h-24 w-full resize-none text-sm"
-          aria-label="Note agent command"
-          value={command}
-          onChange={(event) => setCommand(event.target.value)}
-          placeholder="Ask the agent to update this note or create a new one."
+        <AgentConversationView
+          messages={messages}
+          disabled={status === 'running' || status === 'applying'}
+          onToggleReviewGroup={toggleReviewGroup}
+          onApplyReview={applyCurrent}
+          onCreateReview={createNote}
+          onDiscardReview={discardReview}
+          onUndo={undoFromMessage}
         />
-        <div className="agent-input-toolbar mt-2 flex items-center justify-between">
-          <details className="agent-quick-action-dropdown dropdown dropdown-top" data-no-drag>
-            <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title="Quick Actions">
-              <Zap size={16} />
-            </summary>
-            <div className="agent-quick-action-menu dropdown-content menu z-20 w-44 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
-              {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
-                <button
-                  key={action}
-                  className={activeAction === action ? 'active bg-primary/10 text-primary' : ''}
-                  type="button"
-                  onClick={(e) => {
-                    setActiveAction(action)
-                    setCommand(quickCommand)
-                    const details = e.currentTarget.closest('details')
-                    if (details) details.open = false
-                  }}
-                  title={label}
-                >
-                  <Icon size={14} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-          </details>
-          <button className="agent-run-btn btn btn-primary btn-sm btn-square" title="Run agent" type="button" onClick={() => runAgent()} disabled={status === 'running' || status === 'applying'}>
-            {status === 'running' ? <RefreshCw size={15} /> : <Send size={15} />}
-          </button>
-        </div>
       </div>
+      <AgentComposer
+        command={command}
+        activeAction={activeAction}
+        disabled={status === 'running' || status === 'applying'}
+        onCommandChange={setCommand}
+        onActionSelect={(action, nextCommand) => {
+          setActiveAction(action)
+          setCommand(nextCommand)
+        }}
+        onSubmit={() => runAgent()}
+      />
     </div>
-  )
-
-  function toggleReviewGroup(groupId: string) {
-    setReviewPlan((current) => current
-      ? { ...current, groups: current.groups.map((group) => group.id === groupId ? { ...group, selected: !group.selected } : group) }
-      : current)
-  }
-}
-
-function renderStage(stage: string) {
-  const stages = ['preparing', 'requesting', 'receiving', 'parsing', 'ready']
-  return (
-    <div className="agent-stage-list" aria-label="Agent progress">
-      {stages.map((item) => (
-        <span key={item} className={stage === item ? 'active' : ''}>{item}</span>
-      ))}
-    </div>
-  )
-}
-
-function renderSessionTimeline(session: AgentSession | null) {
-  if (!session || (session.turns.length === 0 && session.operationEvents.length === 0)) {
-    return <p className="agent-empty text-sm text-base-content/60">No saved agent session for this note yet.</p>
-  }
-  return (
-    <div className="agent-timeline">
-      {session.turns.slice(-5).map((turn) => (
-        <details key={turn.id} className="agent-timeline-item">
-          <summary>{turn.command}</summary>
-          <p>{turn.status}{turn.error ? `: ${turn.error}` : ''}</p>
-        </details>
-      ))}
-      {session.operationEvents.slice(-3).map((event) => (
-        <div key={event.id} className="agent-timeline-item applied">
-          Applied {event.operationTypes.join(', ')}: {event.changedFields.join(', ') || 'note'}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function renderReviewPlan(plan: ReviewPlan | null, onToggleGroup: (id: string) => void) {
-  if (!plan) return null
-  return (
-    <>
-      <p className="panel-title compact">Review Plan</p>
-      <div className="agent-review-plan">
-        <p>{plan.message || 'Review the proposed changes before applying.'}</p>
-        {plan.groups.map((group) => (
-          <div key={group.id} className={`agent-review-group ${group.kind}`}>
-            <label>
-              <input
-                type="checkbox"
-                checked={group.selected}
-                disabled={group.kind === 'risk' || group.kind === 'suggestion'}
-                onChange={() => onToggleGroup(group.id)}
-              />
-              <strong>{group.title}</strong>
-            </label>
-            <small>{group.summary}</small>
-            {group.items.map((item) => (
-              <div className="agent-review-item" key={`${group.id}-${item.label}`}>
-                <span>{item.label}</span>
-                {item.before !== undefined || item.after !== undefined ? (
-                  <code>{item.before ?? ''} -&gt; {item.after ?? ''}</code>
-                ) : null}
-                {item.previewMarkdown ? <pre>{item.previewMarkdown}</pre> : null}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </>
   )
 }
