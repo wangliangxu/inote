@@ -95,6 +95,7 @@ import {
 } from "../features/agent/applyAgentOperations";
 import { buildOperationEventMessage } from "../features/agent/agentConversation";
 import type { AgentResult } from "../features/agent/agentTypes";
+import { makeAgentId, nowIso } from "../features/agent/agentUtils";
 import {
   archiveNote,
   clearLastAgentUndoSnapshot,
@@ -325,17 +326,6 @@ function localDateString(date = new Date()): string {
     date.getTime() - date.getTimezoneOffset() * 60_000,
   );
   return localDate.toISOString().slice(0, 10);
-}
-
-function makeAgentId(prefix: string): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-}
-
-function nowIsoString(): string {
-  return new Date().toISOString();
 }
 
 function getFilenameForTitle(title: string) {
@@ -1210,7 +1200,7 @@ export function App() {
         setActivePath(visibleNotes[0].path);
         return;
       }
-      
+
       let nextIndex = currentIndex;
       if ((e.key === "ArrowDown" || e.key === "ArrowRight") && currentIndex < visibleNotes.length - 1) {
         nextIndex = currentIndex + 1;
@@ -1550,7 +1540,7 @@ export function App() {
       const currentFilename = noteToSave.path.split('/').pop() || '';
       const currentName = currentFilename.replace(/\.md$/, '');
       const isUntitledLike = /^(?:untitled|无标题|note)(?:-\d+)?$/i.test(currentName) || /^\d{14}-\d{4}$/.test(currentName);
-      
+
       if (!isUntitledLike) {
         expectedPath = noteToSave.category
           ? `${noteToSave.category}/${currentFilename}`
@@ -1609,7 +1599,7 @@ export function App() {
       lockUpdateTime ? activeNote.updatedAt : localDateString(),
     );
     const eventId = makeAgentId("event");
-    const now = nowIsoString();
+    const now = nowIso();
     const event: AgentOperationEvent = {
       id: eventId,
       sessionId,
@@ -1885,7 +1875,7 @@ export function App() {
         operationTypes: selectedOperations.map((operation) => operation.type),
         changedFields: [],
         createdNotePath: saved.path,
-        appliedAt: nowIsoString(),
+        appliedAt: nowIso(),
       };
       await recordAgentOperationEvent({
         vaultRoot: vaultRoot.trim(),
@@ -1976,7 +1966,7 @@ export function App() {
         operationTypes: ["undo_agent_apply"],
         changedFields: ["body"],
         createdNotePath: null,
-        appliedAt: nowIsoString(),
+        appliedAt: nowIso(),
       };
       await recordAgentMessages({
         vaultRoot: vaultRoot.trim(),
@@ -2270,7 +2260,7 @@ export function App() {
           style={{ WebkitAppRegion: "no-drag" } as any}
         >
           <button
-            className="btn btn-primary btn-sm btn-square"
+            className="btn btn-ghost btn-sm btn-square"
             type="button"
             onClick={addCategoryNote}
             title={t("app.createNote")}

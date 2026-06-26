@@ -18,24 +18,51 @@ export function buildAgentPrompt({ command, note, notes, action, maxContextLengt
       'Allowed operation types: update_current_note, append_to_current_note, replace_current_note_body, create_note, suggest_only.',
       'For append/replace/suggest, include a "markdown" string field. For update, include a "patch" object. For create, include a "note" object.',
       'Allowed patch fields: title, category, tags, summary, due, status, priority, project.',
+      '请用中文回复 message 字段内容。',
       actionInstruction(action),
       `User command: ${command.trim() || actionInstruction(action)}`,
     ].filter(Boolean).join('\n'),
-    context: [
-      sessionSummary?.trim() ? sessionSummary.trim() : '',
-      sessionSummary?.trim() ? '' : '',
-      'Current note:',
-      `Title: ${note.title}`,
-      `Path: ${note.path}`,
-      `Category: ${note.category}`,
-      `Created: ${note.createdAt}`,
-      `Updated: ${note.updatedAt}`,
-      note.summary ? `Summary: ${note.summary}` : '',
-      `Existing categories: ${unique(notes.filter((item) => !isArchiveOrTrashNote(item)).map((item) => item.category)).join(', ') || 'none'}`,
-      '',
-      note.body.slice(0, maxContextLength ?? 10000),
-    ].filter((line, index, all) => line !== '' || all[index - 1] !== '').join('\n'),
+    context: buildContext(note, notes, maxContextLength, sessionSummary),
   }
+}
+
+function buildContext(note: Note, notes: Note[], maxContextLength?: number, sessionSummary?: string): string {
+  const activeNotes = notes.filter((item) => !isArchiveOrTrashNote(item))
+
+  const lines: string[] = []
+
+  // Session summary first (if available)
+  if (sessionSummary?.trim()) {
+    lines.push(sessionSummary.trim(), '')
+  }
+
+  // Current note metadata
+  lines.push('Current note:')
+  lines.push(`Title: ${note.title}`)
+  lines.push(`Path: ${note.path}`)
+  lines.push(`Category: ${note.category}`)
+  lines.push(`Created: ${note.createdAt}`)
+  lines.push(`Updated: ${note.updatedAt}`)
+  if (note.tags.length > 0) lines.push(`Tags: ${note.tags.join(', ')}`)
+  if (note.summary) lines.push(`Summary: ${note.summary}`)
+  if (note.status) lines.push(`Status: ${note.status}`)
+  if (note.priority && note.priority !== 'none') lines.push(`Priority: ${note.priority}`)
+  if (note.project) lines.push(`Project: ${note.project}`)
+  if (note.due) lines.push(`Due: ${note.due}`)
+
+  // Existing categories and tags for context
+  lines.push(`Existing categories: ${unique(activeNotes.map((item) => item.category)).join(', ') || 'none'}`)
+  const existingTags = uniqueTags(activeNotes)
+  if (existingTags.length > 0) {
+    lines.push(`Existing tags: ${existingTags.slice(0, 50).join(', ')}`)
+  }
+
+  lines.push('')
+
+  // Note body
+  lines.push(note.body.slice(0, maxContextLength ?? 10000))
+
+  return lines.filter((line, index, all) => line !== '' || all[index - 1] !== '').join('\n')
 }
 
 function actionInstruction(action?: QuickAgentAction): string {
@@ -50,6 +77,21 @@ function actionInstruction(action?: QuickAgentAction): string {
 
 function unique(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).sort((a, b) => a.localeCompare(b))
+}
+
+function uniqueTags(notes: Note[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const note of notes) {
+    for (const tag of note.tags) {
+      const normalized = tag.trim()
+      if (normalized && !seen.has(normalized)) {
+        seen.add(normalized)
+        result.push(normalized)
+      }
+    }
+  }
+  return result.sort((a, b) => a.localeCompare(b))
 }
 
 function isArchiveOrTrashNote(note: Note): boolean {

@@ -77,7 +77,7 @@ describe('startup shell', () => {
   it('uses the primary color for the title bar create note button', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
-    expect(app).toMatch(/className=["']btn btn-primary btn-sm btn-square["'][\s\S]*?type=["']button["'][\s\S]*?onClick=\{addCategoryNote\}/)
+    expect(app).toMatch(/className=["']btn btn-ghost btn-sm btn-square["'][\s\S]*?type=["']button["'][\s\S]*?onClick=\{addCategoryNote\}/)
   })
 
   it('enables the Tauri asset protocol for local markdown images', () => {

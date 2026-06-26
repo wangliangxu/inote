@@ -112,10 +112,10 @@ export function buildOperationEventMessage(input: MessageBaseInput & {
   canUndo: boolean
 }): AgentMessage {
   const label = input.action === 'created'
-    ? `Created ${input.event.createdNotePath ?? 'note'}.`
+    ? `已创建笔记 ${input.event.createdNotePath ?? ''}`
     : input.action === 'undone'
-      ? `Undid the last agent apply for ${input.event.notePath}.`
-      : `Applied ${input.event.operationTypes.join(', ')}.`
+      ? `已撤销对 ${input.event.notePath} 的上次操作`
+      : `已${translateOperationTypes(input.event.operationTypes)}`
   return {
     id: input.id,
     sessionId: input.sessionId,
@@ -129,6 +129,20 @@ export function buildOperationEventMessage(input: MessageBaseInput & {
     createdAt: input.now,
     updatedAt: input.now,
   }
+}
+
+const OPERATION_TYPE_LABELS: Record<string, string> = {
+  update_current_note: '更新笔记元数据',
+  append_to_current_note: '追加内容到笔记',
+  replace_current_note_body: '替换笔记正文',
+  create_note: '创建新笔记',
+  suggest_only: '建议内容',
+  undo_agent_apply: '撤销操作',
+}
+
+function translateOperationTypes(types: string[]): string {
+  if (types.length === 0) return '执行操作'
+  return types.map((type) => OPERATION_TYPE_LABELS[type] ?? type).join('、')
 }
 
 export function buildErrorMessage(input: MessageBaseInput & { text: string }): AgentMessage {

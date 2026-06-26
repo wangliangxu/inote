@@ -2518,6 +2518,267 @@ button {
   margin: 0;
 }
 
+/* Operation event (timeline style) */
+.agent-operation-event {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 10px;
+}
+
+.agent-operation-event-content {
+  align-items: center;
+  color: var(--color-success);
+  display: flex;
+  font-size: var(--font-size-12);
+  gap: 8px;
+}
+
+.agent-operation-undo {
+  font-size: 11px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0 6px;
+}
+
+/* Turn group container */
+.agent-turn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.agent-turn-group:not(.standalone)::before {
+  border-left: 2px solid var(--color-base-300);
+  bottom: 0;
+  content: '';
+  left: 6px;
+  position: absolute;
+  top: 22px;
+}
+
+.agent-turn-header {
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-11);
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.agent-turn-header:hover {
+  opacity: 0.8;
+}
+
+.agent-turn-chevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.agent-turn-time {
+  color: var(--text-secondary);
+  font-size: var(--font-size-11);
+  white-space: nowrap;
+}
+
+.agent-turn-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+/* Collapsed turn */
+.agent-turn-collapsed {
+  align-items: center;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-12);
+  gap: 8px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  width: 100%;
+}
+
+.agent-turn-collapsed:hover {
+  background: var(--color-base-200);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-base-300));
+}
+
+.agent-turn-command {
+  color: var(--color-base-content);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Load more button */
+.agent-load-more {
+  align-items: center;
+  align-self: center;
+  background: var(--color-base-100);
+  border: 1px dashed var(--color-base-300);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--font-size-12);
+  gap: 6px;
+  padding: 6px 16px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.agent-load-more:hover {
+  background: var(--color-base-200);
+  color: var(--color-primary);
+}
+
+/* Message timestamp */
+.agent-message-timestamp {
+  color: var(--text-secondary);
+  display: block;
+  font-size: 10px;
+  opacity: 0.7;
+  text-align: right;
+}
+
+.agent-message-footer {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+/* Detail tabs for assistant_result */
+.agent-detail-tabs {
+  margin-top: 6px;
+}
+
+.agent-detail-tab-bar {
+  border-bottom: 1px solid var(--color-base-300);
+  display: flex;
+  gap: 0;
+}
+
+.agent-detail-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-11);
+  padding: 4px 10px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.agent-detail-tab:hover {
+  color: var(--color-base-content);
+}
+
+.agent-detail-tab.active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.agent-detail-content {
+  background: var(--color-base-200);
+  border-radius: 0 0 var(--radius-field, 0.5rem) var(--radius-field, 0.5rem);
+  font-size: 11px;
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+/* Review status badges */
+.agent-review-badge {
+  align-items: center;
+  border-radius: 10px;
+  display: inline-flex;
+  font-size: var(--font-size-11);
+  gap: 3px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.agent-review-badge.applied {
+  background: color-mix(in srgb, var(--color-success) 15%, var(--color-base-100));
+  color: var(--color-success);
+}
+
+.agent-review-badge.discarded {
+  background: color-mix(in srgb, var(--color-warning) 15%, var(--color-base-100));
+  color: var(--color-warning);
+}
+
+/* Collapsed review plan */
+.agent-review-plan.applied-collapsed {
+  border: 1px solid var(--color-base-300);
+  border-radius: 6px;
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.agent-review-collapsed-header-wrapper {
+  align-items: center;
+  background: var(--color-base-100);
+  display: flex;
+  gap: 8px;
+  padding-right: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.agent-review-collapsed-header-wrapper:hover {
+  background: var(--color-base-200);
+}
+
+.agent-review-collapsed-header {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font-size: var(--font-size-12);
+  gap: 8px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.agent-review-collapsed-summary {
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-review-collapsed-body {
+  border-top: 1px solid var(--color-base-300);
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.agent-review-collapsed-body .agent-review-group {
+  opacity: 0.75;
+}
+
+.agent-review-group.readonly label {
+  cursor: default;
+}
+
 .agent-quick-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
