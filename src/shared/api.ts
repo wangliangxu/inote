@@ -1,5 +1,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
 import type {
+  AgentConversation,
+  AgentMessage,
   AgentOperationEvent,
   AgentSession,
   AgentTurn,
@@ -71,10 +73,31 @@ interface LoadAgentSessionInput {
   notePath: string
 }
 
+interface LoadAgentConversationInput {
+  vaultRoot: string
+  notePath: string
+  messageLimit?: number
+}
+
 interface RecordAgentTurnInput {
   vaultRoot: string
   noteTitle: string
   turn: AgentTurn
+}
+
+interface RecordAgentMessageInput {
+  vaultRoot: string
+  message: AgentMessage
+}
+
+interface RecordAgentMessagesInput {
+  vaultRoot: string
+  messages: AgentMessage[]
+}
+
+interface UpdateAgentMessageInput {
+  vaultRoot: string
+  message: AgentMessage
 }
 
 interface RecordAgentOperationEventInput {
@@ -189,8 +212,24 @@ export async function loadAgentSession(input: LoadAgentSessionInput): Promise<Ag
   return invoke<AgentSession | null>('load_agent_session', { input })
 }
 
+export async function loadAgentConversation(input: LoadAgentConversationInput): Promise<AgentConversation> {
+  return invoke<AgentConversation>('load_agent_conversation', { input })
+}
+
 export async function recordAgentTurn(input: RecordAgentTurnInput): Promise<void> {
   return invoke<void>('record_agent_turn', { input })
+}
+
+export async function recordAgentMessage(input: RecordAgentMessageInput): Promise<void> {
+  return invoke<void>('record_agent_message', { input })
+}
+
+export async function recordAgentMessages(input: RecordAgentMessagesInput): Promise<void> {
+  return invoke<void>('record_agent_messages', { input })
+}
+
+export async function updateAgentMessage(input: UpdateAgentMessageInput): Promise<void> {
+  return invoke<void>('update_agent_message', { input })
 }
 
 export async function recordAgentOperationEvent(input: RecordAgentOperationEventInput): Promise<void> {

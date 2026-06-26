@@ -1,5 +1,6 @@
 use crate::agent_session::{
-    AgentOperationEvent, AgentSession, AgentSessionStore, AgentTurn, AgentUndoSnapshot,
+    AgentConversation, AgentMessage, AgentOperationEvent, AgentSession, AgentSessionStore,
+    AgentTurn, AgentUndoSnapshot,
 };
 use crate::indexer::{NoteIndex, NoteLink, SearchResult};
 use crate::llm::{
@@ -120,10 +121,39 @@ pub struct LoadAgentSessionInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LoadAgentConversationInput {
+    pub vault_root: String,
+    pub note_path: String,
+    pub message_limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordAgentTurnInput {
     pub vault_root: String,
     pub note_title: String,
     pub turn: AgentTurn,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordAgentMessageInput {
+    pub vault_root: String,
+    pub message: AgentMessage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordAgentMessagesInput {
+    pub vault_root: String,
+    pub messages: Vec<AgentMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAgentMessageInput {
+    pub vault_root: String,
+    pub message: AgentMessage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -351,6 +381,14 @@ pub fn load_agent_session(input: LoadAgentSessionInput) -> Result<Option<AgentSe
 }
 
 #[tauri::command]
+pub fn load_agent_conversation(
+    input: LoadAgentConversationInput,
+) -> Result<AgentConversation, String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .load_conversation(&input.note_path, input.message_limit.unwrap_or(60))
+}
+
+#[tauri::command]
 pub fn record_agent_turn(input: RecordAgentTurnInput) -> Result<(), String> {
     let store = AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?;
     store.upsert_session(
@@ -360,6 +398,24 @@ pub fn record_agent_turn(input: RecordAgentTurnInput) -> Result<(), String> {
         &input.turn.created_at,
     )?;
     store.record_turn(&input.turn)
+}
+
+#[tauri::command]
+pub fn record_agent_message(input: RecordAgentMessageInput) -> Result<(), String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .record_message(&input.message)
+}
+
+#[tauri::command]
+pub fn record_agent_messages(input: RecordAgentMessagesInput) -> Result<(), String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .record_messages(&input.messages)
+}
+
+#[tauri::command]
+pub fn update_agent_message(input: UpdateAgentMessageInput) -> Result<(), String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .record_message(&input.message)
 }
 
 #[tauri::command]
@@ -783,6 +839,173 @@ mod tests {
         assert_eq!(session.created_at, turn.created_at);
         assert_eq!(session.updated_at, turn.created_at);
         assert_eq!(session.turns, vec![turn]);
+    }
+
+    #[test]
+    fn command_records_and_loads_agent_conversation_messages() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let note_path = "journal/conversation.md";
+        let session_id = "session-command-message";
+        let turn = sample_agent_turn(
+            "turn-command-message",
+            session_id,
+            note_path,
+            "2026-06-26T12:00:00Z",
+        );
+        record_agent_turn(RecordAgentTurnInput {
+            vault_root: root.clone(),
+            note_title: "Conversation".to_string(),
+            turn,
+        })
+        .unwrap();
+
+        record_agent_message(RecordAgentMessageInput {
+            vault_root: root.clone(),
+            message: AgentMessage {
+                id: "message-command-1".to_string(),
+                session_id: session_id.to_string(),
+                note_path: note_path.to_string(),
+                turn_id: Some("turn-command-message".to_string()),
+                role: "user".to_string(),
+                kind: "user_command".to_string(),
+                text: "Summarize".to_string(),
+                payload_json: None,
+                status: "ready".to_string(),
+                created_at: "2026-06-26T12:00:00Z".to_string(),
+                updated_at: "2026-06-26T12:00:00Z".to_string(),
+            },
+        })
+        .unwrap();
+
+        let conversation = load_agent_conversation(LoadAgentConversationInput {
+            vault_root: root,
+            note_path: note_path.to_string(),
+            message_limit: Some(10),
+        })
+        .unwrap();
+
+        assert_eq!(conversation.session.unwrap().id, session_id);
+        assert_eq!(conversation.messages.len(), 1);
+        assert_eq!(conversation.messages[0].text, "Summarize");
+    }
+
+    #[test]
+    fn command_records_agent_message_batch() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let note_path = "journal/batch.md";
+        let session_id = "session-command-batch";
+        record_agent_turn(RecordAgentTurnInput {
+            vault_root: root.clone(),
+            note_title: "Batch".to_string(),
+            turn: sample_agent_turn(
+                "turn-command-batch",
+                session_id,
+                note_path,
+                "2026-06-26T13:00:00Z",
+            ),
+        })
+        .unwrap();
+
+        record_agent_messages(RecordAgentMessagesInput {
+            vault_root: root.clone(),
+            messages: vec![
+                AgentMessage {
+                    id: "message-batch-1".to_string(),
+                    session_id: session_id.to_string(),
+                    note_path: note_path.to_string(),
+                    turn_id: Some("turn-command-batch".to_string()),
+                    role: "assistant".to_string(),
+                    kind: "assistant_status".to_string(),
+                    text: "Reading current note context...".to_string(),
+                    payload_json: None,
+                    status: "ready".to_string(),
+                    created_at: "2026-06-26T13:00:00Z".to_string(),
+                    updated_at: "2026-06-26T13:00:00Z".to_string(),
+                },
+                AgentMessage {
+                    id: "message-batch-2".to_string(),
+                    session_id: session_id.to_string(),
+                    note_path: note_path.to_string(),
+                    turn_id: Some("turn-command-batch".to_string()),
+                    role: "assistant".to_string(),
+                    kind: "assistant_result".to_string(),
+                    text: "Ready to review.".to_string(),
+                    payload_json: Some("{\"ok\":true}".to_string()),
+                    status: "ready".to_string(),
+                    created_at: "2026-06-26T13:00:01Z".to_string(),
+                    updated_at: "2026-06-26T13:00:01Z".to_string(),
+                },
+            ],
+        })
+        .unwrap();
+
+        let conversation = load_agent_conversation(LoadAgentConversationInput {
+            vault_root: root,
+            note_path: note_path.to_string(),
+            message_limit: Some(10),
+        })
+        .unwrap();
+        assert_eq!(conversation.messages.len(), 2);
+        assert_eq!(conversation.messages[1].kind, "assistant_result");
+    }
+
+    #[test]
+    fn command_updates_agent_message() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+        let note_path = "journal/update.md";
+        let session_id = "session-command-update";
+        record_agent_turn(RecordAgentTurnInput {
+            vault_root: root.clone(),
+            note_title: "Update".to_string(),
+            turn: sample_agent_turn(
+                "turn-command-update",
+                session_id,
+                note_path,
+                "2026-06-26T14:00:00Z",
+            ),
+        })
+        .unwrap();
+
+        let mut message = AgentMessage {
+            id: "message-update-1".to_string(),
+            session_id: session_id.to_string(),
+            note_path: note_path.to_string(),
+            turn_id: Some("turn-command-update".to_string()),
+            role: "assistant".to_string(),
+            kind: "assistant_status".to_string(),
+            text: "Reading current note context...".to_string(),
+            payload_json: None,
+            status: "streaming".to_string(),
+            created_at: "2026-06-26T14:00:00Z".to_string(),
+            updated_at: "2026-06-26T14:00:00Z".to_string(),
+        };
+        record_agent_message(RecordAgentMessageInput {
+            vault_root: root.clone(),
+            message: message.clone(),
+        })
+        .unwrap();
+
+        message.text = "Ready to review.".to_string();
+        message.status = "ready".to_string();
+        message.updated_at = "2026-06-26T14:00:01Z".to_string();
+        update_agent_message(UpdateAgentMessageInput {
+            vault_root: root.clone(),
+            message,
+        })
+        .unwrap();
+
+        let conversation = load_agent_conversation(LoadAgentConversationInput {
+            vault_root: root,
+            note_path: note_path.to_string(),
+            message_limit: Some(10),
+        })
+        .unwrap();
+        assert_eq!(conversation.messages.len(), 1);
+        assert_eq!(conversation.messages[0].text, "Ready to review.");
+        assert_eq!(conversation.messages[0].status, "ready");
     }
 
     #[test]

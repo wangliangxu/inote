@@ -149,6 +149,38 @@ export interface AgentUndoSnapshot {
   createdAt: string
 }
 
+export type AgentMessageRole = 'user' | 'assistant' | 'system'
+
+export type AgentMessageKind =
+  | 'user_command'
+  | 'assistant_status'
+  | 'assistant_result'
+  | 'review_plan'
+  | 'operation_event'
+  | 'error'
+
+export type AgentMessageStatus = 'pending' | 'streaming' | 'ready' | 'applied' | 'failed'
+
+export interface AgentMessage {
+  id: string
+  sessionId: string
+  notePath: string
+  turnId?: string | null
+  role: AgentMessageRole
+  kind: AgentMessageKind
+  text: string
+  payloadJson?: string | null
+  status: AgentMessageStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentConversation {
+  session: AgentSession | null
+  messages: AgentMessage[]
+  lastUndoSnapshot?: AgentUndoSnapshot | null
+}
+
 export type ReviewGroupKind = 'metadata' | 'body_append' | 'body_replace' | 'create_note' | 'suggestion' | 'risk'
 
 export interface ReviewPlan {

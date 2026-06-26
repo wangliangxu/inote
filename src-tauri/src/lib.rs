@@ -79,7 +79,11 @@ pub fn run() {
             commands::execute_llm_chat,
             commands::execute_llm_chat_stream,
             commands::load_agent_session,
+            commands::load_agent_conversation,
             commands::record_agent_turn,
+            commands::record_agent_message,
+            commands::record_agent_messages,
+            commands::update_agent_message,
             commands::record_agent_operation_event,
             commands::load_last_agent_undo_snapshot,
             commands::clear_last_agent_undo_snapshot
