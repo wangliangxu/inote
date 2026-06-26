@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub const DEFAULT_TURN_RETENTION: usize = 20;
+pub const DEFAULT_MESSAGE_RETENTION: usize = 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +61,30 @@ pub struct AgentUndoSnapshot {
     pub active_path_after_apply: String,
     pub created_note_path: Option<String>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMessage {
+    pub id: String,
+    pub session_id: String,
+    pub note_path: String,
+    pub turn_id: Option<String>,
+    pub role: String,
+    pub kind: String,
+    pub text: String,
+    pub payload_json: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConversation {
+    pub session: Option<AgentSession>,
+    pub messages: Vec<AgentMessage>,
+    pub last_undo_snapshot: Option<AgentUndoSnapshot>,
 }
 
 pub struct AgentSessionStore {
@@ -141,9 +166,45 @@ impl AgentSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_agent_undo_snapshots_note_path
                 ON agent_undo_snapshots(note_path);
+
+                CREATE TABLE IF NOT EXISTS agent_messages (
+                  id TEXT PRIMARY KEY,
+                  session_id TEXT NOT NULL,
+                  note_path TEXT NOT NULL,
+                  turn_id TEXT,
+                  role TEXT NOT NULL,
+                  kind TEXT NOT NULL,
+                  text TEXT NOT NULL,
+                  payload_json TEXT,
+                  status TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  FOREIGN KEY(session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_agent_messages_note_path_created_at
+                ON agent_messages(note_path, created_at);
+
+                CREATE INDEX IF NOT EXISTS idx_agent_messages_session_id_created_at
+                ON agent_messages(session_id, created_at);
                 ",
             )
             .map_err(|error| format!("failed to create agent session schema: {error}"))
+    }
+
+    pub fn load_conversation(
+        &self,
+        note_path: &str,
+        message_limit: usize,
+    ) -> Result<AgentConversation, String> {
+        let session = self.load_session(note_path)?;
+        let messages = self.load_messages(note_path, message_limit)?;
+        let last_undo_snapshot = self.load_last_undo_snapshot(note_path)?;
+        Ok(AgentConversation {
+            session,
+            messages,
+            last_undo_snapshot,
+        })
     }
 
     pub fn load_session(&self, note_path: &str) -> Result<Option<AgentSession>, String> {
@@ -288,6 +349,112 @@ impl AgentSessionStore {
             )
             .map_err(|error| format!("failed to record agent turn: {error}"))?;
         self.enforce_turn_retention(&turn.session_id, DEFAULT_TURN_RETENTION)?;
+        Ok(())
+    }
+
+    pub fn load_messages(
+        &self,
+        note_path: &str,
+        limit: usize,
+    ) -> Result<Vec<AgentMessage>, String> {
+        let limit = limit.max(1) as i64;
+        let mut statement = self
+            .conn
+            .prepare(
+                "
+                SELECT
+                  id,
+                  session_id,
+                  note_path,
+                  turn_id,
+                  role,
+                  kind,
+                  text,
+                  payload_json,
+                  status,
+                  created_at,
+                  updated_at
+                FROM agent_messages
+                WHERE note_path = ?1
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?2
+                ",
+            )
+            .map_err(|error| format!("failed to prepare agent messages query: {error}"))?;
+
+        let mut messages = statement
+            .query_map(params![note_path, limit], row_to_message)
+            .map_err(|error| format!("failed to load agent messages: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("failed to read agent message: {error}"))?;
+        messages.reverse();
+        Ok(messages)
+    }
+
+    pub fn record_message(&self, message: &AgentMessage) -> Result<(), String> {
+        let transaction = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| format!("failed to start agent message transaction: {error}"))?;
+
+        transaction
+            .execute(
+                "
+                INSERT INTO agent_messages (
+                  id,
+                  session_id,
+                  note_path,
+                  turn_id,
+                  role,
+                  kind,
+                  text,
+                  payload_json,
+                  status,
+                  created_at,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                ON CONFLICT(id) DO UPDATE SET
+                  session_id = excluded.session_id,
+                  note_path = excluded.note_path,
+                  turn_id = excluded.turn_id,
+                  role = excluded.role,
+                  kind = excluded.kind,
+                  text = excluded.text,
+                  payload_json = excluded.payload_json,
+                  status = excluded.status,
+                  updated_at = excluded.updated_at
+                ",
+                params![
+                    message.id,
+                    message.session_id,
+                    message.note_path,
+                    message.turn_id,
+                    message.role,
+                    message.kind,
+                    message.text,
+                    message.payload_json,
+                    message.status,
+                    message.created_at,
+                    message.updated_at
+                ],
+            )
+            .map_err(|error| format!("failed to record agent message: {error}"))?;
+        Self::enforce_message_retention_tx(
+            &transaction,
+            &message.note_path,
+            DEFAULT_MESSAGE_RETENTION,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit agent message: {error}"))?;
+        Ok(())
+    }
+
+    pub fn record_messages(&self, messages: &[AgentMessage]) -> Result<(), String> {
+        for message in messages {
+            self.record_message(message)?;
+        }
         Ok(())
     }
 
@@ -452,6 +619,30 @@ impl AgentSessionStore {
         Ok(())
     }
 
+    fn enforce_message_retention_tx(
+        transaction: &rusqlite::Transaction<'_>,
+        note_path: &str,
+        keep: usize,
+    ) -> Result<(), String> {
+        transaction
+            .execute(
+                "
+                DELETE FROM agent_messages
+                WHERE note_path = ?1
+                  AND id NOT IN (
+                    SELECT id
+                    FROM agent_messages
+                    WHERE note_path = ?1
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?2
+                  )
+                ",
+                params![note_path, keep as i64],
+            )
+            .map_err(|error| format!("failed to enforce agent message retention: {error}"))?;
+        Ok(())
+    }
+
     fn load_turns(&self, session_id: &str) -> Result<Vec<AgentTurn>, String> {
         let mut statement = self
             .conn
@@ -567,6 +758,22 @@ fn row_to_undo_snapshot(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentUndoSn
         active_path_after_apply: row.get(6)?,
         created_note_path: row.get(7)?,
         created_at: row.get(8)?,
+    })
+}
+
+fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMessage> {
+    Ok(AgentMessage {
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        note_path: row.get(2)?,
+        turn_id: row.get(3)?,
+        role: row.get(4)?,
+        kind: row.get(5)?,
+        text: row.get(6)?,
+        payload_json: row.get(7)?,
+        status: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 
@@ -695,6 +902,139 @@ mod tests {
                 last_undo_snapshot: Some(snapshot),
             }
         );
+    }
+
+    #[test]
+    fn agent_messages_round_trip_and_update_by_note_path() {
+        let store = store();
+        let session_id = "session-message";
+        let note_path = "journal/message.md";
+        store
+            .upsert_session(session_id, note_path, "Message Note", "2026-06-26T09:00:00Z")
+            .unwrap();
+
+        let user_message = AgentMessage {
+            id: "message-1".to_string(),
+            session_id: session_id.to_string(),
+            note_path: note_path.to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "user".to_string(),
+            kind: "user_command".to_string(),
+            text: "Summarize this note".to_string(),
+            payload_json: None,
+            status: "ready".to_string(),
+            created_at: "2026-06-26T09:01:00Z".to_string(),
+            updated_at: "2026-06-26T09:01:00Z".to_string(),
+        };
+        let mut status_message = AgentMessage {
+            id: "message-2".to_string(),
+            session_id: session_id.to_string(),
+            note_path: note_path.to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            kind: "assistant_status".to_string(),
+            text: "Reading current note context...".to_string(),
+            payload_json: None,
+            status: "streaming".to_string(),
+            created_at: "2026-06-26T09:01:01Z".to_string(),
+            updated_at: "2026-06-26T09:01:01Z".to_string(),
+        };
+
+        store.record_message(&user_message).unwrap();
+        store.record_message(&status_message).unwrap();
+        status_message.text = "Building review plan...".to_string();
+        status_message.status = "ready".to_string();
+        status_message.updated_at = "2026-06-26T09:01:02Z".to_string();
+        store.record_message(&status_message).unwrap();
+
+        let messages = store.load_messages(note_path, 10).unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0], user_message);
+        assert_eq!(messages[1].text, "Building review plan...");
+        assert_eq!(messages[1].status, "ready");
+    }
+
+    #[test]
+    fn load_conversation_returns_session_messages_and_undo_snapshot() {
+        let store = store();
+        let session_id = "session-conversation";
+        let note_path = "journal/conversation.md";
+        store
+            .upsert_session(session_id, note_path, "Conversation", "2026-06-26T10:00:00Z")
+            .unwrap();
+
+        let turn = sample_turn(
+            "turn-conversation",
+            session_id,
+            note_path,
+            "2026-06-26T10:01:00Z",
+        );
+        store.record_turn(&turn).unwrap();
+        let event = sample_event(session_id, &turn.id, note_path);
+        store.record_operation_event(&event).unwrap();
+        let snapshot = sample_snapshot(
+            "undo-conversation",
+            session_id,
+            &event.id,
+            note_path,
+            "---\ntitle: Conversation\n---\nBefore",
+            "2026-06-26T10:03:00Z",
+        );
+        store.store_undo_snapshot(&snapshot).unwrap();
+        store
+            .record_message(&AgentMessage {
+                id: "message-conversation".to_string(),
+                session_id: session_id.to_string(),
+                note_path: note_path.to_string(),
+                turn_id: Some(turn.id.clone()),
+                role: "assistant".to_string(),
+                kind: "assistant_result".to_string(),
+                text: "Ready to review changes.".to_string(),
+                payload_json: Some("{\"summary\":\"ok\"}".to_string()),
+                status: "ready".to_string(),
+                created_at: "2026-06-26T10:02:00Z".to_string(),
+                updated_at: "2026-06-26T10:02:00Z".to_string(),
+            })
+            .unwrap();
+
+        let conversation = store.load_conversation(note_path, 5).unwrap();
+        assert_eq!(conversation.session.unwrap().id, session_id);
+        assert_eq!(conversation.messages.len(), 1);
+        assert_eq!(conversation.messages[0].kind, "assistant_result");
+        assert_eq!(conversation.last_undo_snapshot.unwrap().id, snapshot.id);
+    }
+
+    #[test]
+    fn record_message_keeps_latest_sixty_messages_for_note() {
+        let store = store();
+        let session_id = "session-retention";
+        let note_path = "journal/retention.md";
+        store
+            .upsert_session(session_id, note_path, "Retention", "2026-06-26T11:00:00Z")
+            .unwrap();
+
+        for index in 0..65 {
+            store
+                .record_message(&AgentMessage {
+                    id: format!("message-{index:02}"),
+                    session_id: session_id.to_string(),
+                    note_path: note_path.to_string(),
+                    turn_id: None,
+                    role: "assistant".to_string(),
+                    kind: "assistant_status".to_string(),
+                    text: format!("Status {index}"),
+                    payload_json: None,
+                    status: "ready".to_string(),
+                    created_at: format!("2026-06-26T11:{index:02}:00Z"),
+                    updated_at: format!("2026-06-26T11:{index:02}:00Z"),
+                })
+                .unwrap();
+        }
+
+        let messages = store.load_messages(note_path, 100).unwrap();
+        assert_eq!(messages.len(), DEFAULT_MESSAGE_RETENTION);
+        assert_eq!(messages.first().unwrap().id, "message-05");
+        assert_eq!(messages.last().unwrap().id, "message-64");
     }
 
     #[test]
