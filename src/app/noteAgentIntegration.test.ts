@@ -44,11 +44,16 @@ describe('note agent integration', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
     expect(app).toContain('recordAgentOperationEvent')
+    expect(app).toContain('buildOperationEventMessage')
+    expect(app).toContain('recordAgentMessages({')
     expect(app).toContain('loadLastAgentUndoSnapshot')
     expect(app).toContain('clearLastAgentUndoSnapshot')
     expect(app).toContain('noteBeforeMarkdown: noteToMarkdown(activeNote)')
     expect(app).toContain('noteTitle: saved.title')
     expect(app).toContain('Undo is not available for created notes yet.')
+    expect(app).toContain('action: "applied"')
+    expect(app).toContain('action: "created"')
+    expect(app).toContain('action: "undone"')
   })
 
   it('uses Codex-style conversation components for NoteAgent', () => {
@@ -71,5 +76,15 @@ describe('note agent integration', () => {
     expect(agent).toContain('getRecentMeaningfulMessages')
     expect(agent).not.toContain('agent-stage-list')
     expect(agent).not.toContain('agent-timeline')
+  })
+
+  it('has Codex-style conversation sidebar styles', () => {
+    const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
+
+    expect(styles).toContain('.agent-conversation-stream')
+    expect(styles).toContain('.agent-message-bubble.user')
+    expect(styles).toContain('.agent-message-bubble.assistant')
+    expect(styles).toContain('.agent-review-actions')
+    expect(styles).toContain('.agent-composer')
   })
 })

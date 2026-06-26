@@ -93,6 +93,7 @@ import {
   filterOperationsByIndexes,
   getCreateNoteDraft,
 } from "../features/agent/applyAgentOperations";
+import { buildOperationEventMessage } from "../features/agent/agentConversation";
 import type { AgentResult } from "../features/agent/agentTypes";
 import {
   archiveNote,
@@ -120,6 +121,7 @@ import {
   stopVaultWatcher,
   parseMarkdownWithFrontmatter,
   recordAgentOperationEvent,
+  recordAgentMessages,
   getSetting,
 } from "../shared/api";
 import {
@@ -1641,6 +1643,21 @@ export function App() {
         event: savedEvent,
         undoSnapshot: savedSnapshot,
       });
+      await recordAgentMessages({
+        vaultRoot: vaultRoot.trim(),
+        messages: [
+          buildOperationEventMessage({
+            id: makeAgentId("message"),
+            sessionId,
+            notePath: saved.path,
+            turnId,
+            now,
+            event: savedEvent,
+            action: "applied",
+            canUndo: true,
+          }),
+        ],
+      });
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
         current.map((note) => (note.path === activeNote.path ? saved : note)),
@@ -1860,20 +1877,36 @@ export function App() {
         path: created.path,
         content: noteToMarkdown(noteToSave),
       });
+      const event: AgentOperationEvent = {
+        id: makeAgentId("event"),
+        sessionId,
+        turnId,
+        notePath: activeNote?.path ?? saved.path,
+        operationTypes: selectedOperations.map((operation) => operation.type),
+        changedFields: [],
+        createdNotePath: saved.path,
+        appliedAt: nowIsoString(),
+      };
       await recordAgentOperationEvent({
         vaultRoot: vaultRoot.trim(),
         noteTitle: activeNote?.title ?? saved.title,
-        event: {
-          id: makeAgentId("event"),
-          sessionId,
-          turnId,
-          notePath: activeNote?.path ?? saved.path,
-          operationTypes: selectedOperations.map((operation) => operation.type),
-          changedFields: [],
-          createdNotePath: saved.path,
-          appliedAt: nowIsoString(),
-        },
+        event,
         undoSnapshot: null,
+      });
+      await recordAgentMessages({
+        vaultRoot: vaultRoot.trim(),
+        messages: [
+          buildOperationEventMessage({
+            id: makeAgentId("message"),
+            sessionId,
+            notePath: event.notePath,
+            turnId,
+            now: event.appliedAt,
+            event,
+            action: "created",
+            canUndo: false,
+          }),
+        ],
       });
       setLinkVersion((current) => current + 1);
       setNotes((current) => [
@@ -1935,6 +1968,31 @@ export function App() {
           notePath: restorePath,
         });
       }
+      const event: AgentOperationEvent = {
+        id: makeAgentId("event"),
+        sessionId: snapshot.sessionId,
+        turnId: "",
+        notePath: restored.path,
+        operationTypes: ["undo_agent_apply"],
+        changedFields: ["body"],
+        createdNotePath: null,
+        appliedAt: nowIsoString(),
+      };
+      await recordAgentMessages({
+        vaultRoot: vaultRoot.trim(),
+        messages: [
+          buildOperationEventMessage({
+            id: makeAgentId("message"),
+            sessionId: snapshot.sessionId,
+            notePath: restored.path,
+            turnId: null,
+            now: event.appliedAt,
+            event,
+            action: "undone",
+            canUndo: false,
+          }),
+        ],
+      });
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
         current.map((note) => (note.path === activeNote.path ? restored : note)),
