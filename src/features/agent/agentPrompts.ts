@@ -28,12 +28,10 @@ export function buildAgentPrompt({ command, note, notes, action, maxContextLengt
       `Title: ${note.title}`,
       `Path: ${note.path}`,
       `Category: ${note.category}`,
-      `Tags: ${note.tags.join(', ') || 'none'}`,
       `Created: ${note.createdAt}`,
       `Updated: ${note.updatedAt}`,
       note.summary ? `Summary: ${note.summary}` : '',
-      `Existing categories: ${unique(notes.map((item) => item.category)).join(', ') || 'none'}`,
-      `Existing tags: ${unique(notes.flatMap((item) => item.tags)).join(', ') || 'none'}`,
+      `Existing categories: ${unique(notes.filter((item) => !isArchiveOrTrashNote(item)).map((item) => item.category)).join(', ') || 'none'}`,
       '',
       note.body.slice(0, maxContextLength ?? 10000),
     ].filter((line, index, all) => line !== '' || all[index - 1] !== '').join('\n'),
@@ -52,4 +50,15 @@ function actionInstruction(action?: QuickAgentAction): string {
 
 function unique(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).sort((a, b) => a.localeCompare(b))
+}
+
+function isArchiveOrTrashNote(note: Note): boolean {
+  const blockedRoots = new Set(['archive', 'archives', 'archived', 'trash', '存档', '归档', '回收站'])
+  const categoryRoot = firstPathPart(note.category)
+  const pathRoot = firstPathPart(note.path)
+  return blockedRoots.has(categoryRoot) || blockedRoots.has(pathRoot)
+}
+
+function firstPathPart(value: string): string {
+  return value.trim().replace(/^\/+/, '').split(/[\\/]/)[0]?.toLowerCase() ?? ''
 }

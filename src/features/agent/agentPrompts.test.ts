@@ -28,19 +28,29 @@ describe('buildAgentPrompt', () => {
     expect(prompt.context).toContain('AI Notes')
   })
 
-  it('includes compact category and tag hints', () => {
+  it('includes compact category hints without archive trash or tags', () => {
     const prompt = buildAgentPrompt({
       command: 'create related note',
       note,
       notes: [
         note,
         { ...note, path: 'projects/app.md', category: 'projects', tags: ['inote', 'ai'] },
+        { ...note, path: 'archive/old.md', category: 'archive', tags: ['old'] },
+        { ...note, path: 'trash/deleted.md', category: 'trash', tags: ['deleted'] },
+        { ...note, path: '归档/旧笔记.md', category: '归档', tags: ['archived'] },
+        { ...note, path: '回收站/删除.md', category: '回收站', tags: ['removed'] },
       ],
       action: 'create_related',
     })
 
     expect(prompt.context).toContain('Existing categories: knowledge, projects')
-    expect(prompt.context).toContain('Existing tags: ai, inote')
+    expect(prompt.context).not.toContain('Existing categories: archive')
+    expect(prompt.context).not.toContain('trash')
+    expect(prompt.context).not.toContain('归档')
+    expect(prompt.context).not.toContain('回收站')
+    expect(prompt.context).not.toContain('Tags:')
+    expect(prompt.context).not.toContain('Existing tags:')
+    expect(prompt.context).not.toContain('inote')
     expect(prompt.prompt).toContain('Create a related note')
   })
 
