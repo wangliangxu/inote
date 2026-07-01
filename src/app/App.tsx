@@ -259,15 +259,15 @@ const NoteRowItem = memo(function NoteRowItem({
   }, [isActive]);
 
   return (
-    <div ref={ref}>
+    <div ref={ref} className="w-full min-w-0 max-w-full">
       <button
-        className={`flex flex-col w-full text-left px-3 py-2 rounded-lg focus:outline-none transition-none ${isActive ? "bg-primary/10 text-primary" : ""}`}
+        className={`flex flex-col w-full min-w-0 max-w-full text-left px-3 py-2 rounded-lg focus:outline-none transition-none ${isActive ? "bg-primary/10 text-primary" : ""}`}
         type="button"
         onClick={() => onSelect(note.path)}
       >
-        <div className="flex items-center justify-between gap-2 w-full">
+        <div className="flex items-center justify-between gap-2 w-full min-w-0 max-w-full">
           <strong
-            className={`text-sm font-semibold truncate ${isActive ? "text-primary" : "text-base-content"}`}
+            className={`text-sm font-semibold truncate min-w-0 max-w-full ${isActive ? "text-primary" : "text-base-content"}`}
           >
             {note.title}
           </strong>

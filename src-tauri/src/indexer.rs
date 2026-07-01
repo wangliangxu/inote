@@ -83,7 +83,7 @@ impl NoteIndex {
     }
 
     pub fn update_note(&self, vault_root: &Path, note: &NoteMetadata, notes: &[NoteMetadata]) -> Result<(), String> {
-        self.delete_note(&note.path)?;
+        self.remove_note_outgoing(&note.path)?;
         let resolver = LinkResolver::new(notes);
         let file_modified = std::fs::metadata(vault_root.join(&note.path))
             .ok()
@@ -166,6 +166,27 @@ impl NoteIndex {
                 params![path],
             )
             .map_err(|error| format!("failed to remove note links from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM tags WHERE note_path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note tags from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM search_index WHERE path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note text from index: {error}"))?;
+        self.conn
+            .execute("DELETE FROM notes WHERE path = ?1", params![path])
+            .map_err(|error| format!("failed to remove note metadata from index: {error}"))?;
+        Ok(())
+    }
+
+    /// Remove only the outgoing data for a note (source links, tags, search text, metadata)
+    /// so it can be re-inserted. Incoming links (where target_path = path) are preserved.
+    fn remove_note_outgoing(&self, path: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM links WHERE source_path = ?1",
+                params![path],
+            )
+            .map_err(|error| format!("failed to remove outgoing links: {error}"))?;
         self.conn
             .execute("DELETE FROM tags WHERE note_path = ?1", params![path])
             .map_err(|error| format!("failed to remove note tags from index: {error}"))?;
@@ -818,5 +839,43 @@ mod tests {
         assert!(outgoing.iter().all(|link| link.target_path == "knowledge/POI更新策略.md"));
         assert_eq!(backlinks.len(), 2, "expected 2 backlinks, got: {backlinks:?}");
         assert!(backlinks.iter().all(|link| link.source_path == "knowledge/source.md"));
+    }
+
+    #[test]
+    fn update_note_preserves_backlinks() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note(
+                "knowledge/source.md",
+                "---\ntitle: Source Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nLinks to [[Target Note]].",
+            )
+            .unwrap();
+        vault
+            .write_note(
+                "knowledge/target.md",
+                "---\ntitle: Target Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nOriginal body.",
+            )
+            .unwrap();
+
+        let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
+        let notes = vault.scan().unwrap();
+        index.full_rebuild(vault.root(), &notes).unwrap();
+        assert_eq!(index.backlinks("knowledge/target.md").unwrap().len(), 1);
+
+        // Update target note (simulates saving) — backlinks from source should survive
+        vault
+            .write_note(
+                "knowledge/target.md",
+                "---\ntitle: Target Note\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nUpdated body.",
+            )
+            .unwrap();
+        let updated_notes = vault.scan().unwrap();
+        let target = updated_notes.iter().find(|n| n.path == "knowledge/target.md").unwrap();
+        index.update_note(vault.root(), target, &updated_notes).unwrap();
+
+        let backlinks = index.backlinks("knowledge/target.md").unwrap();
+        assert_eq!(backlinks.len(), 1, "backlink from source should be preserved after updating target");
+        assert_eq!(backlinks[0].source_path, "knowledge/source.md");
     }
 }

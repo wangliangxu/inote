@@ -59,6 +59,14 @@ describe('startup shell', () => {
     expect(styles).toContain('height: 206px')
   })
 
+  it('keeps summary note titles from widening the left sidebar', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('className="w-full min-w-0 max-w-full"')
+    expect(app).toContain('className="flex items-center justify-between gap-2 w-full min-w-0 max-w-full"')
+    expect(app).toMatch(/className=\{`text-sm font-semibold truncate min-w-0 max-w-full/)
+  })
+
   it('reserves native macOS traffic-light space in the title bar', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 

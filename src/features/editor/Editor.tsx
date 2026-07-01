@@ -237,7 +237,12 @@ export function Editor({
   })
 
   const [diffBaseline, setDiffBaseline] = useState(() => normalizedMarkdown)
-  const [metadataPanelOpen, setMetadataPanelOpen] = useState(false)
+  const [metadataPanelOpen, setMetadataPanelOpen] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('mdxeditor-metadata-open') === 'true'
+    }
+    return false
+  })
   const metadataPanelOpenRef = useRef(metadataPanelOpen)
 
   const [tocPanelOpen, setTocPanelOpen] = useState(() => {
@@ -256,6 +261,11 @@ export function Editor({
 
   useEffect(() => {
     metadataPanelOpenRef.current = metadataPanelOpen
+  }, [metadataPanelOpen])
+
+  useEffect(() => {
+    localStorage.setItem('mdxeditor-metadata-open', String(metadataPanelOpen))
+    setSetting('mdxeditor-metadata-open', String(metadataPanelOpen)).catch(console.error)
   }, [metadataPanelOpen])
 
   useEffect(() => {
