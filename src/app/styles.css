@@ -2841,7 +2841,16 @@ button {
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-actions button,
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .secondary-action,
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-actions button,
-:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .link-group button {
+  background: var(--bg-sidebar);
+  border-color: var(--border-main);
+  color: var(--text-main);
+}
+
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .topbar-icon-button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .window-actions button,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .secondary-action,
+:root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .context-actions button,
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .llm-task-grid button,
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-list-tools button,
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .note-delete-action,
