@@ -9,6 +9,8 @@ import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/
 import { orderedListStartPlugin } from './orderedListStartPlugin'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
+import { $getNearestNodeFromDOMNode, $isElementNode } from 'lexical'
+import { computeScrollTopForChild, extractMarkdownHeadings, findActiveHeadingFromLine as findActiveHeadingIndexFromLine, findRichTextHeadingElementIndex, isScrollableOverflowY, type EditorHeading } from './editorToc'
 import {
   MDXEditor,
   type MDXEditorMethods,
@@ -37,6 +39,7 @@ import {
   codeMirrorPlugin,
   InsertCodeBlock,
   viewMode$,
+  rootEditor$,
   realmPlugin
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
@@ -127,6 +130,39 @@ export function Editor({
   const editorRef = useRef<MDXEditorMethods>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
 
+  const getEditorContainer = useCallback(() => {
+    return editorWrapperRef.current?.querySelector('.mdx-editor-main') ?? null
+  }, [])
+
+  const getRichTextArea = useCallback(() => {
+    const editorContainer = getEditorContainer()
+    if (!editorContainer) return null
+
+    const candidates = Array.from(editorContainer.querySelectorAll<HTMLElement>('[contenteditable="true"]'))
+    return candidates.find(el => !el.closest('.cm-editor') && el.closest('.mdxeditor-root-contenteditable')) ??
+      candidates.find(el => !el.closest('.cm-editor')) ??
+      null
+  }, [getEditorContainer])
+
+  const getRichTextScrollContainer = useCallback((richTextArea: HTMLElement) => {
+    const editorContainer = getEditorContainer()
+    let node = richTextArea.parentElement
+
+    while (node && node !== editorContainer) {
+      const { overflowY } = window.getComputedStyle(node)
+      if (
+        isScrollableOverflowY(overflowY) &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        return node
+      }
+      node = node.parentElement
+    }
+
+    const wrapper = editorContainer?.querySelector('.mdxeditor-diff-source-wrapper')
+    return wrapper instanceof HTMLElement ? wrapper : null
+  }, [getEditorContainer])
+
   // Prevent Backspace/Delete in empty table cells from freezing the editor
   useEffect(() => {
     const el = editorWrapperRef.current
@@ -155,7 +191,7 @@ export function Editor({
       if (!href) return
 
       // Only intercept in rich-text contenteditable, not in CodeMirror/source mode
-      const richTextArea = el.querySelector('[contenteditable="true"]')
+      const richTextArea = getRichTextArea()
       if (!richTextArea || !richTextArea.contains(anchor)) return
 
       e.preventDefault()
@@ -216,7 +252,7 @@ export function Editor({
 
     el.addEventListener('click', handleLinkClick)
     return () => el.removeEventListener('click', handleLinkClick)
-  }, [note.path, vaultRoot, onNavigateLink])
+  }, [note.path, vaultRoot, onNavigateLink, getRichTextArea])
 
   // Pre-normalize the markdown body so it matches MDXEditor's canonical output.
   // This prevents spurious diffs (bullet chars, list spacing, table formatting)
@@ -295,43 +331,7 @@ export function Editor({
 
   // Extract headings
   const headings = useMemo(() => {
-    const lines = normalizedMarkdown.split('\n')
-    const result: { id: string; text: string; level: number; numberPrefix?: string; lineIndex: number }[] = []
-    let inCodeBlock = false
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      if (line.startsWith('```')) {
-        inCodeBlock = !inCodeBlock
-        continue
-      }
-      if (inCodeBlock) continue
-      const match = line.match(/^(#{1,6})\s+(.+)$/)
-      if (match) {
-        result.push({
-          id: `h-${i}`,
-          level: match[1].length,
-          text: match[2].trim(),
-          lineIndex: i
-        })
-      }
-    }
-    
-    // Compute numbering
-    if (result.length > 0) {
-      const numberPath: number[] = [];
-      const minLevel = Math.min(...result.map(h => h.level));
-      result.forEach(h => {
-        const relLevel = h.level - minLevel;
-        numberPath.length = relLevel + 1;
-        for (let j = 0; j < relLevel; j++) {
-          if (numberPath[j] === undefined) numberPath[j] = 1;
-        }
-        numberPath[relLevel] = (numberPath[relLevel] || 0) + 1;
-        h.numberPrefix = numberPath.join('.') + '. ';
-      });
-    }
-
-    return result
+    return extractMarkdownHeadings(normalizedMarkdown)
   }, [normalizedMarkdown])
 
   const headingsRef = useRef(headings)
@@ -339,15 +339,7 @@ export function Editor({
 
   // Helper: find the active heading index from a 0-based line index
   const findActiveHeadingFromLine = useCallback((lineIndex: number) => {
-    let activeIndex = -1
-    for (let i = 0; i < headings.length; i++) {
-      if (headings[i].lineIndex <= lineIndex) {
-        activeIndex = i
-      } else {
-        break
-      }
-    }
-    return activeIndex
+    return findActiveHeadingIndexFromLine(headings, lineIndex)
   }, [headings])
 
   // Helper: get the CodeMirror EditorView for the source/diff editor (NOT code block editors)
@@ -357,12 +349,14 @@ export function Editor({
 
     // Source mode: .mdxeditor-source-editor .cm-editor
     // Diff mode: .mdxeditor-diff-editor .cm-editor (last one is the editable "b" side)
-    const cmEditors = document.querySelectorAll('.mdx-editor-main .cm-editor')
+    const editorContainer = getEditorContainer()
+    if (!editorContainer) return null
+    const cmEditors = editorContainer.querySelectorAll('.cm-editor')
     if (cmEditors.length === 0) return null
     // Pick the last cm-editor (in diff mode, the "b" side is last)
     const cmEl = cmEditors[cmEditors.length - 1] as HTMLElement
     return EditorView.findFromDOM(cmEl)
-  }, [])
+  }, [getEditorContainer])
 
   // Read current line from CodeMirror and update active heading
   const updateCmActiveHeading = useCallback(() => {
@@ -373,36 +367,39 @@ export function Editor({
     setActiveHeadingIndex(findActiveHeadingFromLine(line.number - 1))
   }, [getCmEditorView, findActiveHeadingFromLine])
 
-  useEffect(() => {
-    // --- Rich text mode: use selectionchange ---
-    const handleSelectionChange = () => {
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-      
-      const node = selection.anchorNode
-      if (!node) return
-      
-      // Skip if the selection is inside a CodeMirror editor
-      const cmEditor = document.querySelector('.mdx-editor-main .cm-editor')
-      if (cmEditor && cmEditor.contains(node)) return
+  const updateRichTextActiveHeading = useCallback(() => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
 
-      // Rich Text Mode support
-      const editorElement = document.querySelector('.mdx-editor-main [contenteditable="true"]')
-      if (!editorElement || !editorElement.contains(node)) return
-      
-      const headingElements = Array.from(editorElement.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-      
-      let activeIndex = -1
-      for (let i = 0; i < headingElements.length; i++) {
-        const heading = headingElements[i]
+    const node = selection.anchorNode
+    if (!node) return
+
+    const richTextArea = getRichTextArea()
+    if (!richTextArea || !richTextArea.contains(node)) return
+
+    const headingElements = Array.from(richTextArea.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+
+    let activeIndex = -1
+    for (let i = 0; i < headingElements.length; i++) {
+      const heading = headingElements[i]
+      if (heading === node || heading.contains(node)) {
+        activeIndex = i
+      } else {
         const position = heading.compareDocumentPosition(node)
-        if ((position & Node.DOCUMENT_POSITION_FOLLOWING) || (position & Node.DOCUMENT_POSITION_CONTAINED_BY) || heading === node) {
+        if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
           activeIndex = i
         } else {
           break
         }
       }
-      setActiveHeadingIndex(activeIndex)
+    }
+    setActiveHeadingIndex(activeIndex)
+  }, [getRichTextArea])
+
+  useEffect(() => {
+    // --- Rich text mode: use selectionchange ---
+    const handleSelectionChange = () => {
+      updateRichTextActiveHeading()
     }
 
     document.addEventListener('selectionchange', handleSelectionChange)
@@ -413,12 +410,19 @@ export function Editor({
       setTimeout(updateCmActiveHeading, 20)
     }
 
+    const handleRichTextCursorChange = () => {
+      setTimeout(updateRichTextActiveHeading, 20)
+    }
+
     // We attach listeners to the entire editor wrapper to catch events from any CM instance
-    const editorWrapper = document.querySelector('.mdx-editor-main')
+    const editorWrapper = getEditorContainer()
     if (editorWrapper) {
       editorWrapper.addEventListener('keyup', handleCmCursorChange)
       editorWrapper.addEventListener('mouseup', handleCmCursorChange)
       editorWrapper.addEventListener('focusin', handleCmCursorChange)
+      editorWrapper.addEventListener('keyup', handleRichTextCursorChange)
+      editorWrapper.addEventListener('mouseup', handleRichTextCursorChange)
+      editorWrapper.addEventListener('focusin', handleRichTextCursorChange)
     }
 
     return () => {
@@ -427,36 +431,97 @@ export function Editor({
         editorWrapper.removeEventListener('keyup', handleCmCursorChange)
         editorWrapper.removeEventListener('mouseup', handleCmCursorChange)
         editorWrapper.removeEventListener('focusin', handleCmCursorChange)
+        editorWrapper.removeEventListener('keyup', handleRichTextCursorChange)
+        editorWrapper.removeEventListener('mouseup', handleRichTextCursorChange)
+        editorWrapper.removeEventListener('focusin', handleRichTextCursorChange)
       }
     }
-  }, [headings, updateCmActiveHeading])
+  }, [getEditorContainer, updateCmActiveHeading, updateRichTextActiveHeading])
 
-  const handleHeadingClick = useCallback((text: string, level: number, lineIndex: number) => {
-    const editorContainer = document.querySelector('.mdx-editor-main')
+  const scrollRichTextHeadingIntoView = useCallback((headingElement: Element, richTextArea: HTMLElement) => {
+    const scrollContainer = getRichTextScrollContainer(richTextArea)
+    if (!scrollContainer) {
+      headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const headingRect = headingElement.getBoundingClientRect()
+    scrollContainer.scrollTo({
+      top: Math.max(0, computeScrollTopForChild({
+        containerScrollTop: scrollContainer.scrollTop,
+        containerTop: containerRect.top,
+        childTop: headingRect.top,
+      })),
+      behavior: 'smooth',
+    })
+  }, [getRichTextScrollContainer])
+
+  const selectRichTextHeading = useCallback((headingElement: Element) => {
+    const rootEditor = realmRef.current?.getValue(rootEditor$)
+    if (!rootEditor) return false
+
+    let selected = false
+    rootEditor.update(() => {
+      const lexicalNode = $getNearestNodeFromDOMNode(headingElement)
+      const targetNode = lexicalNode && ($isElementNode(lexicalNode) ? lexicalNode : lexicalNode.getTopLevelElement())
+      if ($isElementNode(targetNode)) {
+        targetNode.selectStart()
+        selected = true
+      }
+    }, { discrete: true })
+    return selected
+  }, [])
+
+  const focusRichTextHeading = useCallback((headingElement: Element, richTextArea: HTMLElement) => {
+    selectRichTextHeading(headingElement)
+    richTextArea.focus({ preventScroll: true })
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    const walker = document.createTreeWalker(headingElement, NodeFilter.SHOW_TEXT)
+    const firstTextNode = walker.nextNode()
+
+    if (firstTextNode) {
+      range.setStart(firstTextNode, 0)
+    } else {
+      range.setStart(headingElement, 0)
+    }
+    range.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    scrollRichTextHeadingIntoView(headingElement, richTextArea)
+    window.requestAnimationFrame(() => {
+      scrollRichTextHeadingIntoView(headingElement, richTextArea)
+    })
+  }, [scrollRichTextHeadingIntoView, selectRichTextHeading])
+
+  const handleHeadingClick = useCallback((heading: EditorHeading) => {
+    const editorContainer = getEditorContainer()
     if (!editorContainer) return
 
     const mode = currentViewModeRef.current
 
     // Rich text mode: find the heading element in the contenteditable area and scroll to it
     if (mode === 'rich-text') {
-      const richTextArea = editorContainer.querySelector('[contenteditable="true"]')
+      const richTextArea = getRichTextArea()
       if (richTextArea) {
-        const elements = richTextArea.querySelectorAll(`h${level}`)
-        const sameLevelHeadings = headings.filter(h => h.level === level)
-        const elementIndex = sameLevelHeadings.findIndex(h => h.lineIndex === lineIndex)
+        const elements = richTextArea.querySelectorAll(`h${heading.level}`)
+        const elementIndex = findRichTextHeadingElementIndex(headings, heading)
         
         if (elementIndex >= 0 && elementIndex < elements.length) {
-          elements[elementIndex].scrollIntoView({ behavior: 'smooth', block: 'start' })
-          setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+          focusRichTextHeading(elements[elementIndex], richTextArea)
+          setActiveHeadingIndex(findActiveHeadingFromLine(heading.lineIndex))
           return
         }
         
         // Fallback: try text matching if indexing somehow failed
-        const normalizedText = text.replace(/\s+/g, ' ')
+        const normalizedText = heading.text.replace(/\s+/g, ' ')
         for (let i = 0; i < elements.length; i++) {
           if (elements[i].textContent?.trim().replace(/\s+/g, ' ') === normalizedText) {
-            elements[i].scrollIntoView({ behavior: 'smooth', block: 'start' })
-            setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+            focusRichTextHeading(elements[i], richTextArea)
+            setActiveHeadingIndex(findActiveHeadingFromLine(heading.lineIndex))
             return
           }
         }
@@ -468,16 +533,16 @@ export function Editor({
     const view = getCmEditorView()
     if (view) {
       // lineIndex is 0-based, CM lines are 1-based
-      const targetLine = Math.min(lineIndex + 1, view.state.doc.lines)
+      const targetLine = Math.min(heading.lineIndex + 1, view.state.doc.lines)
       const line = view.state.doc.line(targetLine)
       view.dispatch({
         selection: { anchor: line.from },
         scrollIntoView: true
       })
       view.focus()
-      setActiveHeadingIndex(findActiveHeadingFromLine(lineIndex))
+      setActiveHeadingIndex(findActiveHeadingFromLine(heading.lineIndex))
     }
-  }, [getCmEditorView, findActiveHeadingFromLine])
+  }, [focusRichTextHeading, getCmEditorView, getEditorContainer, getRichTextArea, headings, findActiveHeadingFromLine])
 
   const [metadataWidth, setMetadataWidth] = useState(300)
   const [tocWidth, setTocWidth] = useState(250)
@@ -558,7 +623,7 @@ export function Editor({
               setTimeout(tryRestore, 50)
             }
           } else if (mode === 'rich-text') {
-            const richTextArea = document.querySelector('.mdx-editor-main [contenteditable="true"]')
+            const richTextArea = getRichTextArea()
             // Wait until the editor has mounted and contains text
             if (richTextArea && richTextArea.textContent?.trim().length) {
               let foundBlock: Element | null = null
@@ -641,7 +706,7 @@ export function Editor({
         setTimeout(tryRestore, 50)
       })
     }
-  }), [getCmEditorView])
+  }), [getCmEditorView, getRichTextArea])
 
   useEffect(() => {
     if (metadataPanelOpen) {
@@ -930,7 +995,7 @@ export function Editor({
                       <button 
                         id={`toc-heading-${i}`}
                         key={h.id} 
-                        onClick={() => handleHeadingClick(h.text, h.level, h.lineIndex)}
+                        onClick={() => handleHeadingClick(h)}
                         style={{
                           textAlign: 'left',
                           padding: '2px 4px',
