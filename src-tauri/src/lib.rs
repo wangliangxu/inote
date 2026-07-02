@@ -12,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
             use tauri::Manager;
             if let Ok(db_path) = crate::commands::settings_db_path(app.handle()) {
@@ -37,7 +38,25 @@ pub fn run() {
                     }
                 }
             }
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                use tauri_plugin_decorum::WebviewWindowExt;
+                let _ = window.set_traffic_lights_inset(16.0, 20.0);
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            #[cfg(target_os = "macos")]
+            tauri::WindowEvent::Resized(_)
+            | tauri::WindowEvent::ThemeChanged(_)
+            | tauri::WindowEvent::Focused(_) => {
+                use tauri::Manager;
+                use tauri_plugin_decorum::WebviewWindowExt;
+                if let Some(win) = window.get_webview_window("main") {
+                    let _ = win.set_traffic_lights_inset(16.0, 20.0);
+                }
+            }
+            _ => {}
         })
         .manage(watcher::WatcherState::default())
         .menu(menu::build)

@@ -2177,7 +2177,7 @@ export function App() {
       data-theme={themeDatasetValue}
     >
       <header
-        className="navbar bg-base-100/90 backdrop-blur border-b border-base-300 z-10 min-h-12 pl-[82px] pr-2 max-[900px]:pl-[74px]"
+        className="navbar bg-base-100/90 backdrop-blur border-b border-base-300 z-10 h-[52px] min-h-[52px] pl-[82px] pr-2 max-[900px]:pl-[74px]"
         style={{ WebkitAppRegion: "drag" } as any}
         onMouseDown={(e) => {
           if (
@@ -2289,6 +2289,37 @@ export function App() {
             aria-label={t("app.tags")}
           >
             <Tags size={18} />
+          </button>
+          <button
+            className={`btn btn-ghost btn-sm btn-square ${activeView === "todo" ? "bg-base-content/10 text-primary" : ""}`}
+            type="button"
+            onClick={() => {
+              if (activeView === "todo") {
+                setActiveView(previousViewRef.current.view);
+                setActiveCategory(previousViewRef.current.category);
+                if (previousViewRef.current.path) {
+                  setActivePath(previousViewRef.current.path);
+                }
+              } else {
+                if (
+                  activeView !== "archive" &&
+                  activeView !== "trash" &&
+                  activeView !== "calendar"
+                ) {
+                  previousViewRef.current = {
+                    view: activeView,
+                    category: activeCategory,
+                    path: activePath,
+                  };
+                }
+                setActiveView("todo");
+                setActivePath("");
+              }
+            }}
+            title="Todo List"
+            aria-label="Toggle Todo List"
+          >
+            <ListTodo size={18} />
           </button>
           <button
             className={`btn btn-ghost btn-sm btn-square ${activeView === "calendar" ? "bg-base-content/10 text-primary" : ""}`}
@@ -2442,36 +2473,6 @@ export function App() {
               </div>
             </details>
             <div className="flex items-center gap-1">
-              <button
-                className={`btn btn-sm btn-ghost btn-square ${activeView === "todo" ? "bg-base-content/10 text-primary" : ""}`}
-                onClick={() => {
-                  if (activeView === "todo") {
-                    setActiveView(previousViewRef.current.view);
-                    setActiveCategory(previousViewRef.current.category);
-                    if (previousViewRef.current.path) {
-                      setActivePath(previousViewRef.current.path);
-                    }
-                  } else {
-                    if (
-                      activeView !== "archive" &&
-                      activeView !== "trash" &&
-                      activeView !== "calendar"
-                    ) {
-                      previousViewRef.current = {
-                        view: activeView,
-                        category: activeCategory,
-                        path: activePath,
-                      };
-                    }
-                    setActiveView("todo");
-                    setActivePath("");
-                  }
-                }}
-                title="Todo List"
-                aria-label="Toggle Todo List"
-              >
-                <ListTodo size={15} />
-              </button>
               <div
                 className="flex items-center gap-1 bg-base-200/50 rounded-lg p-1"
                 aria-label="Note list display mode"
