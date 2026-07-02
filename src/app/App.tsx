@@ -370,6 +370,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showTodayNoteButton, setShowTodayNoteButton] = useState(false);
   const [lockUpdateTime, setLockUpdateTime] = useState(false);
+  const [autoSaveOnExit, setAutoSaveOnExit] = useState(false);
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot);
   const [status, setStatus] = useState(initialWorkspace.status);
@@ -424,6 +425,9 @@ export function App() {
   const categoryFilterPointerInsideRef = useRef(false);
   const skipNextSettingsSaveRef = useRef(true);
   const skipNextVaultChangeUntilRef = useRef(0);
+  const closingAfterAutoSaveRef = useRef(false);
+  const activeNoteRef = useRef<Note | undefined>(undefined);
+  const autoSaveOnExitRef = useRef(false);
   const previousViewRef = useRef<{
     view: WorkspaceView;
     category: string;
@@ -458,6 +462,14 @@ export function App() {
   const activeNote = activePath
     ? notes.find((note) => note.path === activePath)
     : undefined;
+
+  useEffect(() => {
+    activeNoteRef.current = activeNote;
+  }, [activeNote]);
+
+  useEffect(() => {
+    autoSaveOnExitRef.current = autoSaveOnExit;
+  }, [autoSaveOnExit]);
 
   const saveState: SaveState = !vaultRoot.trim()
     ? "demo"
@@ -644,6 +656,8 @@ export function App() {
           setShowTodayNoteButton(savedSettings.showTodayNoteButton);
         if (savedSettings.lockUpdateTime !== undefined)
           setLockUpdateTime(savedSettings.lockUpdateTime);
+        if (savedSettings.autoSaveOnExit !== undefined)
+          setAutoSaveOnExit(savedSettings.autoSaveOnExit);
         if (savedSettings.fontFamily !== undefined)
           setFontFamily(savedSettings.fontFamily);
         const savedLlmSettings = window.localStorage.getItem(LLM_SETTINGS_KEY);
@@ -743,6 +757,7 @@ export function App() {
         rightSidebarWidth,
         showTodayNoteButton,
         lockUpdateTime,
+        autoSaveOnExit,
         fontFamily,
       })
         .then(() => {
@@ -785,6 +800,7 @@ export function App() {
     rightSidebarWidth,
     showTodayNoteButton,
     lockUpdateTime,
+    autoSaveOnExit,
     fontFamily,
   ]);
 
@@ -979,6 +995,31 @@ export function App() {
   useEffect(() => {
     const unlistenPromise = listen("inote://save", () => {
       saveActiveNoteRef.current();
+    });
+
+    return () => {
+      unlistenPromise.then((dispose) => dispose()).catch(() => { });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window)
+    )
+      return;
+
+    const appWindow = getCurrentWindow();
+    const unlistenPromise = appWindow.onCloseRequested(async (event) => {
+      if (closingAfterAutoSaveRef.current) return;
+      if (!autoSaveOnExitRef.current || !activeNoteRef.current?.isDirty) return;
+
+      event.preventDefault();
+      const saved = await saveActiveNoteRef.current();
+      if (saved) {
+        closingAfterAutoSaveRef.current = true;
+        await appWindow.destroy();
+      }
     });
 
     return () => {
@@ -1477,10 +1518,10 @@ export function App() {
     }
   }
 
-  async function saveActiveNote() {
+  async function saveActiveNote(): Promise<boolean> {
     if (!activeNote || !vaultRoot.trim()) {
       setStatus("Open a real vault before saving.");
-      return;
+      return false;
     }
     try {
       setIsSaving(true);
@@ -1517,9 +1558,11 @@ export function App() {
       setActiveCategory(saved.category);
       setSaveError(false);
       setStatus(`Saved ${saved.path}.`);
+      return true;
     } catch (error) {
       setSaveError(true);
       setStatus(error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -2685,6 +2728,8 @@ export function App() {
                 onShowTodayNoteButtonChange={setShowTodayNoteButton}
                 lockUpdateTime={lockUpdateTime}
                 onLockUpdateTimeChange={setLockUpdateTime}
+                autoSaveOnExit={autoSaveOnExit}
+                onAutoSaveOnExitChange={setAutoSaveOnExit}
                 onVaultRootChange={setVaultRoot}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}

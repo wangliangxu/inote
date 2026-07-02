@@ -90,6 +90,7 @@ export interface UserSettings {
   windowMaximized?: boolean
   showTodayNoteButton?: boolean
   lockUpdateTime?: boolean
+  autoSaveOnExit?: boolean
   fontFamily?: string
 }
 

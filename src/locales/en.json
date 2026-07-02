@@ -61,6 +61,7 @@
     "themeFollowSystem": "Follow system",
     "showTodayNoteButton": "Show Today Note Button",
     "lockUpdateTime": "Lock Update Time",
+    "autoSaveOnExit": "Auto Save on Exit",
     "fontFamily": "Font Family",
     "fontFamilyDefault": "System Default",
     "vaultPath": "Vault Path",

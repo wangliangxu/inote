@@ -29,6 +29,7 @@ pub struct UserSettings {
     pub window_maximized: Option<bool>,
     pub show_today_note_button: Option<bool>,
     pub lock_update_time: Option<bool>,
+    pub auto_save_on_exit: Option<bool>,
     pub font_family: Option<String>,
 }
 
@@ -59,6 +60,7 @@ impl Default for UserSettings {
             window_maximized: None,
             show_today_note_button: None,
             lock_update_time: None,
+            auto_save_on_exit: None,
             font_family: None,
         }
     }
@@ -144,6 +146,9 @@ impl UserSettingsStore {
         if let Some(val) = self.get_value("lock_update_time")? {
             settings.lock_update_time = Some(val == "true");
         }
+        if let Some(val) = self.get_value("auto_save_on_exit")? {
+            settings.auto_save_on_exit = Some(val == "true");
+        }
         if let Some(val) = self.get_value("font_family")? {
             settings.font_family = Some(val);
         }
@@ -178,6 +183,7 @@ impl UserSettingsStore {
         if let Some(m) = settings.window_maximized { self.set_value("window_maximized", if m { "true" } else { "false" })?; }
         if let Some(val) = settings.show_today_note_button { self.set_value("show_today_note_button", if val { "true" } else { "false" })?; }
         if let Some(val) = settings.lock_update_time { self.set_value("lock_update_time", if val { "true" } else { "false" })?; }
+        if let Some(val) = settings.auto_save_on_exit { self.set_value("auto_save_on_exit", if val { "true" } else { "false" })?; }
         if let Some(val) = &settings.font_family { self.set_value("font_family", val)?; }
         
         let mut llm_settings = settings.llm_settings.clone();
@@ -389,6 +395,7 @@ mod tests {
             window_maximized: Some(true),
             show_today_note_button: Some(true),
             lock_update_time: Some(true),
+            auto_save_on_exit: Some(true),
             font_family: Some("Inter".to_string()),
         };
 
@@ -429,6 +436,7 @@ mod tests {
             window_maximized: None,
             show_today_note_button: None,
             lock_update_time: None,
+            auto_save_on_exit: None,
             font_family: None,
         };
 

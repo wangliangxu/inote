@@ -22,6 +22,8 @@ interface SettingsPanelProps {
   onShowTodayNoteButtonChange: (show: boolean) => void
   lockUpdateTime: boolean
   onLockUpdateTimeChange: (lock: boolean) => void
+  autoSaveOnExit: boolean
+  onAutoSaveOnExitChange: (enabled: boolean) => void
   onVaultRootChange: (path: string) => void
   onLlmSettingsChange: (settings: LlmProviderSettings) => void
   onThemePreferenceChange: (preference: ThemePreference) => void
@@ -53,6 +55,8 @@ export function SettingsPanel({
   onShowTodayNoteButtonChange,
   lockUpdateTime,
   onLockUpdateTimeChange,
+  autoSaveOnExit,
+  onAutoSaveOnExitChange,
   onVaultRootChange,
   onLlmSettingsChange,
   onThemePreferenceChange,
@@ -175,6 +179,15 @@ export function SettingsPanel({
                   onChange={(e) => onLockUpdateTimeChange(e.target.checked)}
                 />
                 <span className="label-text">{t('settings.lockUpdateTime')}</span>
+              </label>
+              <label className="setting-checkbox-label label cursor-pointer justify-start gap-3 rounded-lg bg-base-200/60 px-3 py-2">
+                <input
+                  className="checkbox checkbox-primary checkbox-sm"
+                  type="checkbox"
+                  checked={autoSaveOnExit}
+                  onChange={(e) => onAutoSaveOnExitChange(e.target.checked)}
+                />
+                <span className="label-text">{t('settings.autoSaveOnExit')}</span>
               </label>
               <div className="action-row flex flex-wrap gap-2">
                 <button className="secondary-action btn btn-outline btn-sm" type="button" onClick={onOpenVault}>

@@ -82,6 +82,17 @@ describe('startup shell', () => {
     expect(app).toContain(') : null}')
   })
 
+  it('adds a general setting for auto-saving when the native window closes', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const settings = readFileSync(resolve(__dirname, '../features/settings/SettingsPanel.tsx'), 'utf8')
+
+    expect(settings).toContain('autoSaveOnExit')
+    expect(settings).toContain('settings.autoSaveOnExit')
+    expect(app).toContain('onCloseRequested')
+    expect(app).toContain('autoSaveOnExitRef.current')
+    expect(app).toContain('saveActiveNoteRef.current()')
+  })
+
   it('uses the primary color for the title bar create note button', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
