@@ -7,6 +7,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
 import { orderedListStartPlugin } from './orderedListStartPlugin'
+import { captureRichTextSelection, restoreRichTextSelection, type RichTextSelectionSnapshot } from './richTextSelection'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
 import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
 import { $getNearestNodeFromDOMNode, $isElementNode } from 'lexical'
@@ -40,8 +41,11 @@ import {
   InsertCodeBlock,
   viewMode$,
   rootEditor$,
+  activeEditor$,
+  convertSelectionToNode$,
   realmPlugin
 } from '@mdxeditor/editor'
+import { withLatestFrom } from '@mdxeditor/gurx'
 import '@mdxeditor/editor/style.css'
 import { EditorView } from '@codemirror/view'
 import { installTableCellBackspaceGuard } from './tableCellBackspacePlugin'
@@ -129,6 +133,13 @@ export function Editor({
   const { t } = useTranslation()
   const editorRef = useRef<MDXEditorMethods>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
+  const isInternalChangeRef = useRef(false)
+  const pendingBlockTypeSelectionRef = useRef<RichTextSelectionSnapshot | null>(null)
+
+  const handleEditorChange = useCallback((body: string) => {
+    isInternalChangeRef.current = true
+    onChange(body)
+  }, [onChange])
 
   const getEditorContainer = useCallback(() => {
     return editorWrapperRef.current?.querySelector('.mdx-editor-main') ?? null
@@ -322,8 +333,16 @@ export function Editor({
   useEffect(() => {
     if (activeHeadingIndex >= 0) {
       const activeEl = document.getElementById(`toc-heading-${activeHeadingIndex}`)
-      if (activeEl) {
-        // block: 'nearest' ensures it only scrolls if out of view
+      const container = activeEl?.closest('.context-panel') as HTMLElement | null
+      if (activeEl && container) {
+        const containerRect = container.getBoundingClientRect()
+        const elRect = activeEl.getBoundingClientRect()
+        if (elRect.top < containerRect.top) {
+          container.scrollBy({ top: elRect.top - containerRect.top - 8, behavior: 'smooth' })
+        } else if (elRect.bottom > containerRect.bottom) {
+          container.scrollBy({ top: elRect.bottom - containerRect.bottom + 8, behavior: 'smooth' })
+        }
+      } else if (activeEl) {
         activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
     }
@@ -472,6 +491,34 @@ export function Editor({
     }, { discrete: true })
     return selected
   }, [])
+
+  const captureActiveRichTextSelection = useCallback(() => {
+    const editor = realmRef.current?.getValue(activeEditor$) ?? realmRef.current?.getValue(rootEditor$)
+    if (!editor) return
+
+    const snapshot = captureRichTextSelection(editor)
+    if (snapshot) {
+      pendingBlockTypeSelectionRef.current = snapshot
+    }
+  }, [])
+
+  useEffect(() => {
+    const wrapper = editorWrapperRef.current
+    if (!wrapper) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+
+      const richTextArea = getRichTextArea()
+      if (richTextArea?.contains(target)) return
+
+      captureActiveRichTextSelection()
+    }
+
+    wrapper.addEventListener('pointerdown', handlePointerDown, true)
+    return () => wrapper.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [captureActiveRichTextSelection, getRichTextArea])
 
   const focusRichTextHeading = useCallback((headingElement: Element, richTextArea: HTMLElement) => {
     selectRichTextHeading(headingElement)
@@ -705,6 +752,58 @@ export function Editor({
         
         setTimeout(tryRestore, 50)
       })
+
+      // Prevent scroll-to-bottom and preserve cursor position when changing block type
+      // (e.g. paragraph → heading). The scroll happens because Lexical's DOM reconciliation
+      // after $setBlocksType calls scrollIntoViewIfNeeded, and the subsequent editor.focus() does it again.
+      // We save all ancestor scroll positions and lock them, and also re-apply the Lexical selection after focus.
+      realm.sub(
+        realm.pipe(convertSelectionToNode$, withLatestFrom(activeEditor$)),
+        ([_factory, editor]: [any, any]) => {
+          if (!editor) return
+          const rootEl = editor.getRootElement()
+          if (!rootEl) return
+          const selectionSnapshot = pendingBlockTypeSelectionRef.current ?? captureRichTextSelection(editor)
+          pendingBlockTypeSelectionRef.current = null
+
+          // Collect all scrollable ancestors and save their scrollTop
+          const savedScrolls: { el: Element, top: number }[] = []
+          let el: Element | null = rootEl
+          while (el) {
+            if (el.scrollHeight > el.clientHeight) {
+              savedScrolls.push({ el, top: el.scrollTop })
+            }
+            el = el.parentElement
+          }
+
+          // Also lock scroll via a scroll event listener on each scrollable ancestor
+          const lockScroll = (e: Event) => {
+            const target = e.target as Element
+            const saved = savedScrolls.find(s => s.el === target)
+            if (saved) target.scrollTop = saved.top
+          }
+          for (const { el } of savedScrolls) {
+            el.addEventListener('scroll', lockScroll, { passive: false })
+          }
+
+          // After MDXEditor's core setTimeout(() => editor.focus(), 0) has run,
+          // ensure rootEl is focused and force Lexical to synchronize DOM selection so the cursor isn't lost.
+          setTimeout(() => {
+            if (rootEl && document.contains(rootEl)) {
+              rootEl.focus({ preventScroll: true })
+              restoreRichTextSelection(editor, selectionSnapshot)
+            }
+          }, 25)
+
+          // Release the lock after all focus and selection updates are settled
+          setTimeout(() => {
+            for (const { el, top } of savedScrolls) {
+              el.removeEventListener('scroll', lockScroll)
+              el.scrollTop = top
+            }
+          }, 120)
+        }
+      )
     }
   }), [getCmEditorView, getRichTextArea])
 
@@ -774,6 +873,11 @@ export function Editor({
   }, [saveState, normalizedMarkdown])
 
   useEffect(() => {
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false
+      return
+    }
+
     if (editorRef.current) {
       const currentMd = editorRef.current.getMarkdown()
       const { metadata: currentMeta, body: currentBody } = parseMarkdownWithFrontmatter(currentMd)
@@ -939,7 +1043,7 @@ export function Editor({
             key={note.path} // Force re-mount on note change so internal state resets
             className={`mdx-editor-main ${isDark ? 'dark-theme dark-editor' : ''}`}
             markdown={normalizedMarkdown}
-            onChange={onChange}
+            onChange={handleEditorChange}
             readOnly={previewMode}
             contentEditableClassName="prose max-w-none"
             plugins={plugins}
