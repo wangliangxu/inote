@@ -461,6 +461,11 @@ pub fn save_user_settings(app: AppHandle, settings: UserSettings) -> Result<(), 
 }
 
 #[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
 pub fn get_setting(app: AppHandle, key: String) -> Result<Option<String>, String> {
     UserSettingsStore::open(settings_db_path(&app)?)?.get_value(&key)
 }

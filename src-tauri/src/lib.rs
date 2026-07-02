@@ -90,6 +90,7 @@ pub fn run() {
             commands::empty_trash,
             commands::load_user_settings,
             commands::save_user_settings,
+            commands::quit_app,
             commands::get_setting,
             commands::set_setting,
             commands::save_window_state,

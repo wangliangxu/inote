@@ -93,6 +93,21 @@ describe('startup shell', () => {
     expect(app).toContain('saveActiveNoteRef.current()')
   })
 
+  it('quits the app process after handling the native close request', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const api = readFileSync(resolve(__dirname, '../shared/api.ts'), 'utf8')
+    const commands = readFileSync(resolve(__dirname, '../../src-tauri/src/commands.rs'), 'utf8')
+    const lib = readFileSync(resolve(__dirname, '../../src-tauri/src/lib.rs'), 'utf8')
+
+    expect(app).toContain('quitApp')
+    expect(app).toContain('event.preventDefault()')
+    expect(app).toContain('await quitApp()')
+    expect(app).not.toContain('await appWindow.destroy()')
+    expect(api).toContain("invoke<void>('quit_app')")
+    expect(commands).toContain('pub fn quit_app')
+    expect(lib).toContain('commands::quit_app')
+  })
+
   it('uses the primary color for the title bar create note button', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 

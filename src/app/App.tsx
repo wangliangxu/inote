@@ -124,6 +124,7 @@ import {
   recordAgentOperationEvent,
   recordAgentMessages,
   getSetting,
+  quitApp,
 } from "../shared/api";
 import {
   filterNotesByCategory,
@@ -425,7 +426,7 @@ export function App() {
   const categoryFilterPointerInsideRef = useRef(false);
   const skipNextSettingsSaveRef = useRef(true);
   const skipNextVaultChangeUntilRef = useRef(0);
-  const closingAfterAutoSaveRef = useRef(false);
+  const closeRequestInProgressRef = useRef(false);
   const activeNoteRef = useRef<Note | undefined>(undefined);
   const autoSaveOnExitRef = useRef(false);
   const previousViewRef = useRef<{
@@ -1011,14 +1012,22 @@ export function App() {
 
     const appWindow = getCurrentWindow();
     const unlistenPromise = appWindow.onCloseRequested(async (event) => {
-      if (closingAfterAutoSaveRef.current) return;
-      if (!autoSaveOnExitRef.current || !activeNoteRef.current?.isDirty) return;
-
       event.preventDefault();
-      const saved = await saveActiveNoteRef.current();
-      if (saved) {
-        closingAfterAutoSaveRef.current = true;
-        await appWindow.destroy();
+      if (closeRequestInProgressRef.current) return;
+
+      closeRequestInProgressRef.current = true;
+      try {
+        if (autoSaveOnExitRef.current && activeNoteRef.current?.isDirty) {
+          const saved = await saveActiveNoteRef.current();
+          if (!saved) {
+            closeRequestInProgressRef.current = false;
+            return;
+          }
+        }
+        await quitApp();
+      } catch (error) {
+        closeRequestInProgressRef.current = false;
+        setStatus(error instanceof Error ? error.message : String(error));
       }
     });
 

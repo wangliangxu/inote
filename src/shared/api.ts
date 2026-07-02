@@ -112,6 +112,10 @@ interface AgentUndoSnapshotInput {
   notePath: string
 }
 
+export async function quitApp(): Promise<void> {
+  return invoke<void>('quit_app')
+}
+
 export async function scanVault(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault', { vaultRoot })
 }
