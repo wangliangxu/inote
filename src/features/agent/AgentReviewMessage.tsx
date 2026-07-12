@@ -38,7 +38,7 @@ export function AgentReviewMessage({
   }
 
   const isApplied = message.status === 'applied'
-  const isDiscarded = message.text === '审阅已丢弃。'
+  const isDiscarded = message.status === 'discarded'
   const isFinished = isApplied || isDiscarded
 
   // Collapsed view for finished review plans

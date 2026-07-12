@@ -53,6 +53,7 @@ function groupMessagesByTurn(messages: AgentMessage[]): TurnGroup[] {
       const turnMessages = turnMap.get(message.turnId) ?? []
       const userCommand = turnMessages.find((m) => m.kind === 'user_command')
       const hasApplied = turnMessages.some((m) => m.status === 'applied')
+      const hasDiscarded = turnMessages.some((m) => m.status === 'discarded')
       const hasFailed = turnMessages.some((m) => m.status === 'failed')
       const hasReady = turnMessages.some((m) => m.kind === 'review_plan' && m.status === 'ready')
 
@@ -61,7 +62,7 @@ function groupMessagesByTurn(messages: AgentMessage[]): TurnGroup[] {
         messages: turnMessages,
         timestamp: turnMessages[0]?.createdAt ?? '',
         commandText: userCommand?.text ?? '',
-        isCompleted: hasApplied || hasFailed || (!hasReady && turnMessages.every((m) => m.status === 'ready')),
+        isCompleted: hasApplied || hasDiscarded || hasFailed || (!hasReady && turnMessages.every((m) => m.status === 'ready')),
       })
     } else if (!message.turnId) {
       // Standalone messages (operation events without turnId)

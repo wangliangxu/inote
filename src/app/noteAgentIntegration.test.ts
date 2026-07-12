@@ -43,6 +43,15 @@ describe('note agent integration', () => {
     expect(hook).not.toContain('renderSessionTimeline')
   })
 
+  it('creates the agent session before recording its first messages', () => {
+    const hook = readFileSync(resolve(__dirname, '../features/agent/useNoteAgent.ts'), 'utf8')
+    const runningTurn = hook.indexOf("status: 'running'")
+    const firstMessageWrite = hook.indexOf('await recordAgentMessages')
+
+    expect(runningTurn).toBeGreaterThan(-1)
+    expect(firstMessageWrite).toBeGreaterThan(runningTurn)
+  })
+
   it('records agent operation events and supports current-note undo wiring', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
@@ -173,5 +182,15 @@ describe('note agent integration', () => {
     expect(review).toContain('applied-collapsed')
     expect(review).toContain('ReviewStatusBadge')
     expect(review).toContain('agent-review-collapsed-header')
+  })
+
+  it('persists discarded reviews with a distinct status', () => {
+    const hook = readFileSync(resolve(__dirname, '../features/agent/useNoteAgent.ts'), 'utf8')
+    const review = readFileSync(resolve(__dirname, '../features/agent/AgentReviewMessage.tsx'), 'utf8')
+    const conversation = readFileSync(resolve(__dirname, '../features/agent/AgentConversationView.tsx'), 'utf8')
+
+    expect(hook).toContain("markReviewMessage(message, 'discarded', '审阅已丢弃。')")
+    expect(review).toContain("message.status === 'discarded'")
+    expect(conversation).toContain("m.status === 'discarded'")
   })
 })

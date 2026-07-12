@@ -206,11 +206,6 @@ export function useNoteAgent({
 
     try {
       setStatus('running')
-      appendLocalMessages([userMessage, statusMessage])
-      await recordAgentMessages({ vaultRoot: vault, messages: [userMessage, statusMessage] })
-
-      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
-
       const request = buildAgentPrompt({
         command: nextCommand,
         note,
@@ -219,6 +214,34 @@ export function useNoteAgent({
         maxContextLength: settings.maxContextLength,
         sessionSummary: buildAgentSessionSummary(conversation?.session ?? null),
       })
+
+      // agent_messages.session_id references agent_sessions.id. Persist the
+      // running turn first so a newly generated session ID exists before its
+      // initial transcript messages are inserted.
+      await recordAgentTurn({
+        vaultRoot: vault,
+        noteTitle: note.title,
+        turn: {
+          id: turnId,
+          sessionId,
+          notePath: note.path,
+          command: nextCommand,
+          action: nextAction ?? null,
+          prompt: request.prompt,
+          contextSummary: request.context.slice(0, 1200),
+          rawResponse: '',
+          parsedResultJson: null,
+          status: 'running',
+          error: null,
+          createdAt,
+          completedAt: null,
+        },
+      })
+
+      appendLocalMessages([userMessage, statusMessage])
+      await recordAgentMessages({ vaultRoot: vault, messages: [userMessage, statusMessage] })
+
+      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
 
       statusMessage = { ...statusMessage, text: '正在请求模型...', updatedAt: nowIso() }
       upsertLocalMessage(statusMessage)
@@ -344,9 +367,9 @@ export function useNoteAgent({
     }
   }
 
-  async function markReviewMessage(message: AgentMessage, text: string) {
+  async function markReviewMessage(message: AgentMessage, status: 'applied' | 'discarded', text: string) {
     const vault = vaultRoot.trim()
-    const nextMessage = { ...message, text, status: 'applied' as const, updatedAt: nowIso() }
+    const nextMessage = { ...message, text, status, updatedAt: nowIso() }
     upsertLocalMessage(nextMessage)
     if (vault) await updateAgentMessage({ vaultRoot: vault, message: nextMessage })
   }
@@ -361,7 +384,7 @@ export function useNoteAgent({
     setStatus('applying')
     try {
       await onApplyCurrentNote(result, getSelectedIndexes(plan, 'current'), plan.turnId, message.sessionId)
-      await markReviewMessage(message, '审阅已应用。')
+      await markReviewMessage(message, 'applied', '审阅已应用。')
       await refreshConversation()
       setStatus('idle')
     } catch (err) {
@@ -380,7 +403,7 @@ export function useNoteAgent({
     setStatus('applying')
     try {
       await onCreateNote(result, getSelectedIndexes(plan, 'create'), plan.turnId, message.sessionId)
-      await markReviewMessage(message, '审阅已应用。')
+      await markReviewMessage(message, 'applied', '审阅已应用。')
       await refreshConversation()
       setStatus('idle')
     } catch (err) {
@@ -391,7 +414,7 @@ export function useNoteAgent({
 
   async function discardReview(message: AgentMessage) {
     try {
-      await markReviewMessage(message, '审阅已丢弃。')
+      await markReviewMessage(message, 'discarded', '审阅已丢弃。')
     } catch (err) {
       setStatus('error')
       setError(err instanceof Error ? err.message : String(err))

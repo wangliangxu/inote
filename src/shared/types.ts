@@ -160,7 +160,7 @@ export type AgentMessageKind =
   | 'operation_event'
   | 'error'
 
-export type AgentMessageStatus = 'pending' | 'streaming' | 'ready' | 'applied' | 'failed'
+export type AgentMessageStatus = 'pending' | 'streaming' | 'ready' | 'applied' | 'discarded' | 'failed'
 
 export interface AgentMessage {
   id: string
