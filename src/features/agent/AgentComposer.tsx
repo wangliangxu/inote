@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { FilePlus2, ListChecks, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
 import type { QuickAgentAction } from './agentTypes'
 
@@ -32,6 +32,8 @@ export function AgentComposer({
   onSubmit,
   onCancel,
 }: AgentComposerProps) {
+  const actionDropdownRef = useRef<HTMLDetailsElement>(null)
+
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
       event.preventDefault()
@@ -41,55 +43,68 @@ export function AgentComposer({
     }
   }, [disabled, onSubmit])
 
+  const handleActionBlur = useCallback((event: React.FocusEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      event.currentTarget.open = false
+    }
+  }, [])
+
   return (
     <div className="agent-composer border-t border-base-300 bg-base-100 p-3">
-      <textarea
-        className="agent-command textarea textarea-bordered min-h-24 w-full resize-none text-sm"
-        aria-label="Note agent command"
-        value={command}
-        onChange={(event) => onCommandChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="输入指令让 Agent 更新或创建笔记。（⌘/Ctrl+Enter 提交）"
-        disabled={isRunning}
-      />
-      <div className="agent-input-toolbar mt-2 flex items-center justify-between">
-        <details className="agent-quick-action-dropdown dropdown dropdown-top" data-no-drag>
-          <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title="Quick Actions">
-            <Zap size={16} />
-          </summary>
-          <div className="agent-quick-action-menu dropdown-content menu z-20 w-44 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
-            {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
+      <div className="agent-input-shell">
+        <textarea
+          className="agent-command textarea min-h-24 w-full resize-none text-sm"
+          aria-label="Note agent command"
+          value={command}
+          onChange={(event) => onCommandChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="输入指令让 Agent 更新或创建笔记。（⌘/Ctrl+Enter 提交）"
+          disabled={isRunning}
+        />
+        <div className="agent-input-toolbar flex items-center justify-between">
+          <details
+            ref={actionDropdownRef}
+            className="agent-quick-action-dropdown dropdown dropdown-top"
+            data-no-drag
+            onBlur={handleActionBlur}
+          >
+            <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title="Quick Actions">
+              <Zap size={16} />
+            </summary>
+            <div className="agent-quick-action-menu dropdown-content menu z-20 w-44 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
+              {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
+                <button
+                  key={action}
+                  className={activeAction === action ? 'active bg-primary/10 text-primary' : ''}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onActionSelect(action, quickCommand)
+                    actionDropdownRef.current?.removeAttribute('open')
+                  }}
+                  title={label}
+                >
+                  <Icon size={14} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+          <div className="flex items-center gap-1">
+            {isRunning && onCancel ? (
               <button
-                key={action}
-                className={activeAction === action ? 'active bg-primary/10 text-primary' : ''}
+                className="agent-cancel-btn btn btn-ghost btn-sm btn-square"
+                title="取消"
                 type="button"
-                onClick={(event) => {
-                  onActionSelect(action, quickCommand)
-                  const details = event.currentTarget.closest('details')
-                  if (details) details.open = false
-                }}
-                title={label}
+                onClick={onCancel}
               >
-                <Icon size={14} />
-                <span>{label}</span>
+                <X size={15} />
               </button>
-            ))}
-          </div>
-        </details>
-        <div className="flex items-center gap-1">
-          {isRunning && onCancel ? (
-            <button
-              className="agent-cancel-btn btn btn-ghost btn-sm btn-square"
-              title="取消"
-              type="button"
-              onClick={onCancel}
-            >
-              <X size={15} />
+            ) : null}
+            <button className="agent-run-btn btn btn-primary btn-sm btn-square" title="运行 Agent" type="button" onClick={onSubmit} disabled={disabled}>
+              {disabled ? <RefreshCw size={15} /> : <Send size={15} />}
             </button>
-          ) : null}
-          <button className="agent-run-btn btn btn-primary btn-sm btn-square" title="运行 Agent" type="button" onClick={onSubmit} disabled={disabled}>
-            {disabled ? <RefreshCw size={15} /> : <Send size={15} />}
-          </button>
+          </div>
         </div>
       </div>
     </div>

@@ -79,6 +79,7 @@ export function NoteAgent({ note, notes, vaultRoot, settings, onApplyCurrentNote
         onActionSelect={(action, nextCommand) => {
           setActiveAction(action)
           setCommand(nextCommand)
+          void runAgent(action, nextCommand)
         }}
         onSubmit={() => runAgent()}
         onCancel={cancelAgent}

@@ -312,6 +312,8 @@ pub fn move_note(input: MoveNoteInput) -> Result<NoteMetadata, String> {
     let vault = Vault::new(&input.vault_root)?;
     let note = vault.move_note(&input.from, &input.to)?;
     update_index_for_move(&vault, &input.from, &note)?;
+    let agent_store = AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?;
+    agent_store.move_note_target(&input.from, &note.path, &note.title)?;
     Ok(note)
 }
 

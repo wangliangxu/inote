@@ -297,6 +297,68 @@ impl AgentSessionStore {
         Ok(())
     }
 
+    pub fn move_note_target(
+        &self,
+        old_path: &str,
+        new_path: &str,
+        new_title: &str,
+    ) -> Result<(), String> {
+        let transaction = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| format!("failed to start agent note move: {error}"))?;
+
+        transaction
+            .execute(
+                "UPDATE agent_sessions SET note_path = ?2, note_title = ?3 WHERE note_path = ?1",
+                params![old_path, new_path, new_title],
+            )
+            .map_err(|error| format!("failed to move agent sessions: {error}"))?;
+
+        for table in [
+            "agent_turns",
+            "agent_operation_events",
+            "agent_undo_snapshots",
+            "agent_messages",
+        ] {
+            transaction
+                .execute(
+                    &format!("UPDATE {table} SET note_path = ?2 WHERE note_path = ?1"),
+                    params![old_path, new_path],
+                )
+                .map_err(|error| format!("failed to move {table}: {error}"))?;
+        }
+
+        transaction
+            .execute(
+                "
+                UPDATE agent_operation_events
+                SET created_note_path = ?2
+                WHERE created_note_path = ?1
+                ",
+                params![old_path, new_path],
+            )
+            .map_err(|error| format!("failed to update created note event paths: {error}"))?;
+        transaction
+            .execute(
+                "
+                UPDATE agent_undo_snapshots
+                SET note_before_path = CASE WHEN note_before_path = ?1 THEN ?2 ELSE note_before_path END,
+                    active_path_after_apply = CASE WHEN active_path_after_apply = ?1 THEN ?2 ELSE active_path_after_apply END,
+                    created_note_path = CASE WHEN created_note_path = ?1 THEN ?2 ELSE created_note_path END
+                WHERE note_before_path = ?1
+                   OR active_path_after_apply = ?1
+                   OR created_note_path = ?1
+                ",
+                params![old_path, new_path],
+            )
+            .map_err(|error| format!("failed to update agent undo paths: {error}"))?;
+
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit agent note move: {error}"))
+    }
+
     pub fn record_turn(&self, turn: &AgentTurn) -> Result<(), String> {
         self.conn
             .execute(
@@ -1182,5 +1244,41 @@ mod tests {
         assert_eq!(session.note_title, "New title");
         assert_eq!(session.created_at, "2026-06-20T09:00:00Z");
         assert_eq!(session.updated_at, "2026-06-20T10:00:00Z");
+    }
+
+    #[test]
+    fn moving_note_target_preserves_the_full_conversation() {
+        let store = store();
+        let session_id = "session-1";
+        let old_path = "knowledge/old.md";
+        let new_path = "projects/new.md";
+        store
+            .upsert_session(session_id, old_path, "Old", "2026-06-20T09:00:00Z")
+            .unwrap();
+        let turn = sample_turn("turn-1", session_id, old_path, "2026-06-20T09:05:00Z");
+        store.record_turn(&turn).unwrap();
+        store
+            .record_message(&AgentMessage {
+                id: "message-1".to_string(),
+                session_id: session_id.to_string(),
+                note_path: old_path.to_string(),
+                turn_id: Some(turn.id.clone()),
+                role: "user".to_string(),
+                kind: "command".to_string(),
+                text: "Summarize".to_string(),
+                payload_json: None,
+                status: "ready".to_string(),
+                created_at: "2026-06-20T09:05:00Z".to_string(),
+                updated_at: "2026-06-20T09:05:00Z".to_string(),
+            })
+            .unwrap();
+
+        store.move_note_target(old_path, new_path, "New").unwrap();
+
+        assert!(store.load_conversation(old_path, 10).unwrap().messages.is_empty());
+        let conversation = store.load_conversation(new_path, 10).unwrap();
+        assert_eq!(conversation.session.unwrap().note_title, "New");
+        assert_eq!(conversation.messages.len(), 1);
+        assert_eq!(conversation.messages[0].note_path, new_path);
     }
 }
