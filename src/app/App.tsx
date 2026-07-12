@@ -501,7 +501,7 @@ export function App() {
   );
   const searchScopeLabel =
     selectedSearchCategories.length === 0
-      ? "All categories"
+      ? t("app.allCategories")
       : selectedSearchCategories.length === 1
         ? selectedSearchCategories[0]
         : `${selectedSearchCategories.length} categories`;
@@ -2489,7 +2489,7 @@ export function App() {
                     }}
                   />
                   <span className="label-text font-medium">
-                    {t("app.categories")}
+                    {t("app.allCategories")}
                   </span>
                 </label>
                 {categoryOptions.map((category) => (
