@@ -77,7 +77,7 @@ export function AgentReviewMessage({
         </div>
       ))}
       <div className="agent-review-actions">
-        <button className="btn btn-primary btn-sm" type="button" disabled={disabled || !hasCurrentNoteOperation} onClick={() => onApply(message, plan)}>应用</button>
+        <button className="agent-apply-btn btn btn-primary btn-sm" type="button" disabled={disabled || !hasCurrentNoteOperation} onClick={() => onApply(message, plan)}>应用</button>
         <button className="btn btn-outline btn-sm" type="button" disabled={disabled || !hasCreateOperation} onClick={() => onCreate(message, plan)}>创建</button>
         <button className="btn btn-ghost btn-sm" type="button" disabled={disabled} onClick={() => onDiscard(message)}>
           <Trash2 size={13} /> 丢弃

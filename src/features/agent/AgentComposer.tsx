@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react'
-import { FilePlus2, ListChecks, RefreshCw, Send, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
+import { ArrowUp, FilePlus2, ListChecks, RefreshCw, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
 import type { QuickAgentAction } from './agentTypes'
 
 interface AgentComposerProps {
@@ -58,7 +58,7 @@ export function AgentComposer({
           value={command}
           onChange={(event) => onCommandChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="输入指令让 Agent 更新或创建笔记。（⌘/Ctrl+Enter 提交）"
+          placeholder="输入指令，或使用快捷操作分析和优化当前笔记…"
           disabled={isRunning}
         />
         <div className="agent-input-toolbar flex items-center justify-between">
@@ -101,8 +101,8 @@ export function AgentComposer({
                 <X size={15} />
               </button>
             ) : null}
-            <button className="agent-run-btn btn btn-primary btn-sm btn-square" title="运行 Agent" type="button" onClick={onSubmit} disabled={disabled}>
-              {disabled ? <RefreshCw size={15} /> : <Send size={15} />}
+            <button className="agent-run-btn btn btn-primary btn-sm btn-circle" title="发送" type="button" onClick={onSubmit} disabled={disabled}>
+              {disabled ? <RefreshCw size={16} /> : <ArrowUp className="agent-send-icon" size={18} strokeWidth={2.6} />}
             </button>
           </div>
         </div>

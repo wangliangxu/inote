@@ -78,7 +78,7 @@ export function useNoteAgent({
   onCreateNote,
   onUndoLastApply,
 }: UseNoteAgentInput) {
-  const [command, setCommand] = useState('更新当前笔记的标签和摘要。')
+  const [command, setCommand] = useState('')
   const [activeAction, setActiveAction] = useState<QuickAgentAction | undefined>()
   const [conversation, setConversation] = useState<AgentConversation | null>(null)
   const [messages, setMessages] = useState<AgentMessage[]>([])
@@ -96,6 +96,8 @@ export function useNoteAgent({
     setMessages([])
     setResultsByTurn({})
     setError('')
+    setCommand('')
+    setActiveAction(undefined)
     const vault = vaultRoot.trim()
     if (!vault) return
     setDisplayLimit(INITIAL_DISPLAY_LIMIT)
@@ -176,6 +178,9 @@ export function useNoteAgent({
       setError('请先在设置中添加 LLM API Key。')
       return
     }
+
+    setCommand('')
+    setActiveAction(undefined)
 
     // Cancel any previous in-flight request
     cancelAgent()

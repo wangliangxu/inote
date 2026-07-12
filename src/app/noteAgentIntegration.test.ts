@@ -78,7 +78,11 @@ describe('note agent integration', () => {
     expect(bubble).toContain('agent-message-bubble')
     expect(review).toContain('审阅计划')
     expect(review).toContain('decodeReviewPlanPayload')
+    expect(review).toContain('agent-apply-btn')
     expect(composer).toContain('agent-composer')
+    expect(composer).toContain('placeholder="输入指令，或使用快捷操作分析和优化当前笔记…"')
+    expect(composer).toContain('<ArrowUp')
+    expect(view).not.toContain('当前笔记暂无 Agent 会话记录。')
   })
 
   it('does not use timeline as the primary NoteAgent experience', () => {
@@ -86,6 +90,8 @@ describe('note agent integration', () => {
 
     expect(hook).toContain('loadAgentConversation')
     expect(hook).toContain('getRecentMeaningfulMessages')
+    expect(hook).toContain("const [command, setCommand] = useState('')")
+    expect(hook).not.toContain("useState('更新当前笔记的标签和摘要。')")
     expect(hook).not.toContain('agent-stage-list')
     expect(hook).not.toContain('agent-timeline')
   })

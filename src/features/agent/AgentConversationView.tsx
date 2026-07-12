@@ -188,14 +188,7 @@ export function AgentConversationView({
   onUndo,
 }: AgentConversationViewProps) {
   if (messages.length === 0) {
-    return (
-      <div className="agent-empty text-sm text-base-content/60">
-        <p>当前笔记暂无 Agent 会话记录。</p>
-        <p className="mt-1 text-xs text-base-content/40">
-          在下方输入指令或使用 ⚡ 快捷操作来分析和优化笔记。
-        </p>
-      </div>
-    )
+    return null
   }
 
   const groups = groupMessagesByTurn(messages)

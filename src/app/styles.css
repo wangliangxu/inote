@@ -2519,6 +2519,14 @@ button {
   justify-content: flex-end;
 }
 
+.agent-review-actions .agent-apply-btn:not(:disabled) {
+  color: #fff;
+}
+
+.agent-review-actions .agent-apply-btn:not(:disabled) svg {
+  color: currentColor;
+}
+
 .agent-composer {
   flex-shrink: 0;
 }
@@ -3599,6 +3607,23 @@ body.dark-theme .mdx-editor-main [contenteditable="true"] {
 .agent-quick-action-btn.btn,
 .agent-run-btn.btn {
   border-radius: var(--radius-field, 0.5rem);
+}
+
+.agent-run-btn.btn {
+  border-radius: 9999px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  width: 28px;
+}
+
+.agent-run-btn.btn .agent-send-icon {
+  height: 18px;
+  min-height: 18px;
+  min-width: 18px;
+  stroke-width: 2.6;
+  width: 18px;
 }
 
 .agent-quick-action-menu.dropdown-content {
