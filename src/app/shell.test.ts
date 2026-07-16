@@ -40,6 +40,16 @@ describe('startup shell', () => {
     expect(lib).toContain('webview.window().show()')
   })
 
+  it('keeps the native About version aligned with the application version', () => {
+    const packageJson = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8'))
+    const tauriConfig = JSON.parse(readFileSync(resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'))
+    const cargoToml = readFileSync(resolve(__dirname, '../../src-tauri/Cargo.toml'), 'utf8')
+
+    expect(packageJson.version).toBe('0.9.0')
+    expect(tauriConfig.version).toBe(packageJson.version)
+    expect(cargoToml).toContain(`version = "${packageJson.version}"`)
+  })
+
   it('keeps markdown images within the editor content width', () => {
     const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
 
