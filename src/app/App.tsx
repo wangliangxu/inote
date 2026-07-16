@@ -19,6 +19,8 @@ import {
   Bot,
   CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   FileMinus2,
   FilePlus2,
@@ -105,7 +107,9 @@ import {
   deleteNote,
   emptyTrash,
   getNoteLinks,
+  loadIndexedVault,
   loadLastAgentUndoSnapshot,
+  migrateNoteImages,
   initializeVault,
   moveNote,
   noteToMarkdown,
@@ -387,6 +391,8 @@ export function App() {
   const [llmSettings, setLlmSettings] =
     useState<LlmProviderSettings>(defaultLlmSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [startupMigrationPath, setStartupMigrationPath] = useState("");
+  const [editorPaintReady, setEditorPaintReady] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>(
     () => {
       if (typeof window === "undefined") return "system";
@@ -429,6 +435,9 @@ export function App() {
   const closeRequestInProgressRef = useRef(false);
   const activeNoteRef = useRef<Note | undefined>(undefined);
   const autoSaveOnExitRef = useRef(false);
+  const noteHistoryNavigationRef = useRef(false);
+  const [noteHistory, setNoteHistory] = useState<string[]>([]);
+  const [noteHistoryIndex, setNoteHistoryIndex] = useState(-1);
   const previousViewRef = useRef<{
     view: WorkspaceView;
     category: string;
@@ -465,8 +474,42 @@ export function App() {
     : undefined;
 
   useEffect(() => {
+    setEditorPaintReady(false);
+    if (
+      !settingsLoaded ||
+      !activeNote ||
+      startupMigrationPath === activeNote.path
+    )
+      return;
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        setEditorPaintReady(true);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [activeNote?.path, settingsLoaded, startupMigrationPath]);
+
+  useEffect(() => {
     activeNoteRef.current = activeNote;
   }, [activeNote]);
+
+  useEffect(() => {
+    if (!activePath) return;
+    if (noteHistoryNavigationRef.current) {
+      noteHistoryNavigationRef.current = false;
+      return;
+    }
+    setNoteHistory((current) => [
+      ...current.slice(0, noteHistoryIndex + 1),
+      activePath,
+    ]);
+    setNoteHistoryIndex(noteHistoryIndex + 1);
+  }, [activePath]);
 
   useEffect(() => {
     autoSaveOnExitRef.current = autoSaveOnExit;
@@ -582,6 +625,80 @@ export function App() {
     [],
   );
 
+  const restoreVaultOnStartup = useCallback(
+    async (
+      root: string,
+      reason: string,
+      preferredPath = "",
+    ) => {
+      const trimmedRoot = root.trim();
+      if (!trimmedRoot) return;
+
+      let cachedNotes: Note[] | null = null;
+      try {
+        cachedNotes = await loadIndexedVault(trimmedRoot);
+      } catch (error) {
+        console.warn("Failed to restore cached vault index", error);
+      }
+
+      if (cachedNotes === null) {
+        await loadVaultFromDisk(trimmedRoot, reason, preferredPath);
+        return;
+      }
+
+      setNotes(cachedNotes);
+      setActivePath((current) => {
+        if (
+          preferredPath &&
+          cachedNotes.some((note) => note.path === preferredPath)
+        )
+          return preferredPath;
+        if (cachedNotes.some((note) => note.path === current)) return current;
+        return cachedNotes[0]?.path ?? "";
+      });
+      setSaveError(false);
+      setStatus(reason);
+
+      const cachedActiveNote =
+        cachedNotes.find((note) => note.path === preferredPath) ??
+        cachedNotes[0];
+      const migrationPath = cachedActiveNote?.body.includes("data:image/")
+        ? cachedActiveNote.path
+        : "";
+      setStartupMigrationPath(migrationPath);
+
+      void (async () => {
+        try {
+          if (migrationPath) {
+            const migrated = await migrateNoteImages({
+              vaultRoot: trimmedRoot,
+              notePath: migrationPath,
+            });
+            if (migrated) {
+              setNotes((current) =>
+                current.map((note) =>
+                  note.path === migrated.path
+                    ? { ...migrated, isDirty: false }
+                    : note,
+                ),
+              );
+            }
+          }
+        } catch (error) {
+          console.error("Failed to migrate embedded note images", error);
+        } finally {
+          setStartupMigrationPath("");
+        }
+
+        await loadVaultFromDisk(trimmedRoot, reason, preferredPath);
+      })().catch((error) => {
+        setSaveError(true);
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+    },
+    [loadVaultFromDisk],
+  );
+
   const loadDemoWorkspace = useCallback(() => {
     setNotes(demoNotes);
     setActivePath(demoNotes[0]?.path ?? "");
@@ -682,7 +799,7 @@ export function App() {
         setLlmSettings({ ...defaultLlmSettings, ...llmSettingsFromStorage });
         if (vaultRootFromSettings) {
           try {
-            await loadVaultFromDisk(
+            await restoreVaultOnStartup(
               vaultRootFromSettings,
               savedSettings.vaultRoot
                 ? "Last vault restored from SQLite."
@@ -703,7 +820,7 @@ export function App() {
         if (remembered) {
           setVaultRoot(remembered);
           try {
-            await loadVaultFromDisk(
+            await restoreVaultOnStartup(
               remembered,
               "Last vault restored from browser fallback.",
               window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? "",
@@ -734,7 +851,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadDemoWorkspace, loadVaultFromDisk]);
+  }, [loadDemoWorkspace, restoreVaultOnStartup]);
 
   useEffect(() => {
     if (!settingsLoaded) return;
@@ -1267,6 +1384,31 @@ export function App() {
     }
   }, [visibleNotes, activePath, renderedCount]);
 
+  const existingNotePaths = useMemo(
+    () => new Set(notes.map((note) => note.path)),
+    [notes],
+  );
+  const previousHistoryIndex = useMemo(() => {
+    for (let index = noteHistoryIndex - 1; index >= 0; index -= 1) {
+      if (existingNotePaths.has(noteHistory[index])) return index;
+    }
+    return -1;
+  }, [existingNotePaths, noteHistory, noteHistoryIndex]);
+  const nextHistoryIndex = noteHistory.findIndex(
+    (path, index) => index > noteHistoryIndex && existingNotePaths.has(path),
+  );
+
+  const navigateNoteHistory = useCallback(
+    (index: number) => {
+      const path = noteHistory[index];
+      if (!path || !existingNotePaths.has(path)) return;
+      noteHistoryNavigationRef.current = true;
+      setNoteHistoryIndex(index);
+      setActivePath(path);
+    },
+    [existingNotePaths, noteHistory],
+  );
+
   useEffect(() => {
     if (!vaultRoot.trim() || !query.trim()) {
       setIndexedResults([]);
@@ -1288,13 +1430,15 @@ export function App() {
     };
   }, [query, vaultRoot]);
 
+  const activeNotePath = activeNote?.path;
+
   useEffect(() => {
-    if (!activeNote || !vaultRoot.trim()) {
+    if (!activeNotePath || !vaultRoot.trim()) {
       setNoteLinks({ outgoing: [], backlinks: [] });
       return;
     }
     let cancelled = false;
-    getNoteLinks({ vaultRoot: vaultRoot.trim(), path: activeNote.path })
+    getNoteLinks({ vaultRoot: vaultRoot.trim(), path: activeNotePath })
       .then((links) => {
         if (!cancelled) setNoteLinks(links);
       })
@@ -1304,7 +1448,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeNote, linkVersion, vaultRoot]);
+  }, [activeNotePath, linkVersion, vaultRoot]);
 
   function updateActiveNote(fullContent: string) {
     if (!activeNote) return;
@@ -2245,6 +2389,14 @@ export function App() {
             .catch(() => { });
         }}
       >
+        <div className="mr-2 flex min-w-0 flex-none select-none flex-col items-start">
+          <strong className="text-sm font-bold leading-tight">iNote</strong>
+          <span className="max-w-[140px] truncate text-xs leading-tight text-base-content/60">
+            {vaultRoot.trim()
+              ? vaultRoot.split("/").filter(Boolean).pop()
+              : "Demo workspace"}
+          </span>
+        </div>
         <div
           className="flex-none"
           style={{ WebkitAppRegion: "no-drag" } as any}
@@ -2263,14 +2415,34 @@ export function App() {
             <PanelLeft size={18} />
           </button>
         </div>
-        <div className="flex-1 flex flex-col items-start px-4 select-none">
-          <strong className="text-sm font-bold">iNote</strong>
-          <span className="text-xs text-base-content/60 truncate max-w-[200px]">
-            {vaultRoot.trim()
-              ? vaultRoot.split("/").filter(Boolean).pop()
-              : "Demo workspace"}
-          </span>
+        <div
+          className="flex flex-none items-center gap-0.5"
+          data-no-drag
+          aria-label={t("app.noteNavigation")}
+          style={{ WebkitAppRegion: "no-drag" } as any}
+        >
+          <button
+            className="btn btn-square btn-ghost btn-sm disabled:bg-transparent disabled:text-base-content/20 disabled:opacity-40"
+            type="button"
+            disabled={previousHistoryIndex < 0}
+            onClick={() => navigateNoteHistory(previousHistoryIndex)}
+            title={t("app.previousNote")}
+            aria-label={t("app.previousNote")}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <button
+            className="btn btn-square btn-ghost btn-sm disabled:bg-transparent disabled:text-base-content/20 disabled:opacity-40"
+            type="button"
+            disabled={nextHistoryIndex < 0}
+            onClick={() => navigateNoteHistory(nextHistoryIndex)}
+            title={t("app.nextNote")}
+            aria-label={t("app.nextNote")}
+          >
+            <ChevronRight size={18} />
+          </button>
         </div>
+        <div className="flex-1" />
         <div
           className="min-w-0 flex-none px-2"
           style={{ WebkitAppRegion: "no-drag" } as any}
@@ -2644,31 +2816,37 @@ export function App() {
               />
             </Suspense>
           ) : activeNote ? (
-            <Editor
-              key={activeNote.path}
-              vaultRoot={vaultRoot.trim()}
-              note={activeNote}
-              onChange={updateActiveNote}
-              onSave={saveActiveNote}
-              onRename={renameActiveNote}
-              onMove={moveActiveNotePrompt}
-              onCheckExternal={checkExternalActiveNote}
-              onDelete={deleteActiveNote}
-              previewMode={previewMode}
-              onTogglePreview={() => setPreviewMode((current) => !current)}
-              saveState={saveState}
-              noteLinks={noteLinks}
-              onUpdateTitle={updateActiveNoteTitle}
-              onUpdateCreatedAt={updateActiveNoteCreatedAt}
-              onUpdateUpdatedAt={updateActiveNoteUpdatedAt}
-              onUpdateDue={updateActiveNoteDue}
-              onUpdateStatus={updateActiveNoteStatus}
-              onUpdatePriority={updateActiveNotePriority}
-              onUpdateProject={updateActiveNoteProject}
-              onUpdateTags={updateActiveNoteTags}
-              onArchiveInboxNote={archiveActiveInboxNote}
-              onNavigateLink={setActivePath}
-            />
+            startupMigrationPath === activeNote.path ? (
+              <div className="empty">Optimizing embedded note images…</div>
+            ) : !editorPaintReady ? (
+              <div className="empty">Loading note…</div>
+            ) : (
+              <Editor
+                key={activeNote.path}
+                vaultRoot={vaultRoot.trim()}
+                note={activeNote}
+                onChange={updateActiveNote}
+                onSave={saveActiveNote}
+                onRename={renameActiveNote}
+                onMove={moveActiveNotePrompt}
+                onCheckExternal={checkExternalActiveNote}
+                onDelete={deleteActiveNote}
+                previewMode={previewMode}
+                onTogglePreview={() => setPreviewMode((current) => !current)}
+                saveState={saveState}
+                noteLinks={noteLinks}
+                onUpdateTitle={updateActiveNoteTitle}
+                onUpdateCreatedAt={updateActiveNoteCreatedAt}
+                onUpdateUpdatedAt={updateActiveNoteUpdatedAt}
+                onUpdateDue={updateActiveNoteDue}
+                onUpdateStatus={updateActiveNoteStatus}
+                onUpdatePriority={updateActiveNotePriority}
+                onUpdateProject={updateActiveNoteProject}
+                onUpdateTags={updateActiveNoteTags}
+                onArchiveInboxNote={archiveActiveInboxNote}
+                onNavigateLink={setActivePath}
+              />
+            )
           ) : (
             <div className="empty">
               {activeView === "search" && query.startsWith("#")

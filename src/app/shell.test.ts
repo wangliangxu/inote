@@ -82,6 +82,27 @@ describe('startup shell', () => {
     expect(app).toContain(') : null}')
   })
 
+  it('provides browser-style note history navigation in the title bar', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('const [noteHistory, setNoteHistory] = useState<string[]>([])')
+    expect(app).toContain('...current.slice(0, noteHistoryIndex + 1)')
+    expect(app).toContain('navigateNoteHistory(previousHistoryIndex)')
+    expect(app).toContain('navigateNoteHistory(nextHistoryIndex)')
+    expect(app.match(/disabled:text-base-content\/20/g)).toHaveLength(2)
+    expect(app.match(/disabled:opacity-40/g)).toHaveLength(2)
+    expect(app).not.toContain('notePosition')
+  })
+
+  it('places the iNote brand directly after the macOS traffic-light space', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    const header = app.slice(app.indexOf('<header'), app.indexOf('</header>'))
+    expect(header.indexOf('iNote')).toBeLessThan(header.indexOf('<PanelLeft'))
+    expect(header.indexOf('vaultRoot.split')).toBeLessThan(header.indexOf('<PanelLeft'))
+    expect(header).toContain('flex-col items-start')
+  })
+
   it('adds a general setting for auto-saving when the native window closes', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
     const settings = readFileSync(resolve(__dirname, '../features/settings/SettingsPanel.tsx'), 'utf8')
@@ -121,5 +142,57 @@ describe('startup shell', () => {
       enable: true,
       scope: expect.arrayContaining(['$HOME/**']),
     })
+  })
+
+  it('stores pasted images as local assets instead of embedding them in markdown', () => {
+    const editor = readFileSync(resolve(__dirname, '../features/editor/Editor.tsx'), 'utf8')
+    const api = readFileSync(resolve(__dirname, '../shared/api.ts'), 'utf8')
+    const commands = readFileSync(resolve(__dirname, '../../src-tauri/src/commands.rs'), 'utf8')
+    const lib = readFileSync(resolve(__dirname, '../../src-tauri/src/lib.rs'), 'utf8')
+
+    expect(editor).toContain('return saveNoteImage({')
+    expect(api).toContain("invoke<string>('save_note_image'")
+    expect(commands).toContain('pub fn save_note_image')
+    expect(lib).toContain('commands::save_note_image')
+  })
+
+  it('does not reload note links for every body edit', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('const activeNotePath = activeNote?.path')
+    expect(app).toContain('[activeNotePath, linkVersion, vaultRoot]')
+    expect(app).not.toContain('[activeNote, linkVersion, vaultRoot]')
+  })
+
+  it('restores the cached vault before checking the disk in the background', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const api = readFileSync(resolve(__dirname, '../shared/api.ts'), 'utf8')
+    const commands = readFileSync(resolve(__dirname, '../../src-tauri/src/commands.rs'), 'utf8')
+    const lib = readFileSync(resolve(__dirname, '../../src-tauri/src/lib.rs'), 'utf8')
+
+    expect(app).toContain('cachedNotes = await loadIndexedVault(trimmedRoot)')
+    expect(app).toContain('await loadVaultFromDisk(trimmedRoot, reason, preferredPath)')
+    expect(api).toContain("invoke<Note[] | null>('load_indexed_vault'")
+    expect(commands).toContain('pub fn load_indexed_vault')
+    expect(lib).toContain('commands::load_indexed_vault')
+  })
+
+  it('paints the workspace before mounting a heavy note editor', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+
+    expect(app).toContain('window.requestAnimationFrame')
+    expect(app).toContain('!editorPaintReady')
+    expect(app).toContain('Loading note…')
+  })
+
+  it('migrates legacy base64 note images before mounting the editor', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const api = readFileSync(resolve(__dirname, '../shared/api.ts'), 'utf8')
+    const commands = readFileSync(resolve(__dirname, '../../src-tauri/src/commands.rs'), 'utf8')
+
+    expect(app).toContain('await migrateNoteImages({')
+    expect(app).toContain('Optimizing embedded note images…')
+    expect(api).toContain("invoke<Note | null>('migrate_note_images'")
+    expect(commands).toContain('pub fn migrate_note_images')
   })
 })

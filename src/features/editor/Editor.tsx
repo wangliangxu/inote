@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Note, SaveState, NoteLinks } from '../../shared/types'
-import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting, checkFileExists } from '../../shared/api'
+import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting, checkFileExists, saveNoteImage } from '../../shared/api'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
@@ -947,11 +947,18 @@ export function Editor({
     linkDialogPlugin(),
     imagePlugin({
       imageUploadHandler: async (image: File) => {
-        return new Promise<string>((resolve, reject) => {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result as string)
           reader.onerror = reject
           reader.readAsDataURL(image)
+        })
+        if (!vaultRoot.trim()) return dataUrl
+
+        return saveNoteImage({
+          vaultRoot: vaultRoot.trim(),
+          notePath: note.path,
+          dataUrl,
         })
       },
       imagePreviewHandler: async (src: string) => {

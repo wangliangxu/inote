@@ -11,6 +11,7 @@ use crate::markdown::NoteMetadata;
 use crate::settings::{UserSettings, UserSettingsStore};
 use crate::vault::{ArchiveNote, Vault};
 use crate::watcher::WatcherState;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
@@ -21,6 +22,21 @@ pub struct WriteNoteInput {
     pub vault_root: String,
     pub path: String,
     pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveNoteImageInput {
+    pub vault_root: String,
+    pub note_path: String,
+    pub data_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrateNoteImagesInput {
+    pub vault_root: String,
+    pub note_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,6 +222,18 @@ pub fn scan_vault_and_rebuild_index(vault_root: String) -> Result<Vec<NoteMetada
 }
 
 #[tauri::command]
+pub fn load_indexed_vault(vault_root: String) -> Result<Option<Vec<NoteMetadata>>, String> {
+    let vault = Vault::new(&vault_root)?;
+    let index_path = vault.root().join(".inote/index.sqlite3");
+    if !index_path.exists() {
+        return Ok(None);
+    }
+
+    let index = NoteIndex::open(index_path)?;
+    Ok(Some(index.get_all_notes()?))
+}
+
+#[tauri::command]
 pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String> {
     let vault = Vault::new(&input.vault_root)?;
     let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
@@ -260,6 +288,102 @@ pub fn write_note(input: WriteNoteInput) -> Result<NoteMetadata, String> {
     let note = vault.write_note(&input.path, &input.content)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
+}
+
+#[tauri::command]
+pub fn save_note_image(input: SaveNoteImageInput) -> Result<String, String> {
+    let (metadata, encoded) = input
+        .data_url
+        .split_once(',')
+        .ok_or_else(|| "invalid image data URL".to_string())?;
+    if !metadata.starts_with("data:image/") || !metadata.ends_with(";base64") {
+        return Err("unsupported image data URL".to_string());
+    }
+
+    let mime_type = metadata
+        .strip_prefix("data:")
+        .and_then(|value| value.strip_suffix(";base64"))
+        .ok_or_else(|| "invalid image MIME type".to_string())?;
+    let extension = image_extension_for_mime_type(mime_type)?;
+    let bytes = BASE64
+        .decode(encoded)
+        .map_err(|error| format!("failed to decode pasted image: {error}"))?;
+
+    Vault::new(&input.vault_root)?.write_note_image(&input.note_path, extension, &bytes)
+}
+
+#[tauri::command]
+pub fn migrate_note_images(input: MigrateNoteImagesInput) -> Result<Option<NoteMetadata>, String> {
+    let vault = Vault::new(&input.vault_root)?;
+    let source = vault.read_note_source(&input.note_path)?;
+    let mut output = String::with_capacity(source.len());
+    let mut cursor = 0;
+    let mut migrated_count = 0;
+
+    while let Some(relative_start) = source[cursor..].find("data:image/") {
+        let data_start = cursor + relative_start;
+        output.push_str(&source[cursor..data_start]);
+
+        let Some((data_end, mime_type, encoded)) = inline_image_data(&source, data_start) else {
+            output.push_str("data:image/");
+            cursor = data_start + "data:image/".len();
+            continue;
+        };
+
+        let extension = image_extension_for_mime_type(mime_type)?;
+        let bytes = BASE64
+            .decode(encoded)
+            .map_err(|error| format!("failed to decode embedded image: {error}"))?;
+        let relative_path = vault.write_note_image(&input.note_path, extension, &bytes)?;
+        output.push_str(&relative_path);
+        cursor = data_end;
+        migrated_count += 1;
+    }
+
+    if migrated_count == 0 {
+        return Ok(None);
+    }
+
+    output.push_str(&source[cursor..]);
+    let note = vault.write_note(&input.note_path, &output)?;
+    update_index_for_note(&vault, &note)?;
+    Ok(Some(note))
+}
+
+fn inline_image_data(source: &str, data_start: usize) -> Option<(usize, &str, &str)> {
+    if !source[..data_start].ends_with("](") {
+        return None;
+    }
+
+    let metadata_end = source[data_start..].find(',')? + data_start;
+    let metadata = &source[data_start..metadata_end];
+    let mime_type = metadata
+        .strip_prefix("data:")
+        .and_then(|value| value.strip_suffix(";base64"))?;
+    let encoded_start = metadata_end + 1;
+    let encoded_end = source.as_bytes()[encoded_start..]
+        .iter()
+        .position(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'+' | b'/' | b'='))
+        .map(|offset| encoded_start + offset)
+        .unwrap_or(source.len());
+
+    if source.as_bytes().get(encoded_end) != Some(&b')') {
+        return None;
+    }
+    Some((encoded_end, mime_type, &source[encoded_start..encoded_end]))
+}
+
+fn image_extension_for_mime_type(mime_type: &str) -> Result<&'static str, String> {
+    match mime_type.to_ascii_lowercase().as_str() {
+        "image/png" => Ok("png"),
+        "image/jpeg" | "image/jpg" => Ok("jpg"),
+        "image/gif" => Ok("gif"),
+        "image/webp" => Ok("webp"),
+        "image/avif" => Ok("avif"),
+        "image/bmp" => Ok("bmp"),
+        "image/svg+xml" => Ok("svg"),
+        other => Err(format!("unsupported pasted image type: {other}")),
+    }
 }
 
 #[tauri::command]
@@ -621,6 +745,102 @@ mod tests {
 
         let note = read_note(root, "knowledge/test.md".to_string()).unwrap();
         assert_eq!(note.title, "Test Note");
+    }
+
+    #[test]
+    fn command_loads_cached_vault_without_scanning_disk() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        assert!(load_indexed_vault(root.clone()).unwrap().is_none());
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "knowledge/cached.md".to_string(),
+            content: "# Cached Note\n\nBody".to_string(),
+        })
+        .unwrap();
+
+        let notes = load_indexed_vault(root).unwrap().unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].path, "knowledge/cached.md");
+        assert_eq!(notes[0].title, "Cached Note");
+    }
+
+    #[test]
+    fn command_decodes_and_saves_pasted_image_outside_markdown() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "knowledge/test.md".to_string(),
+            content: "# Test Note".to_string(),
+        })
+        .unwrap();
+
+        let relative_path = save_note_image(SaveNoteImageInput {
+            vault_root: root.clone(),
+            note_path: "knowledge/test.md".to_string(),
+            data_url: "data:image/png;base64,cG5nLWJ5dGVz".to_string(),
+        })
+        .unwrap();
+
+        assert!(relative_path.starts_with("_assets/test/image-"));
+        assert_eq!(
+            std::fs::read(dir.path().join("knowledge").join(relative_path)).unwrap(),
+            b"png-bytes",
+        );
+    }
+
+    #[test]
+    fn command_rejects_non_image_data_urls() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        let error = save_note_image(SaveNoteImageInput {
+            vault_root: root,
+            note_path: "knowledge/test.md".to_string(),
+            data_url: "data:text/plain;base64,dGV4dA==".to_string(),
+        })
+        .unwrap_err();
+
+        assert_eq!(error, "unsupported image data URL");
+    }
+
+    #[test]
+    fn command_migrates_legacy_embedded_images_to_assets() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_string_lossy().to_string();
+
+        write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "ideas/legacy.md".to_string(),
+            content: "# Legacy\n\n![image](data:image/png;base64,cG5nLWJ5dGVz)\n".to_string(),
+        })
+        .unwrap();
+
+        let migrated = migrate_note_images(MigrateNoteImagesInput {
+            vault_root: root.clone(),
+            note_path: "ideas/legacy.md".to_string(),
+        })
+        .unwrap()
+        .unwrap();
+
+        assert!(!migrated.body.contains("data:image/"));
+        assert!(migrated.body.contains("](_assets/legacy/image-"));
+        let relative_path = migrated
+            .body
+            .split("](")
+            .nth(1)
+            .unwrap()
+            .split(')')
+            .next()
+            .unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join("ideas").join(relative_path)).unwrap(),
+            b"png-bytes",
+        );
     }
 
     #[test]

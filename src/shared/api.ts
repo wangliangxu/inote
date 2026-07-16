@@ -20,6 +20,17 @@ interface WriteNoteInput {
   content: string
 }
 
+interface SaveNoteImageInput {
+  vaultRoot: string
+  notePath: string
+  dataUrl: string
+}
+
+interface MigrateNoteImagesInput {
+  vaultRoot: string
+  notePath: string
+}
+
 interface CreateNoteInput {
   vaultRoot: string
   title: string
@@ -128,6 +139,10 @@ export async function scanVaultAndRebuildIndex(vaultRoot: string): Promise<Note[
   return invoke<Note[]>('scan_vault_and_rebuild_index', { vaultRoot })
 }
 
+export async function loadIndexedVault(vaultRoot: string): Promise<Note[] | null> {
+  return invoke<Note[] | null>('load_indexed_vault', { vaultRoot })
+}
+
 export async function searchIndex(input: SearchIndexInput): Promise<SearchResult[]> {
   return invoke<SearchResult[]>('search_index', { input })
 }
@@ -158,6 +173,14 @@ export async function initializeVault(vaultRoot: string): Promise<Note[]> {
 
 export async function writeNote(input: WriteNoteInput): Promise<Note> {
   return invoke<Note>('write_note', { input })
+}
+
+export async function saveNoteImage(input: SaveNoteImageInput): Promise<string> {
+  return invoke<string>('save_note_image', { input })
+}
+
+export async function migrateNoteImages(input: MigrateNoteImagesInput): Promise<Note | null> {
+  return invoke<Note | null>('migrate_note_images', { input })
 }
 
 export async function createNote(input: CreateNoteInput): Promise<Note> {

@@ -77,6 +77,11 @@ impl Vault {
         parse_note(&self.root, &path)
     }
 
+    pub fn read_note_source(&self, relative_path: &str) -> Result<String, String> {
+        let path = self.safe_path(relative_path)?;
+        fs::read_to_string(path).map_err(|error| format!("failed to read note source: {error}"))
+    }
+
     pub fn write_note(&self, relative_path: &str, content: &str) -> Result<NoteMetadata, String> {
         let path = self.safe_path(relative_path)?;
         if let Some(parent) = path.parent() {
@@ -88,6 +93,45 @@ impl Vault {
         fs::write(&tmp, content).map_err(|error| format!("failed to write temp note: {error}"))?;
         fs::rename(&tmp, &path).map_err(|error| format!("failed to replace note: {error}"))?;
         parse_note(&self.root, &path)
+    }
+
+    pub fn write_note_image(
+        &self,
+        note_path: &str,
+        extension: &str,
+        bytes: &[u8],
+    ) -> Result<String, String> {
+        let note_path = self.safe_path(note_path)?;
+        let note_directory = note_path.parent().unwrap_or(&self.root);
+        let note_stem = note_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("note");
+        let asset_directory = note_directory.join("_assets").join(note_stem);
+        fs::create_dir_all(&asset_directory)
+            .map_err(|error| format!("failed to create image asset folder: {error}"))?;
+
+        let timestamp = Local::now().format("%Y%m%d-%H%M%S-%3f");
+        let mut sequence = 0_u32;
+        let image_path = loop {
+            let suffix = if sequence == 0 {
+                String::new()
+            } else {
+                format!("-{sequence}")
+            };
+            let candidate = asset_directory.join(format!("image-{timestamp}{suffix}.{extension}"));
+            if !candidate.exists() {
+                break candidate;
+            }
+            sequence += 1;
+        };
+
+        fs::write(&image_path, bytes)
+            .map_err(|error| format!("failed to save pasted image: {error}"))?;
+        image_path
+            .strip_prefix(note_directory)
+            .map_err(|_| "failed to create relative image path".to_string())
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
     }
 
     pub fn create_inbox_note(&self, title: &str) -> Result<NoteMetadata, String> {
@@ -413,6 +457,26 @@ mod tests {
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].title, "Rust Note");
         assert_eq!(notes[0].category, "knowledge/rust");
+    }
+
+    #[test]
+    fn saves_note_images_beside_the_note_as_relative_assets() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note("knowledge/rust/ownership.md", "# Ownership")
+            .unwrap();
+
+        let relative_path = vault
+            .write_note_image("knowledge/rust/ownership.md", "png", b"png-bytes")
+            .unwrap();
+
+        assert!(relative_path.starts_with("_assets/ownership/image-"));
+        assert!(relative_path.ends_with(".png"));
+        assert_eq!(
+            fs::read(dir.path().join("knowledge/rust").join(relative_path)).unwrap(),
+            b"png-bytes",
+        );
     }
 
     #[test]

@@ -24,7 +24,10 @@
     "noNoteSelected": "No note selected.",
     "clearSearch": "Clear search",
     "createNote": "Create note",
-    "allNotes": "All notes"
+    "allNotes": "All notes",
+    "noteNavigation": "Note navigation",
+    "previousNote": "Previous note",
+    "nextNote": "Next note"
   },
   "settings": {
     "title": "Settings",
