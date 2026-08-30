@@ -98,7 +98,14 @@ export interface LlmChatResponse {
   content: string
 }
 
-export type AgentTurnStatus = 'running' | 'ready' | 'applied' | 'discarded' | 'failed'
+export interface LlmStreamSummary {
+  inputTokens?: number | null
+  outputTokens?: number | null
+  finishReason?: string | null
+  structuredOutputMode: 'json_schema' | 'json_object' | 'prompt'
+}
+
+export type AgentTurnStatus = 'running' | 'ready' | 'applied' | 'discarded' | 'failed' | 'cancelled'
 
 export interface AgentSession {
   id: string
@@ -182,6 +189,12 @@ export interface AgentConversation {
   lastUndoSnapshot?: AgentUndoSnapshot | null
 }
 
+export interface AgentPreference {
+  notePath: string
+  content: string
+  updatedAt: string
+}
+
 export type ReviewGroupKind = 'metadata' | 'body_append' | 'body_replace' | 'create_note' | 'suggestion' | 'risk'
 
 export interface ReviewPlan {
@@ -209,4 +222,10 @@ export interface ReviewItem {
   before?: string
   after?: string
   previewMarkdown?: string
+  diffLines?: ReviewDiffLine[]
+}
+
+export interface ReviewDiffLine {
+  kind: 'same' | 'add' | 'remove'
+  text: string
 }

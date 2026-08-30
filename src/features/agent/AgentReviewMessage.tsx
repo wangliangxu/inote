@@ -4,6 +4,18 @@ import type { AgentMessage, ReviewPlan } from '../../shared/types'
 import { decodeOperationEventPayload, decodeReviewPlanPayload } from './agentMessagePayloads'
 import { formatRelativeTime } from './agentTimeFormat'
 
+function ReviewDiff({ lines }: { lines: NonNullable<import('../../shared/types').ReviewItem['diffLines']> }) {
+  return (
+    <pre className="agent-review-diff">
+      {lines.map((line, index) => (
+        <span className={`agent-diff-line ${line.kind}`} key={`${index}-${line.text}`}>
+          {line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '} {line.text || ' '}
+        </span>
+      ))}
+    </pre>
+  )
+}
+
 interface AgentReviewMessageProps {
   message: AgentMessage
   disabled: boolean
@@ -71,6 +83,7 @@ export function AgentReviewMessage({
             <div className="agent-review-item" key={`${group.id}-${item.label}`}>
               <span>{item.label}</span>
               {item.before !== undefined || item.after !== undefined ? <code>{item.before ?? ''} -&gt; {item.after ?? ''}</code> : null}
+              {item.diffLines ? <ReviewDiff lines={item.diffLines} /> : null}
               {item.previewMarkdown ? <pre>{item.previewMarkdown}</pre> : null}
             </div>
           ))}
@@ -144,6 +157,7 @@ function CollapsedReview({
                 <div className="agent-review-item" key={`${group.id}-${item.label}`}>
                   <span>{item.label}</span>
                   {item.before !== undefined || item.after !== undefined ? <code>{item.before ?? ''} -&gt; {item.after ?? ''}</code> : null}
+                  {item.diffLines ? <ReviewDiff lines={item.diffLines} /> : null}
                   {item.previewMarkdown ? <pre>{item.previewMarkdown}</pre> : null}
                 </div>
               ))}

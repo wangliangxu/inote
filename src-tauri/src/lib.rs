@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 pub mod agent_session;
 pub mod commands;
 pub mod indexer;
@@ -59,6 +61,7 @@ pub fn run() {
             _ => {}
         })
         .manage(watcher::WatcherState::default())
+        .manage(llm::LlmRequestState::default())
         .menu(menu::build)
         .on_menu_event(menu::handle_event)
         .on_page_load(|webview, payload| {
@@ -101,6 +104,7 @@ pub fn run() {
             commands::build_llm_request_preview,
             commands::execute_llm_chat,
             commands::execute_llm_chat_stream,
+            commands::cancel_llm_request,
             commands::load_agent_session,
             commands::load_agent_conversation,
             commands::record_agent_turn,
@@ -109,7 +113,10 @@ pub fn run() {
             commands::update_agent_message,
             commands::record_agent_operation_event,
             commands::load_last_agent_undo_snapshot,
-            commands::clear_last_agent_undo_snapshot
+            commands::clear_last_agent_undo_snapshot,
+            commands::load_agent_preference,
+            commands::save_agent_preference,
+            commands::clear_agent_preference
         ])
         .run(tauri::generate_context!())
         .expect("failed to run iNote");

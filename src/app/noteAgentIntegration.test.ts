@@ -27,6 +27,12 @@ describe('note agent integration', () => {
     expect(app).toContain('moveNote({')
   })
 
+  it('rejects stale agent reviews before current-note writes or linked-note creation', () => {
+    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    expect(app).toContain('result.baseNoteRevision !== noteRevision(activeNote)')
+    expect(app).toContain('changed after this review was generated')
+  })
+
   it('wires persisted NoteAgent conversation props via useNoteAgent hook', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
     const agent = readFileSync(resolve(__dirname, '../features/agent/NoteAgent.tsx'), 'utf8')
@@ -60,9 +66,10 @@ describe('note agent integration', () => {
     expect(app).toContain('recordAgentMessages({')
     expect(app).toContain('loadLastAgentUndoSnapshot')
     expect(app).toContain('clearLastAgentUndoSnapshot')
-    expect(app).toContain('noteBeforeMarkdown: noteToMarkdown(activeNote)')
+    expect(app).toContain('noteBeforeMarkdown: noteToMarkdown(before)')
     expect(app).toContain('noteTitle: saved.title')
-    expect(app).toContain('Undo is not available for created notes yet.')
+    expect(app).toContain('undo_agent_create')
+    expect(app).toContain('Removed Agent-created note')
     expect(app).toContain('action: "applied"')
     expect(app).toContain('action: "created"')
     expect(app).toContain('action: "undone"')

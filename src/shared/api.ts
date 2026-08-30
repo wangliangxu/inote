@@ -2,12 +2,14 @@ import { invoke, Channel } from '@tauri-apps/api/core'
 import type {
   AgentConversation,
   AgentMessage,
+  AgentPreference,
   AgentOperationEvent,
   AgentSession,
   AgentTurn,
   AgentUndoSnapshot,
   LlmChatResponse,
   LlmProviderSettings,
+  LlmStreamSummary,
   Note,
   NoteLinks,
   SearchResult,
@@ -77,6 +79,8 @@ interface LlmChatInput {
   settings: LlmProviderSettings
   prompt: string
   context: string
+  requestId?: string
+  structuredOutput?: boolean
 }
 
 interface LoadAgentSessionInput {
@@ -121,6 +125,13 @@ interface RecordAgentOperationEventInput {
 interface AgentUndoSnapshotInput {
   vaultRoot: string
   notePath: string
+}
+
+interface AgentPreferenceInput {
+  vaultRoot: string
+  notePath: string
+  content?: string
+  updatedAt?: string
 }
 
 export async function quitApp(): Promise<void> {
@@ -227,12 +238,16 @@ export async function executeLlmChat(input: LlmChatInput): Promise<LlmChatRespon
   return invoke<LlmChatResponse>('execute_llm_chat', { input })
 }
 
-export async function executeLlmChatStream(input: LlmChatInput, onChunk: (chunk: string) => void): Promise<void> {
+export async function executeLlmChatStream(input: LlmChatInput, onChunk: (chunk: string) => void): Promise<LlmStreamSummary> {
   const channel = new Channel<string>()
   channel.onmessage = (message: string) => {
     onChunk(message)
   }
-  return invoke<void>('execute_llm_chat_stream', { input, onChunk: channel })
+  return invoke<LlmStreamSummary>('execute_llm_chat_stream', { input, onChunk: channel })
+}
+
+export async function cancelLlmRequest(requestId: string): Promise<boolean> {
+  return invoke<boolean>('cancel_llm_request', { requestId })
 }
 
 export async function loadAgentSession(input: LoadAgentSessionInput): Promise<AgentSession | null> {
@@ -269,6 +284,18 @@ export async function loadLastAgentUndoSnapshot(input: AgentUndoSnapshotInput): 
 
 export async function clearLastAgentUndoSnapshot(input: AgentUndoSnapshotInput): Promise<void> {
   return invoke<void>('clear_last_agent_undo_snapshot', { input })
+}
+
+export async function loadAgentPreference(input: AgentPreferenceInput): Promise<AgentPreference | null> {
+  return invoke<AgentPreference | null>('load_agent_preference', { input })
+}
+
+export async function saveAgentPreference(input: AgentPreferenceInput): Promise<void> {
+  return invoke<void>('save_agent_preference', { input })
+}
+
+export async function clearAgentPreference(input: AgentPreferenceInput): Promise<void> {
+  return invoke<void>('clear_agent_preference', { input })
 }
 
 export async function loadUserSettings(): Promise<UserSettings> {

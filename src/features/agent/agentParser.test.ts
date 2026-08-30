@@ -1,7 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { parseAgentResult } from './agentParser'
+import { parseAgentResult, parseAgentStep } from './agentParser'
 
 describe('parseAgentResult', () => {
+  it('parses version 1 read-only tool requests', () => {
+    expect(parseAgentStep(JSON.stringify({
+      version: 1,
+      message: '需要查找相关笔记',
+      toolCalls: [{ id: 'search-1', name: 'search_notes', arguments: { query: 'local first', limit: 3 } }],
+    }))).toEqual({
+      version: 1,
+      message: '需要查找相关笔记',
+      toolCalls: [{ id: 'search-1', name: 'search_notes', arguments: { query: 'local first', limit: 3 } }],
+    })
+  })
+
+  it('rejects unknown tools and mixed tool/final responses', () => {
+    expect(() => parseAgentStep(JSON.stringify({
+      version: 1,
+      toolCalls: [{ id: 'x', name: 'delete_note', arguments: { path: 'x.md' } }],
+    }))).toThrow('Unsupported agent tool')
+    expect(() => parseAgentStep(JSON.stringify({
+      version: 1,
+      toolCalls: [{ id: 'x', name: 'read_note', arguments: { path: 'x.md' } }],
+      operations: [],
+    }))).toThrow('cannot contain toolCalls and operations together')
+  })
+
   it('parses valid current-note metadata updates', () => {
     const result = parseAgentResult(JSON.stringify({
       message: 'I will update the metadata.',
@@ -80,5 +104,30 @@ describe('parseAgentResult', () => {
       message: 'bad',
       operations: [{ type: 'create_note', note: { title: 'New', category: ' ', body: 'Body' } }],
     }))).toThrow('New note category is required.')
+  })
+
+  it('enforces operation and generated content quotas', () => {
+    expect(() => parseAgentResult(JSON.stringify({
+      message: 'too many',
+      operations: Array.from({ length: 13 }, () => ({ type: 'suggest_only', markdown: 'x' })),
+    }))).toThrow('12-operation limit')
+
+    expect(() => parseAgentResult(JSON.stringify({
+      message: 'too long',
+      operations: [{ type: 'append_to_current_note', markdown: 'x'.repeat(50001) }],
+    }))).toThrow('50000-character limit')
+  })
+
+  it('accepts null optional fields emitted by strict structured output', () => {
+    const result = parseAgentResult(JSON.stringify({
+      version: 1,
+      message: 'strict',
+      toolCalls: null,
+      operations: [{
+        type: 'update_current_note',
+        patch: { title: null, category: null, tags: ['agent'], summary: null, due: null, status: null, priority: null, project: null },
+      }],
+    }))
+    expect(result.operations).toEqual([{ type: 'update_current_note', patch: { tags: ['agent'] } }])
   })
 })

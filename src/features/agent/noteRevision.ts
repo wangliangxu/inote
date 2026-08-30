@@ -1,0 +1,25 @@
+import type { Note } from '../../shared/types'
+
+export function noteRevision(note: Note): string {
+  return fnv1a(JSON.stringify({
+    path: note.path,
+    title: note.title,
+    category: note.category,
+    tags: note.tags,
+    summary: note.summary ?? '',
+    due: note.due ?? '',
+    status: note.status ?? '',
+    priority: note.priority ?? '',
+    project: note.project ?? '',
+    body: note.body,
+  }))
+}
+
+function fnv1a(value: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}

@@ -81,6 +81,7 @@ import {
 } from "../shared/theme";
 import type {
   AgentOperationEvent,
+  AgentMessage,
   AgentUndoSnapshot,
   LlmProviderSettings,
   Note,
@@ -98,6 +99,7 @@ import {
 import { buildOperationEventMessage } from "../features/agent/agentConversation";
 import type { AgentResult } from "../features/agent/agentTypes";
 import { makeAgentId, nowIso } from "../features/agent/agentUtils";
+import { noteRevision } from "../features/agent/noteRevision";
 import {
   archiveNote,
   clearLastAgentUndoSnapshot,
@@ -1785,75 +1787,83 @@ export function App() {
       setStatus("Open a real vault before applying agent changes.");
       return;
     }
+    if (result.baseNoteRevision && result.baseNoteRevision !== noteRevision(activeNote)) {
+      throw new Error("The note changed after this review was generated. Run the Agent again to avoid overwriting newer edits.");
+    }
 
     const selectedOperations = selectedOperationIndexes.length
       ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
       : result.operations;
-    const applied = applyCurrentNoteOperations(
-      activeNote,
-      selectedOperations,
-      lockUpdateTime ? activeNote.updatedAt : localDateString(),
-    );
-    const eventId = makeAgentId("event");
-    const now = nowIso();
-    const event: AgentOperationEvent = {
-      id: eventId,
-      sessionId,
-      turnId,
-      notePath: activeNote.path,
-      operationTypes: selectedOperations.map((operation) => operation.type),
-      changedFields: applied.changedFields,
-      createdNotePath: null,
-      appliedAt: now,
-    };
-    const undoSnapshot: AgentUndoSnapshot = {
-      id: makeAgentId("undo"),
-      sessionId: event.sessionId,
-      eventId,
-      notePath: activeNote.path,
-      noteBeforeMarkdown: noteToMarkdown(activeNote),
-      noteBeforePath: activeNote.path,
-      activePathAfterApply: activeNote.path,
-      createdNotePath: null,
-      createdAt: now,
-    };
-
     setIsSaving(true);
     try {
-      const saved = await saveNoteWithPathSync(applied.note);
-      const savedEvent = { ...event, notePath: saved.path };
-      const savedSnapshot = { ...undoSnapshot, notePath: saved.path, activePathAfterApply: saved.path };
-      await recordAgentOperationEvent({
-        vaultRoot: vaultRoot.trim(),
-        noteTitle: saved.title,
-        event: savedEvent,
-        undoSnapshot: savedSnapshot,
-      });
-      await recordAgentMessages({
-        vaultRoot: vaultRoot.trim(),
-        messages: [
+      let workingNote = activeNote;
+      const operationMessages: AgentMessage[] = [];
+      const allChangedFields: string[] = [];
+      for (const operation of selectedOperations) {
+        const before = workingNote;
+        const applied = applyCurrentNoteOperations(
+          before,
+          [operation],
+          lockUpdateTime ? before.updatedAt : localDateString(),
+        );
+        const saved = await saveNoteWithPathSync(applied.note);
+        const now = nowIso();
+        const event: AgentOperationEvent = {
+          id: makeAgentId("event"),
+          sessionId,
+          turnId,
+          notePath: saved.path,
+          operationTypes: [operation.type],
+          changedFields: applied.changedFields,
+          createdNotePath: null,
+          appliedAt: now,
+        };
+        const snapshot: AgentUndoSnapshot = {
+          id: makeAgentId("undo"),
+          sessionId,
+          eventId: event.id,
+          notePath: saved.path,
+          noteBeforeMarkdown: noteToMarkdown(before),
+          noteBeforePath: before.path,
+          activePathAfterApply: saved.path,
+          createdNotePath: null,
+          createdAt: now,
+        };
+        await recordAgentOperationEvent({
+          vaultRoot: vaultRoot.trim(),
+          noteTitle: saved.title,
+          event,
+          undoSnapshot: snapshot,
+        });
+        operationMessages.push(
           buildOperationEventMessage({
             id: makeAgentId("message"),
             sessionId,
             notePath: saved.path,
             turnId,
             now,
-            event: savedEvent,
+            event,
             action: "applied",
             canUndo: true,
           }),
-        ],
+        );
+        allChangedFields.push(...applied.changedFields);
+        workingNote = saved;
+      }
+      await recordAgentMessages({
+        vaultRoot: vaultRoot.trim(),
+        messages: operationMessages,
       });
       setLinkVersion((current) => current + 1);
       setNotes((current) =>
-        current.map((note) => (note.path === activeNote.path ? saved : note)),
+        current.map((note) => (note.path === activeNote.path ? workingNote : note)),
       );
-      if (activeNote.path !== saved.path) {
-        setActivePath(saved.path);
+      if (activeNote.path !== workingNote.path) {
+        setActivePath(workingNote.path);
       }
-      setActiveCategory(saved.category);
+      setActiveCategory(workingNote.category);
       setSaveError(false);
-      setStatus(`Agent updated ${applied.changedFields.join(", ") || "note"}.`);
+      setStatus(`Agent updated ${Array.from(new Set(allChangedFields)).join(", ") || "note"}.`);
     } catch (error) {
       setSaveError(true);
       setStatus(error instanceof Error ? error.message : String(error));
@@ -2036,6 +2046,9 @@ export function App() {
       setStatus("Open a real vault before creating notes.");
       return;
     }
+    if (activeNote && result.baseNoteRevision && result.baseNoteRevision !== noteRevision(activeNote)) {
+      throw new Error("The source note changed after this review was generated. Run the Agent again before creating linked notes.");
+    }
 
     const selectedOperations = selectedOperationIndexes.length
       ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
@@ -2073,11 +2086,22 @@ export function App() {
         createdNotePath: saved.path,
         appliedAt: nowIso(),
       };
+      const undoSnapshot: AgentUndoSnapshot = {
+        id: makeAgentId("undo"),
+        sessionId,
+        eventId: event.id,
+        notePath: event.notePath,
+        noteBeforeMarkdown: activeNote ? noteToMarkdown(activeNote) : "",
+        noteBeforePath: activeNote?.path ?? event.notePath,
+        activePathAfterApply: saved.path,
+        createdNotePath: saved.path,
+        createdAt: event.appliedAt,
+      };
       await recordAgentOperationEvent({
         vaultRoot: vaultRoot.trim(),
         noteTitle: activeNote?.title ?? saved.title,
         event,
-        undoSnapshot: null,
+        undoSnapshot,
       });
       await recordAgentMessages({
         vaultRoot: vaultRoot.trim(),
@@ -2090,7 +2114,7 @@ export function App() {
             now: event.appliedAt,
             event,
             action: "created",
-            canUndo: false,
+            canUndo: true,
           }),
         ],
       });
@@ -2126,7 +2150,38 @@ export function App() {
         return;
       }
       if (snapshot.createdNotePath) {
-        setStatus("Undo is not available for created notes yet.");
+        await deleteNote(vaultRoot.trim(), snapshot.createdNotePath);
+        await clearLastAgentUndoSnapshot({
+          vaultRoot: vaultRoot.trim(),
+          notePath: snapshot.notePath,
+        });
+        setNotes((current) => current.filter((note) => note.path !== snapshot.createdNotePath));
+        if (activePath === snapshot.createdNotePath) setActivePath(snapshot.noteBeforePath);
+        const event: AgentOperationEvent = {
+          id: makeAgentId("event"),
+          sessionId: snapshot.sessionId,
+          turnId: "",
+          notePath: snapshot.noteBeforePath,
+          operationTypes: ["undo_agent_create"],
+          changedFields: [],
+          createdNotePath: snapshot.createdNotePath,
+          appliedAt: nowIso(),
+        };
+        await recordAgentMessages({
+          vaultRoot: vaultRoot.trim(),
+          messages: [buildOperationEventMessage({
+            id: makeAgentId("message"),
+            sessionId: snapshot.sessionId,
+            notePath: snapshot.noteBeforePath,
+            turnId: null,
+            now: event.appliedAt,
+            event,
+            action: "undone",
+            canUndo: false,
+          })],
+        });
+        setLinkVersion((current) => current + 1);
+        setStatus(`Removed Agent-created note ${snapshot.createdNotePath}.`);
         return;
       }
 
@@ -2146,14 +2201,8 @@ export function App() {
       });
       await clearLastAgentUndoSnapshot({
         vaultRoot: vaultRoot.trim(),
-        notePath: activeNote.path,
+        notePath: restorePath,
       });
-      if (restorePath !== activeNote.path) {
-        await clearLastAgentUndoSnapshot({
-          vaultRoot: vaultRoot.trim(),
-          notePath: restorePath,
-        });
-      }
       const event: AgentOperationEvent = {
         id: makeAgentId("event"),
         sessionId: snapshot.sessionId,

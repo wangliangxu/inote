@@ -87,6 +87,14 @@ pub struct AgentConversation {
     pub last_undo_snapshot: Option<AgentUndoSnapshot>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPreference {
+    pub note_path: String,
+    pub content: String,
+    pub updated_at: String,
+}
+
 pub struct AgentSessionStore {
     conn: Connection,
 }
@@ -187,6 +195,12 @@ impl AgentSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_agent_messages_session_id_created_at
                 ON agent_messages(session_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS agent_preferences (
+                  note_path TEXT PRIMARY KEY,
+                  content TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
                 ",
             )
             .map_err(|error| format!("failed to create agent session schema: {error}"))
@@ -205,6 +219,37 @@ impl AgentSessionStore {
             messages,
             last_undo_snapshot,
         })
+    }
+
+    pub fn load_preference(&self, note_path: &str) -> Result<Option<AgentPreference>, String> {
+        self.conn
+            .query_row(
+                "SELECT note_path, content, updated_at FROM agent_preferences WHERE note_path = ?1",
+                params![note_path],
+                |row| Ok(AgentPreference { note_path: row.get(0)?, content: row.get(1)?, updated_at: row.get(2)? }),
+            )
+            .optional()
+            .map_err(|error| format!("failed to load agent preference: {error}"))
+    }
+
+    pub fn save_preference(&self, preference: &AgentPreference) -> Result<(), String> {
+        if preference.content.trim().is_empty() || preference.content.chars().count() > 2000 {
+            return Err("agent preference must contain 1 to 2000 characters".to_string());
+        }
+        self.conn
+            .execute(
+                "INSERT INTO agent_preferences (note_path, content, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(note_path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at",
+                params![preference.note_path, preference.content.trim(), preference.updated_at],
+            )
+            .map_err(|error| format!("failed to save agent preference: {error}"))?;
+        Ok(())
+    }
+
+    pub fn clear_preference(&self, note_path: &str) -> Result<(), String> {
+        self.conn.execute("DELETE FROM agent_preferences WHERE note_path = ?1", params![note_path])
+            .map_err(|error| format!("failed to clear agent preference: {error}"))?;
+        Ok(())
     }
 
     pub fn load_session(&self, note_path: &str) -> Result<Option<AgentSession>, String> {
@@ -572,13 +617,6 @@ impl AgentSessionStore {
 
         transaction
             .execute(
-                "DELETE FROM agent_undo_snapshots WHERE note_path = ?1",
-                params![snapshot.note_path],
-            )
-            .map_err(|error| format!("failed to replace previous undo snapshot: {error}"))?;
-
-        transaction
-            .execute(
                 "
                 INSERT INTO agent_undo_snapshots (
                   id,
@@ -606,6 +644,22 @@ impl AgentSessionStore {
                 ],
             )
             .map_err(|error| format!("failed to store agent undo snapshot: {error}"))?;
+
+        transaction
+            .execute(
+                "
+                DELETE FROM agent_undo_snapshots
+                WHERE note_path = ?1
+                  AND id NOT IN (
+                    SELECT id FROM agent_undo_snapshots
+                    WHERE note_path = ?1
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 20
+                  )
+                ",
+                params![snapshot.note_path],
+            )
+            .map_err(|error| format!("failed to enforce undo history retention: {error}"))?;
 
         transaction
             .commit()
@@ -926,6 +980,20 @@ mod tests {
     }
 
     #[test]
+    fn explicit_note_preference_round_trips_and_clears() {
+        let store = store();
+        let preference = AgentPreference {
+            note_path: "knowledge/example.md".to_string(),
+            content: "Keep headings concise.".to_string(),
+            updated_at: "2026-08-30T10:00:00Z".to_string(),
+        };
+        store.save_preference(&preference).unwrap();
+        assert_eq!(store.load_preference(&preference.note_path).unwrap(), Some(preference.clone()));
+        store.clear_preference(&preference.note_path).unwrap();
+        assert_eq!(store.load_preference(&preference.note_path).unwrap(), None);
+    }
+
+    #[test]
     fn session_turn_operation_event_and_undo_snapshot_round_trip() {
         let store = store();
         let session_id = "session-1";
@@ -1100,7 +1168,7 @@ mod tests {
     }
 
     #[test]
-    fn only_latest_undo_snapshot_per_note_is_returned_and_clear_removes_it() {
+    fn undo_snapshots_form_a_stack_and_clear_pops_only_the_latest() {
         let store = store();
         let session_id = "session-1";
         let note_path = "knowledge/example.md";
@@ -1138,7 +1206,10 @@ mod tests {
 
         store.clear_last_undo_snapshot(note_path).unwrap();
 
-        assert_eq!(store.load_last_undo_snapshot(note_path).unwrap(), None);
+        assert_eq!(
+            store.load_last_undo_snapshot(note_path).unwrap(),
+            Some(older)
+        );
     }
 
     #[test]

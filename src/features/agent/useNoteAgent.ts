@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  cancelLlmRequest,
+  clearAgentPreference,
   executeLlmChatStream,
   loadAgentConversation,
+  loadAgentPreference,
   recordAgentMessages,
   recordAgentTurn,
+  saveAgentPreference,
   updateAgentMessage,
 } from '../../shared/api'
-import type { AgentConversation, AgentMessage, LlmProviderSettings, Note, ReviewPlan } from '../../shared/types'
+import type { AgentConversation, AgentMessage, AgentPreference, LlmProviderSettings, Note, ReviewPlan } from '../../shared/types'
 import {
   buildAssistantResultMessage,
   buildErrorMessage,
@@ -17,11 +21,13 @@ import {
 } from './agentConversation'
 import { decodeAssistantResultPayload, decodeReviewPlanPayload, encodeReviewPlanPayload } from './agentMessagePayloads'
 import { buildAgentPrompt } from './agentPrompts'
-import { parseAgentResult } from './agentParser'
 import type { AgentResult, QuickAgentAction } from './agentTypes'
 import { buildReviewPlan } from './agentReviewPlan'
 import { buildAgentSessionSummary } from './agentSessionSummary'
 import { makeAgentId, nowIso } from './agentUtils'
+import { runAgentLoop } from './agentRunner'
+import { executeAgentTool } from './agentTools'
+import { noteRevision } from './noteRevision'
 
 const INITIAL_DISPLAY_LIMIT = 20
 const LOAD_MORE_INCREMENT = 20
@@ -81,18 +87,21 @@ export function useNoteAgent({
   const [command, setCommand] = useState('')
   const [activeAction, setActiveAction] = useState<QuickAgentAction | undefined>()
   const [conversation, setConversation] = useState<AgentConversation | null>(null)
+  const [preference, setPreference] = useState<AgentPreference | null>(null)
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [displayLimit, setDisplayLimit] = useState(INITIAL_DISPLAY_LIMIT)
   const [resultsByTurn, setResultsByTurn] = useState<Record<string, AgentResult>>({})
   const [status, setStatus] = useState<AgentStatus>('idle')
   const [error, setError] = useState('')
   const abortRef = useRef<AbortController | null>(null)
+  const requestIdRef = useRef<string | null>(null)
   const allMeaningfulRef = useRef<AgentMessage[]>([])
 
   // Load conversation on mount or when note changes
   useEffect(() => {
     let cancelled = false
     setConversation(null)
+    setPreference(null)
     setMessages([])
     setResultsByTurn({})
     setError('')
@@ -113,6 +122,9 @@ export function useNoteAgent({
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       })
+    loadAgentPreference({ vaultRoot: vault, notePath: note.path })
+      .then((loaded) => { if (!cancelled) setPreference(loaded) })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -163,6 +175,10 @@ export function useNoteAgent({
       abortRef.current.abort()
       abortRef.current = null
     }
+    if (requestIdRef.current) {
+      void cancelLlmRequest(requestIdRef.current).catch(() => undefined)
+      requestIdRef.current = null
+    }
   }, [])
 
   async function runAgent(nextAction = activeAction, nextCommand = command) {
@@ -171,6 +187,24 @@ export function useNoteAgent({
     if (!vault) {
       setStatus('error')
       setError('请先打开一个笔记库再运行 Agent。')
+      return
+    }
+    const preferenceCommand = parsePreferenceCommand(nextCommand)
+    if (preferenceCommand) {
+      const now = nowIso()
+      if (preferenceCommand.action === 'clear') {
+        await clearAgentPreference({ vaultRoot: vault, notePath: note.path })
+        setPreference(null)
+      } else {
+        await saveAgentPreference({ vaultRoot: vault, notePath: note.path, content: preferenceCommand.content, updatedAt: now })
+        setPreference({ notePath: note.path, content: preferenceCommand.content, updatedAt: now })
+      }
+      setCommand('')
+      const sessionId = getCurrentSessionId()
+      appendLocalMessages([buildStatusMessage({
+        id: makeAgentId('message'), sessionId, notePath: note.path, turnId: null, now,
+        text: preferenceCommand.action === 'clear' ? '已清除此笔记的 Agent 偏好。' : '已记住此笔记的明确偏好。', status: 'ready',
+      })])
       return
     }
     if (!settings.apiKey.trim()) {
@@ -188,6 +222,7 @@ export function useNoteAgent({
     abortRef.current = abortController
 
     const turnId = makeAgentId('turn')
+    requestIdRef.current = turnId
     const sessionId = getCurrentSessionId()
     const createdAt = nowIso()
     const userMessage = buildUserCommandMessage({
@@ -208,6 +243,9 @@ export function useNoteAgent({
       text: '正在读取笔记上下文...',
       status: 'streaming',
     })
+    let requestPrompt = ''
+    let requestContext = ''
+    let lastRawResponse = ''
 
     try {
       setStatus('running')
@@ -218,7 +256,10 @@ export function useNoteAgent({
         action: nextAction,
         maxContextLength: settings.maxContextLength,
         sessionSummary: buildAgentSessionSummary(conversation?.session ?? null),
+        preference: preference?.content,
       })
+      requestPrompt = request.prompt
+      requestContext = request.context
 
       // agent_messages.session_id references agent_sessions.id. Persist the
       // running turn first so a newly generated session ID exists before its
@@ -248,28 +289,62 @@ export function useNoteAgent({
 
       if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
 
-      statusMessage = { ...statusMessage, text: '正在请求模型...', updatedAt: nowIso() }
-      upsertLocalMessage(statusMessage)
-      await updateAgentMessage({ vaultRoot: vault, message: statusMessage })
-
-      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
-
-      let fullResponse = ''
-      await executeLlmChatStream({ settings, prompt: request.prompt, context: request.context }, (chunk) => {
-        if (abortController.signal.aborted) return
-        fullResponse += chunk
-        const charInfo = formatCharCount(fullResponse.length)
-        statusMessage = { ...statusMessage, text: `正在接收响应... ${charInfo} 字符`, updatedAt: nowIso() }
-        upsertLocalMessage(statusMessage)
+      let currentResponseLength = 0
+      let inputTokens = 0
+      let outputTokens = 0
+      let finishReason: string | undefined
+      let structuredOutputMode: 'json_schema' | 'json_object' | 'prompt' | undefined
+      const loop = await runAgentLoop({
+        prompt: request.prompt,
+        context: request.context,
+        signal: abortController.signal,
+        callModel: async ({ prompt, context, onChunk }) => {
+          let response = ''
+          currentResponseLength = 0
+          const streamSummary = await executeLlmChatStream({ settings, prompt, context, requestId: turnId, structuredOutput: true }, (chunk) => {
+            if (abortController.signal.aborted) return
+            response += chunk
+            currentResponseLength += chunk.length
+            onChunk?.(chunk)
+          })
+          inputTokens += streamSummary.inputTokens ?? 0
+          outputTokens += streamSummary.outputTokens ?? 0
+          finishReason = streamSummary.finishReason ?? finishReason
+          structuredOutputMode = streamSummary.structuredOutputMode
+          if (streamSummary.finishReason === 'length') {
+            throw new Error('模型因输出长度限制提前停止。请缩小任务范围或提高模型输出上限后重试。')
+          }
+          lastRawResponse = response
+          return response
+        },
+        callTool: (call) => executeAgentTool({ call, vaultRoot: vault, notes }),
+        onStatus: (text) => {
+          statusMessage = { ...statusMessage, text, updatedAt: nowIso() }
+          upsertLocalMessage(statusMessage)
+        },
+        onChunk: () => {
+          const charInfo = formatCharCount(currentResponseLength)
+          statusMessage = { ...statusMessage, text: `正在接收响应... ${charInfo} 字符`, updatedAt: nowIso() }
+          upsertLocalMessage(statusMessage)
+        },
       })
 
-      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
-
-      statusMessage = { ...statusMessage, text: '正在解析响应...', updatedAt: nowIso() }
+      statusMessage = { ...statusMessage, text: '正在构建审阅计划...', updatedAt: nowIso() }
       upsertLocalMessage(statusMessage)
       await updateAgentMessage({ vaultRoot: vault, message: statusMessage })
 
-      const parsed = parseAgentResult(fullResponse)
+      const parsed = {
+        ...loop.result,
+        baseNoteRevision: noteRevision(note),
+        metrics: {
+          ...loop.metrics,
+          inputTokens: inputTokens || undefined,
+          outputTokens: outputTokens || undefined,
+          finishReason,
+          structuredOutputMode,
+        },
+      }
+      const fullResponse = loop.rawResponse
       const plan = buildReviewPlan(note, parsed, turnId)
       const completedAt = nowIso()
       await recordAgentTurn({
@@ -324,10 +399,29 @@ export function useNoteAgent({
       await refreshConversation()
       setStatus('idle')
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if (abortController.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
         statusMessage = { ...statusMessage, text: '请求已取消。', status: 'ready' as const, updatedAt: nowIso() }
         upsertLocalMessage(statusMessage)
         await updateAgentMessage({ vaultRoot: vault, message: statusMessage }).catch(() => undefined)
+        await recordAgentTurn({
+          vaultRoot: vault,
+          noteTitle: note.title,
+          turn: {
+            id: turnId,
+            sessionId,
+            notePath: note.path,
+            command: nextCommand,
+            action: nextAction ?? null,
+            prompt: requestPrompt,
+            contextSummary: requestContext.slice(0, 1200),
+            rawResponse: lastRawResponse,
+            parsedResultJson: null,
+            status: 'cancelled',
+            error: null,
+            createdAt,
+            completedAt: nowIso(),
+          },
+        }).catch(() => undefined)
         setStatus('idle')
         return
       }
@@ -342,12 +436,32 @@ export function useNoteAgent({
       })
       appendLocalMessages([message])
       await recordAgentMessages({ vaultRoot: vault, messages: [message] }).catch(() => undefined)
+      await recordAgentTurn({
+        vaultRoot: vault,
+        noteTitle: note.title,
+        turn: {
+          id: turnId,
+          sessionId,
+          notePath: note.path,
+          command: nextCommand,
+          action: nextAction ?? null,
+          prompt: requestPrompt,
+          contextSummary: requestContext.slice(0, 1200),
+          rawResponse: lastRawResponse,
+          parsedResultJson: null,
+          status: 'failed',
+          error: text,
+          createdAt,
+          completedAt: nowIso(),
+        },
+      }).catch(() => undefined)
       setStatus('error')
       setError(text)
     } finally {
       if (abortRef.current === abortController) {
         abortRef.current = null
       }
+      if (requestIdRef.current === turnId) requestIdRef.current = null
     }
   }
 
@@ -456,4 +570,12 @@ export function useNoteAgent({
     discardReview,
     undoFromMessage,
   }
+}
+
+export function parsePreferenceCommand(command: string): { action: 'save', content: string } | { action: 'clear' } | null {
+  const trimmed = command.trim()
+  if (/^(忘记|清除)(?:此笔记的)?\s*(?:agent\s*)?偏好[。.!]?$/i.test(trimmed)) return { action: 'clear' }
+  const match = trimmed.match(/^(?:记住|remember)\s*[:：]\s*(.+)$/i)
+  if (!match?.[1]?.trim()) return null
+  return { action: 'save', content: match[1].trim().slice(0, 2000) }
 }

@@ -3,6 +3,7 @@ import { Undo } from 'lucide-react'
 import type { AgentMessage } from '../../shared/types'
 import { decodeAssistantResultPayload, decodeOperationEventPayload } from './agentMessagePayloads'
 import { formatRelativeTime } from './agentTimeFormat'
+import type { AgentResult } from './agentTypes'
 
 const FIELD_LABELS: Record<string, string> = {
   title: '标题',
@@ -63,6 +64,33 @@ function DetailTabs({ details }: { details: { prompt: string, context: string, r
   )
 }
 
+function ResultRunSummary({ parsedResultJson }: { parsedResultJson: string }) {
+  try {
+    const result = JSON.parse(parsedResultJson) as AgentResult
+    const references = result.references ?? []
+    const metrics = result.metrics
+    if (references.length === 0 && !metrics) return null
+    const paths = references.map((reference) => reference.path).filter((path, index, all) => all.indexOf(path) === index)
+    return (
+      <div className="agent-run-summary text-xs opacity-60">
+        <p>
+          {paths.length > 0 ? `参考 ${paths.length} 篇笔记` : ''}
+          {paths.length > 0 && metrics ? ' · ' : ''}
+          {metrics ? `${metrics.modelCalls} 次模型调用 · ${metrics.toolCalls} 次只读工具 · ${(metrics.durationMs / 1000).toFixed(1)} 秒${metrics.inputTokens || metrics.outputTokens ? ` · ${metrics.inputTokens ?? 0}/${metrics.outputTokens ?? 0} tokens` : ''}` : ''}
+        </p>
+        {paths.length > 0 ? (
+          <details>
+            <summary>查看引用</summary>
+            <ul>{paths.map((path) => <li key={path}>{path}</li>)}</ul>
+          </details>
+        ) : null}
+      </div>
+    )
+  } catch {
+    return null
+  }
+}
+
 export function AgentMessageBubble({ message, onUndo }: AgentMessageBubbleProps) {
   if (message.kind === 'operation_event') {
     const payload = decodeOperationEventPayload(message.payloadJson)
@@ -90,6 +118,7 @@ export function AgentMessageBubble({ message, onUndo }: AgentMessageBubbleProps)
     return (
       <div className={`agent-message-bubble ${message.role} ${message.kind}`}>
         <p>{message.text}</p>
+        {details ? <ResultRunSummary parsedResultJson={details.parsedResultJson} /> : null}
         {details ? (
           <details>
             <summary>查看详情</summary>

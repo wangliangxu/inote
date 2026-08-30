@@ -3,17 +3,18 @@ import type { AgentSession } from '../../shared/types'
 export function buildAgentSessionSummary(session: AgentSession | null | undefined): string {
   if (!session) return ''
 
-  const lines = [`Recent agent session for ${session.noteTitle}:`]
-  for (const turn of session.turns.slice(-3)) {
+  const lines = [`Recent agent session for ${session.noteTitle}:`, '[Working memory]']
+  for (const turn of session.turns.slice(-4)) {
     const resultMessage = extractMessage(turn.parsedResultJson)
     lines.push(`- ${turn.status}: ${turn.command}${resultMessage ? ` -> ${resultMessage}` : ''}`)
   }
 
-  for (const event of session.operationEvents.slice(-3)) {
+  lines.push('[Execution memory: confirmed applies only]')
+  for (const event of session.operationEvents.slice(-5)) {
     lines.push(`- Applied ${event.operationTypes.join(', ')}: ${event.changedFields.join(', ') || 'note'}`)
   }
 
-  return trimToLength(lines.join('\n'), 800)
+  return trimToLength(lines.join('\n'), 1600)
 }
 
 function extractMessage(parsedResultJson?: string | null): string {

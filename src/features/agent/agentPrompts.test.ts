@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Note } from '../../shared/types'
-import { buildAgentPrompt } from './agentPrompts'
+import { buildAgentPrompt, selectRelevantMarkdown } from './agentPrompts'
 
 const note: Note = {
   path: 'knowledge/ai.md',
@@ -61,6 +61,12 @@ describe('buildAgentPrompt', () => {
 
     expect(request.context).toContain('Recent agent session for Example')
     expect(request.context.indexOf('Recent agent session')).toBeLessThan(request.context.indexOf('Current note:'))
+  })
+
+  it('places explicit user-confirmed preference before model context', () => {
+    const request = buildAgentPrompt({ command: 'continue', note, notes: [note], preference: '保持简洁，并使用中文标题。' })
+    expect(request.context).toContain('[User-confirmed preference for this note]')
+    expect(request.context).toContain('保持简洁，并使用中文标题。')
   })
 
   it('includes note tags in context', () => {
@@ -144,5 +150,21 @@ describe('buildAgentPrompt', () => {
     })
 
     expect(prompt.prompt).toContain('请用中文回复')
+  })
+
+  it('selects relevant Markdown sections instead of only truncating the beginning', () => {
+    const body = `# Intro\n${'a'.repeat(80)}\n\n## Unrelated\n${'b'.repeat(80)}\n\n## Deployment\nproduction checklist ${'c'.repeat(80)}`
+    const selected = selectRelevantMarkdown(body, 'review deployment checklist', 150)
+
+    expect(selected).toContain('## Deployment')
+    expect(selected).toContain('production checklist')
+    expect(selected.length).toBeLessThanOrEqual(150)
+  })
+
+  it('keeps both beginning and recent tail for long notes without headings', () => {
+    const selected = selectRelevantMarkdown(`${'a'.repeat(200)}${'z'.repeat(100)}`, 'anything', 120)
+    expect(selected).toContain('内容已截断')
+    expect(selected).toContain('aaaa')
+    expect(selected).toContain('zzzz')
   })
 })

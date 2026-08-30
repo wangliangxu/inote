@@ -2512,6 +2512,27 @@ button {
   white-space: pre-wrap;
 }
 
+.agent-review-item .agent-review-diff {
+  padding: 0;
+  white-space: pre;
+}
+
+.agent-diff-line {
+  display: block;
+  min-height: 1.35em;
+  padding: 1px 8px;
+}
+
+.agent-diff-line.add {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: color-mix(in srgb, var(--color-success) 80%, var(--color-base-content));
+}
+
+.agent-diff-line.remove {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: color-mix(in srgb, var(--color-error) 78%, var(--color-base-content));
+}
+
 .agent-review-actions {
   display: flex;
   flex-wrap: wrap;

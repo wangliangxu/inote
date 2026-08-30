@@ -60,6 +60,8 @@ describe('buildAgentSessionSummary', () => {
     expect(summary).toContain('Summarize this note')
     expect(summary).toContain('Add tags')
     expect(summary).toContain('Applied update_current_note: tags')
+    expect(summary).toContain('[Working memory]')
+    expect(summary).toContain('[Execution memory: confirmed applies only]')
     expect(summary).not.toContain('raw response should not appear')
     expect(summary.length).toBeLessThan(900)
   })

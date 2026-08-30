@@ -78,6 +78,8 @@ describe('buildReviewPlan', () => {
       selected: false,
       requiresConfirmation: true,
     })
+    expect(plan.groups[0].items[0].diffLines?.some((line) => line.kind === 'add')).toBe(true)
+    expect(plan.groups[1].items[0].diffLines?.some((line) => line.kind === 'remove')).toBe(true)
   })
 
   it('creates create-note and suggestion groups', () => {

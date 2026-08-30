@@ -1,11 +1,11 @@
 use crate::agent_session::{
-    AgentConversation, AgentMessage, AgentOperationEvent, AgentSession, AgentSessionStore,
+    AgentConversation, AgentMessage, AgentOperationEvent, AgentPreference, AgentSession, AgentSessionStore,
     AgentTurn, AgentUndoSnapshot,
 };
 use crate::indexer::{NoteIndex, NoteLink, SearchResult};
 use crate::llm::{
     build_chat_request_preview, send_chat_request, LlmChatResponse, LlmProviderSettings,
-    LlmRequestPreview,
+    LlmRequestPreview, LlmRequestState, LlmStreamSummary,
 };
 use crate::markdown::NoteMetadata;
 use crate::settings::{UserSettings, UserSettingsStore};
@@ -116,6 +116,8 @@ pub struct LlmChatInput {
     pub settings: LlmProviderSettings,
     pub prompt: String,
     pub context: String,
+    pub request_id: Option<String>,
+    pub structured_output: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +188,15 @@ pub struct RecordAgentOperationEventInput {
 pub struct AgentUndoSnapshotInput {
     pub vault_root: String,
     pub note_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPreferenceInput {
+    pub vault_root: String,
+    pub note_path: String,
+    pub content: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 #[tauri::command]
@@ -488,16 +499,34 @@ pub async fn execute_llm_chat(input: LlmChatInput) -> Result<LlmChatResponse, St
 pub async fn execute_llm_chat_stream(
     input: LlmChatInput,
     on_chunk: tauri::ipc::Channel<String>,
-) -> Result<(), String> {
-    crate::llm::send_chat_request_stream(
+    state: State<'_, LlmRequestState>,
+) -> Result<LlmStreamSummary, String> {
+    let request_id = input
+        .request_id
+        .clone()
+        .unwrap_or_else(|| "anonymous".to_string());
+    let cancellation = state.register(&request_id)?;
+    let result = crate::llm::send_chat_request_stream(
         &input.settings,
         &input.prompt,
         &input.context,
         move |content| {
             let _ = on_chunk.send(content);
         },
+        cancellation,
+        input.structured_output.unwrap_or(false),
     )
-    .await
+    .await;
+    state.finish(&request_id);
+    result
+}
+
+#[tauri::command]
+pub fn cancel_llm_request(
+    request_id: String,
+    state: State<'_, LlmRequestState>,
+) -> Result<bool, String> {
+    state.cancel(&request_id)
 }
 
 #[tauri::command]
@@ -574,6 +603,25 @@ pub fn load_last_agent_undo_snapshot(
 pub fn clear_last_agent_undo_snapshot(input: AgentUndoSnapshotInput) -> Result<(), String> {
     AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
         .clear_last_undo_snapshot(&input.note_path)
+}
+
+#[tauri::command]
+pub fn load_agent_preference(input: AgentPreferenceInput) -> Result<Option<AgentPreference>, String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.load_preference(&input.note_path)
+}
+
+#[tauri::command]
+pub fn save_agent_preference(input: AgentPreferenceInput) -> Result<(), String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.save_preference(&AgentPreference {
+        note_path: input.note_path,
+        content: input.content.unwrap_or_default(),
+        updated_at: input.updated_at.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+    })
+}
+
+#[tauri::command]
+pub fn clear_agent_preference(input: AgentPreferenceInput) -> Result<(), String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.clear_preference(&input.note_path)
 }
 
 #[tauri::command]

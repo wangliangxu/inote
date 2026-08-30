@@ -1,5 +1,6 @@
 import type { Note, ReviewGroup, ReviewItem, ReviewPlan } from '../../shared/types'
 import type { AgentOperation, AgentResult } from './agentTypes'
+import { buildLineDiff } from './agentDiff'
 
 export function buildReviewPlan(note: Note, result: AgentResult, turnId: string): ReviewPlan {
   const groups: ReviewGroup[] = []
@@ -44,7 +45,7 @@ export function buildReviewPlan(note: Note, result: AgentResult, turnId: string)
         kind: 'body_append',
         title: 'Append to note',
         summary: 'Markdown will be appended to the current note.',
-        items: [{ label: 'append', previewMarkdown: operation.markdown }],
+        items: [{ label: 'append', diffLines: buildLineDiff('', operation.markdown) }],
         selected: true,
         requiresConfirmation: false,
       })
@@ -58,10 +59,7 @@ export function buildReviewPlan(note: Note, result: AgentResult, turnId: string)
         kind: 'body_replace',
         title: 'Replace note body',
         summary: 'The current note body will be replaced.',
-        items: [
-          { label: 'current body', before: note.body },
-          { label: 'replacement', previewMarkdown: operation.markdown },
-        ],
+        items: [{ label: 'body diff', diffLines: buildLineDiff(note.body, operation.markdown) }],
         selected: false,
         requiresConfirmation: true,
       })
