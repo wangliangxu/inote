@@ -66,7 +66,6 @@ export function SettingsPanel({
   onDefaultCategoryChange,
   onOpenVault,
   onInitializeVault,
-  onCreateToday,
 
   onCreateFolder,
   onRebuildIndex,

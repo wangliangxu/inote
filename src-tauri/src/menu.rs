@@ -1,5 +1,8 @@
 use tauri::{
-    menu::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, IconMenuItem, NativeIcon},
+    menu::{
+        AboutMetadata, IconMenuItem, Menu, MenuEvent, MenuItem, NativeIcon, PredefinedMenuItem,
+        Submenu,
+    },
     AppHandle, Emitter, Runtime,
 };
 

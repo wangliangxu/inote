@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -19,6 +20,30 @@ pub struct NoteMetadata {
     pub summary: Option<String>,
     pub body: String,
     pub word_count: usize,
+    #[serde(default)]
+    pub source_revision: String,
+    #[serde(default)]
+    pub source_size: u64,
+    #[serde(default = "loaded_body")]
+    pub body_loaded: bool,
+    pub excerpt: Option<String>,
+    #[serde(default)]
+    pub frontmatter: BTreeMap<String, serde_json::Value>,
+    pub frontmatter_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_markdown: Option<String>,
+}
+
+fn loaded_body() -> bool {
+    true
+}
+
+pub fn source_revision(source: &str) -> String {
+    ring::digest::digest(&ring::digest::SHA256, source.as_bytes())
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -34,16 +59,41 @@ struct Frontmatter {
     priority: Option<String>,
     project: Option<String>,
     summary: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, serde_json::Value>,
 }
 
 pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
     let raw = fs::read_to_string(path).map_err(|error| format!("failed to read note: {error}"))?;
+    parse_note_impl(root, path, &raw, false)
+}
+
+pub fn parse_note_content(root: &Path, path: &Path, raw: &str) -> Result<NoteMetadata, String> {
+    parse_note_impl(root, path, raw, true)
+}
+
+fn parse_note_impl(
+    root: &Path,
+    path: &Path,
+    raw: &str,
+    validate: bool,
+) -> Result<NoteMetadata, String> {
     let relative_path = relative_path(root, path)?;
-    let (frontmatter, body) = split_frontmatter(&raw);
-    let parsed = frontmatter
-        .as_deref()
-        .and_then(|yaml| serde_yaml::from_str::<Frontmatter>(yaml).ok())
-        .unwrap_or_default();
+    let (frontmatter, body) = split_frontmatter(raw);
+    let mut invalid = false;
+    let parsed = match frontmatter.as_deref() {
+        Some(yaml) => match serde_yaml::from_str::<Frontmatter>(yaml) {
+            Ok(parsed) => parsed,
+            Err(error) if validate => {
+                return Err(format!("invalid frontmatter in {relative_path}: {error}"))
+            }
+            Err(_) => {
+                invalid = true;
+                Frontmatter::default()
+            }
+        },
+        None => Frontmatter::default(),
+    };
 
     let category = category_from_path(&relative_path);
     let title = parsed
@@ -75,6 +125,13 @@ pub fn parse_note(root: &Path, path: &Path) -> Result<NoteMetadata, String> {
         summary: parsed.summary,
         body,
         word_count,
+        source_revision: source_revision(raw),
+        source_size: raw.len() as u64,
+        body_loaded: true,
+        excerpt: None,
+        frontmatter: parsed.extra,
+        frontmatter_source: frontmatter,
+        raw_markdown: invalid.then(|| raw.to_string()),
     })
 }
 
@@ -90,13 +147,10 @@ pub fn build_note_with_dates(
     updated_at: &str,
     body: &str,
 ) -> String {
-    let tag_list = tags
-        .iter()
-        .map(|tag| format!("\"{tag}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let tag_list = serde_json::to_string(tags).expect("string list is serializable");
+    let title = serde_json::to_string(title).expect("string is serializable");
     format!(
-        "---\ntitle: \"{title}\"\ntags: [{tag_list}]\ncreated_at: {created_at}\nupdated_at: {updated_at}\n---\n\n{body}"
+        "---\ntitle: {title}\ntags: {tag_list}\ncreated_at: {created_at}\nupdated_at: {updated_at}\n---\n\n{body}"
     )
 }
 
@@ -132,19 +186,30 @@ pub fn category_from_path(path: &str) -> String {
 }
 
 fn split_frontmatter(raw: &str) -> (Option<String>, String) {
-    if !raw.starts_with("---\n") {
+    let source = raw.strip_prefix('\u{feff}').unwrap_or(raw);
+    let mut lines = source.split_inclusive('\n');
+    let first = lines.next().unwrap_or("");
+    if first.trim_end_matches(['\r', '\n']) != "---" {
         return (None, raw.to_string());
     }
-
-    let rest = &raw[4..];
-    if let Some(end) = rest.find("\n---") {
-        let yaml = rest[..end].to_string();
-        let body_start = end + 4;
-        let body = rest[body_start..].trim_start_matches('\n').to_string();
-        (Some(yaml), body)
-    } else {
-        (None, raw.to_string())
+    let mut offset = first.len();
+    for line in lines {
+        if line.trim_end_matches(['\r', '\n']) == "---" {
+            let yaml = source[first.len()..offset]
+                .trim_end_matches(['\r', '\n'])
+                .to_string();
+            let body = source[offset + line.len()..].to_string();
+            return (
+                Some(yaml),
+                body.strip_prefix("\r\n")
+                    .or_else(|| body.strip_prefix('\n'))
+                    .unwrap_or(&body)
+                    .to_string(),
+            );
+        }
+        offset += line.len();
     }
+    (None, raw.to_string())
 }
 
 fn first_heading(body: &str) -> Option<String> {
@@ -176,14 +241,33 @@ fn count_words(body: &str) -> usize {
 
 fn is_cjk(c: char) -> bool {
     let u = c as u32;
-    (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u) || (0xF900..=0xFAFF).contains(&u)
+    (0x4E00..=0x9FFF).contains(&u)
+        || (0x3400..=0x4DBF).contains(&u)
+        || (0xF900..=0xFAFF).contains(&u)
 }
 
 fn is_punctuation(c: char) -> bool {
     c.is_ascii_punctuation()
         || matches!(
             c,
-            '，' | '。' | '！' | '？' | '；' | '：' | '“' | '”' | '‘' | '’' | '（' | '）' | '【' | '】' | '《' | '》' | '、' | '—' | '…'
+            '，' | '。'
+                | '！'
+                | '？'
+                | '；'
+                | '：'
+                | '“'
+                | '”'
+                | '‘'
+                | '’'
+                | '（'
+                | '）'
+                | '【'
+                | '】'
+                | '《'
+                | '》'
+                | '、'
+                | '—'
+                | '…'
         )
 }
 

@@ -14,12 +14,46 @@ import type {
   NoteLinks,
   SearchResult,
   UserSettings,
+  VaultDelta,
 } from './types'
 
 interface WriteNoteInput {
   vaultRoot: string
   path: string
   content: string
+  expectedRevision?: string
+}
+
+export interface NoteCommitInput extends WriteNoteInput {
+  targetPath?: string
+  create?: boolean
+  sourceCheck?: { path: string; revision: string }
+  contentPath?: string
+  agent?: {
+    event: AgentOperationEvent
+    undoSnapshot: AgentUndoSnapshot
+    messages: AgentMessage[]
+  }
+}
+
+export async function commitNote(input: NoteCommitInput): Promise<Note> {
+  return invoke<Note>('commit_note', { input })
+}
+
+export async function undoAgentChange(vaultRoot: string, notePath: string): Promise<{ restored: Note | null; removedPath: string | null; activePath: string }> {
+  return invoke('undo_agent_change', { vaultRoot, notePath })
+}
+
+export async function loadNoteDrafts(vaultRoot: string): Promise<Note[]> {
+  return invoke<Note[]>('load_note_drafts', { vaultRoot })
+}
+
+export async function saveNoteDrafts(vaultRoot: string, notes: Note[]): Promise<void> {
+  return invoke<void>('save_note_drafts', { vaultRoot, notes })
+}
+
+export async function allowVaultAssets(vaultRoot: string): Promise<void> {
+  return invoke<void>('allow_vault_assets', { vaultRoot })
 }
 
 interface SaveNoteImageInput {
@@ -148,6 +182,10 @@ export async function rebuildSearchIndex(vaultRoot: string, isFull: boolean = fa
 
 export async function scanVaultAndRebuildIndex(vaultRoot: string): Promise<Note[]> {
   return invoke<Note[]>('scan_vault_and_rebuild_index', { vaultRoot })
+}
+
+export async function refreshVaultPaths(vaultRoot: string, paths: string[]): Promise<VaultDelta> {
+  return invoke<VaultDelta>('refresh_vault_paths', { vaultRoot, paths })
 }
 
 export async function loadIndexedVault(vaultRoot: string): Promise<Note[] | null> {
@@ -322,52 +360,4 @@ export async function getSystemFonts(): Promise<string[]> {
   return invoke<string[]>('get_system_fonts')
 }
 
-export function noteToMarkdown(note: Note): string {
-  const tags = note.tags.map((tag) => `"${tag}"`).join(', ')
-  const summary = note.summary ? `summary: "${escapeYamlString(note.summary)}"\n` : ''
-  const due = note.due ? `due: "${escapeYamlString(note.due)}"\n` : ''
-  const status = note.status ? `status: "${escapeYamlString(note.status)}"\n` : ''
-  const priority = note.priority ? `priority: "${escapeYamlString(note.priority)}"\n` : ''
-  const project = note.project ? `project: "${escapeYamlString(note.project)}"\n` : ''
-  return `---\ntitle: "${escapeYamlString(note.title)}"\ntags: [${tags}]\ncreated_at: ${note.createdAt}\nupdated_at: ${note.updatedAt}\n${due}${status}${priority}${project}${summary}---\n\n${note.body}`
-}
-
-function escapeYamlString(value: string): string {
-  return value.replace(/"/g, '\\"')
-}
-
-export function parseMarkdownWithFrontmatter(content: string): { body: string, metadata: Partial<Note> } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
-  if (!match) return { body: content, metadata: {} }
-
-  const yamlRaw = match[1]
-  const body = match[2].replace(/^\n/, '')
-  
-  const metadata: Partial<Note> = {}
-  
-  const titleMatch = yamlRaw.match(/^title:\s*"(.*?)"/m) || yamlRaw.match(/^title:\s*(.*?)$/m)
-  if (titleMatch) metadata.title = titleMatch[1].replace(/\\"/g, '"').trim()
-  
-  const tagsMatch = yamlRaw.match(/^tags:\s*\[(.*?)\]/m)
-  if (tagsMatch) {
-    const tagsStr = tagsMatch[1]
-    metadata.tags = tagsStr.split(',').map(t => t.trim().replace(/^"|"$/g, '').replace(/\\"/g, '"')).filter(Boolean)
-  }
-  
-  const summaryMatch = yamlRaw.match(/^summary:\s*"(.*?)"/m) || yamlRaw.match(/^summary:\s*(.*?)$/m)
-  if (summaryMatch) metadata.summary = summaryMatch[1].replace(/\\"/g, '"').trim()
-
-  const dueMatch = yamlRaw.match(/^due:\s*"(.*?)"/m) || yamlRaw.match(/^due:\s*(.*?)$/m)
-  if (dueMatch) metadata.due = dueMatch[1].replace(/\\"/g, '"').trim()
-
-  const statusMatch = yamlRaw.match(/^status:\s*"(.*?)"/m) || yamlRaw.match(/^status:\s*(.*?)$/m)
-  if (statusMatch) metadata.status = statusMatch[1].replace(/\\"/g, '"').trim()
-
-  const priorityMatch = yamlRaw.match(/^priority:\s*"(.*?)"/m) || yamlRaw.match(/^priority:\s*(.*?)$/m)
-  if (priorityMatch) metadata.priority = priorityMatch[1].replace(/\\"/g, '"').trim()
-
-  const projectMatch = yamlRaw.match(/^project:\s*"(.*?)"/m) || yamlRaw.match(/^project:\s*(.*?)$/m)
-  if (projectMatch) metadata.project = projectMatch[1].replace(/\\"/g, '"').trim()
-  
-  return { body, metadata }
-}
+export { noteToMarkdown, parseMarkdownWithFrontmatter } from './noteMarkdown'

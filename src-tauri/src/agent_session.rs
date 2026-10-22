@@ -61,6 +61,8 @@ pub struct AgentUndoSnapshot {
     pub active_path_after_apply: String,
     pub created_note_path: Option<String>,
     pub created_at: String,
+    #[serde(default)]
+    pub applied_revision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -110,6 +112,25 @@ impl AgentSessionStore {
             .map_err(|error| format!("failed to open agent session store: {error}"))?;
         let store = Self { conn };
         store.create_schema()?;
+        let has_revision = store
+            .conn
+            .prepare("PRAGMA table_info(agent_undo_snapshots)")
+            .map_err(|error| error.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+            .iter()
+            .any(|name| name == "applied_revision");
+        if !has_revision {
+            store
+                .conn
+                .execute(
+                    "ALTER TABLE agent_undo_snapshots ADD COLUMN applied_revision TEXT",
+                    [],
+                )
+                .map_err(|error| error.to_string())?;
+        }
         Ok(store)
     }
 
@@ -226,7 +247,13 @@ impl AgentSessionStore {
             .query_row(
                 "SELECT note_path, content, updated_at FROM agent_preferences WHERE note_path = ?1",
                 params![note_path],
-                |row| Ok(AgentPreference { note_path: row.get(0)?, content: row.get(1)?, updated_at: row.get(2)? }),
+                |row| {
+                    Ok(AgentPreference {
+                        note_path: row.get(0)?,
+                        content: row.get(1)?,
+                        updated_at: row.get(2)?,
+                    })
+                },
             )
             .optional()
             .map_err(|error| format!("failed to load agent preference: {error}"))
@@ -247,7 +274,11 @@ impl AgentSessionStore {
     }
 
     pub fn clear_preference(&self, note_path: &str) -> Result<(), String> {
-        self.conn.execute("DELETE FROM agent_preferences WHERE note_path = ?1", params![note_path])
+        self.conn
+            .execute(
+                "DELETE FROM agent_preferences WHERE note_path = ?1",
+                params![note_path],
+            )
             .map_err(|error| format!("failed to clear agent preference: {error}"))?;
         Ok(())
     }
@@ -565,6 +596,87 @@ impl AgentSessionStore {
         Ok(())
     }
 
+    pub fn commit_note_change(
+        &self,
+        old_path: &str,
+        note: &crate::markdown::NoteMetadata,
+        change: Option<&crate::persistence::AgentCommit>,
+        undo_snapshot_id: Option<&str>,
+    ) -> Result<(), String> {
+        let transaction = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| error.to_string())?;
+        if old_path != note.path {
+            transaction.execute("UPDATE agent_sessions SET note_path = ?2, note_title = ?3 WHERE note_path = ?1", params![old_path, note.path, note.title]).map_err(|error| error.to_string())?;
+            for table in [
+                "agent_turns",
+                "agent_operation_events",
+                "agent_undo_snapshots",
+                "agent_messages",
+                "agent_preferences",
+            ] {
+                transaction
+                    .execute(
+                        &format!("UPDATE {table} SET note_path = ?2 WHERE note_path = ?1"),
+                        params![old_path, note.path],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        if let Some(change) = change {
+            let event = &change.event;
+            let snapshot = &change.undo_snapshot;
+            let valid_turn: bool = transaction
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM agent_turns WHERE id = ?1 AND session_id = ?2)",
+                    params![event.turn_id, event.session_id],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string())?;
+            if !valid_turn
+                || snapshot.event_id != event.id
+                || snapshot.session_id != event.session_id
+                || change
+                    .messages
+                    .iter()
+                    .any(|message| message.session_id != event.session_id)
+            {
+                return Err(
+                    "Agent operation does not belong to a persisted session and turn".to_string(),
+                );
+            }
+            transaction.execute("INSERT INTO agent_operation_events (id, session_id, turn_id, note_path, operation_types_json, changed_fields_json, created_note_path, applied_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event.id, event.session_id, event.turn_id, event.note_path, serde_json::to_string(&event.operation_types).map_err(|error| error.to_string())?, serde_json::to_string(&event.changed_fields).map_err(|error| error.to_string())?, event.created_note_path, event.applied_at]).map_err(|error| error.to_string())?;
+            transaction.execute("INSERT INTO agent_undo_snapshots (id, session_id, event_id, note_path, note_before_markdown, note_before_path, active_path_after_apply, created_note_path, created_at, applied_revision) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![snapshot.id, snapshot.session_id, snapshot.event_id, snapshot.note_path, snapshot.note_before_markdown, snapshot.note_before_path, snapshot.active_path_after_apply, snapshot.created_note_path, snapshot.created_at, note.source_revision]).map_err(|error| error.to_string())?;
+            for message in &change.messages {
+                transaction.execute("INSERT INTO agent_messages (id, session_id, note_path, turn_id, role, kind, text, payload_json, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)", params![message.id, message.session_id, message.note_path, message.turn_id, message.role, message.kind, message.text, message.payload_json, message.status, message.created_at, message.updated_at]).map_err(|error| error.to_string())?;
+            }
+            transaction.execute("UPDATE agent_messages SET status = 'applied', updated_at = ?2 WHERE turn_id = ?1 AND kind = 'review_plan'", params![event.turn_id, event.applied_at]).map_err(|error| error.to_string())?;
+            transaction
+                .execute(
+                    "UPDATE agent_turns SET status = 'applied' WHERE id = ?1",
+                    [&event.turn_id],
+                )
+                .map_err(|error| error.to_string())?;
+            transaction.execute("UPDATE agent_sessions SET note_title = CASE WHEN ?4 THEN note_title ELSE ?2 END, updated_at = ?3 WHERE id = ?1", params![event.session_id, note.title, event.applied_at, event.created_note_path.is_some()]).map_err(|error| error.to_string())?;
+            Self::enforce_message_retention_tx(
+                &transaction,
+                &event.note_path,
+                DEFAULT_MESSAGE_RETENTION,
+            )?;
+            transaction.execute("DELETE FROM agent_undo_snapshots WHERE note_path = ?1 AND id NOT IN (SELECT id FROM agent_undo_snapshots WHERE note_path = ?1 ORDER BY created_at DESC, id DESC LIMIT 20)", [&snapshot.note_path]).map_err(|error| error.to_string())?;
+        }
+        if let Some(id) = undo_snapshot_id {
+            transaction
+                .execute("DELETE FROM agent_undo_snapshots WHERE id = ?1", [id])
+                .map_err(|error| error.to_string())?;
+            transaction.execute("UPDATE agent_undo_snapshots SET applied_revision = ?2 WHERE id = (SELECT id FROM agent_undo_snapshots WHERE note_path = ?1 ORDER BY created_at DESC, id DESC LIMIT 1)", params![note.path, note.source_revision]).map_err(|error| error.to_string())?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit note operation: {error}"))
+    }
+
     pub fn record_operation_event(&self, event: &AgentOperationEvent) -> Result<(), String> {
         let operation_types_json = serde_json::to_string(&event.operation_types)
             .map_err(|error| format!("failed to serialize operation types: {error}"))?;
@@ -683,9 +795,10 @@ impl AgentSessionStore {
                   note_before_path,
                   active_path_after_apply,
                   created_note_path,
-                  created_at
+                  created_at,
+                  applied_revision
                 FROM agent_undo_snapshots
-                WHERE note_path = ?1
+                WHERE note_path = ?1 OR created_note_path = ?1
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 ",
@@ -874,6 +987,7 @@ fn row_to_undo_snapshot(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentUndoSn
         active_path_after_apply: row.get(6)?,
         created_note_path: row.get(7)?,
         created_at: row.get(8)?,
+        applied_revision: row.get(9)?,
     })
 }
 
@@ -967,6 +1081,7 @@ mod tests {
             active_path_after_apply: note_path.to_string(),
             created_note_path: None,
             created_at: created_at.to_string(),
+            applied_revision: None,
         }
     }
 
@@ -988,7 +1103,10 @@ mod tests {
             updated_at: "2026-08-30T10:00:00Z".to_string(),
         };
         store.save_preference(&preference).unwrap();
-        assert_eq!(store.load_preference(&preference.note_path).unwrap(), Some(preference.clone()));
+        assert_eq!(
+            store.load_preference(&preference.note_path).unwrap(),
+            Some(preference.clone())
+        );
         store.clear_preference(&preference.note_path).unwrap();
         assert_eq!(store.load_preference(&preference.note_path).unwrap(), None);
     }
@@ -1040,7 +1158,12 @@ mod tests {
         let session_id = "session-message";
         let note_path = "journal/message.md";
         store
-            .upsert_session(session_id, note_path, "Message Note", "2026-06-26T09:00:00Z")
+            .upsert_session(
+                session_id,
+                note_path,
+                "Message Note",
+                "2026-06-26T09:00:00Z",
+            )
             .unwrap();
 
         let user_message = AgentMessage {
@@ -1090,7 +1213,12 @@ mod tests {
         let session_id = "session-conversation";
         let note_path = "journal/conversation.md";
         store
-            .upsert_session(session_id, note_path, "Conversation", "2026-06-26T10:00:00Z")
+            .upsert_session(
+                session_id,
+                note_path,
+                "Conversation",
+                "2026-06-26T10:00:00Z",
+            )
             .unwrap();
 
         let turn = sample_turn(
@@ -1346,7 +1474,11 @@ mod tests {
 
         store.move_note_target(old_path, new_path, "New").unwrap();
 
-        assert!(store.load_conversation(old_path, 10).unwrap().messages.is_empty());
+        assert!(store
+            .load_conversation(old_path, 10)
+            .unwrap()
+            .messages
+            .is_empty());
         let conversation = store.load_conversation(new_path, 10).unwrap();
         assert_eq!(conversation.session.unwrap().note_title, "New");
         assert_eq!(conversation.messages.len(), 1);

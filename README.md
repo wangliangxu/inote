@@ -34,7 +34,7 @@ iNote is a powerful, local-first Markdown knowledge base application designed to
 ## 📦 Getting Started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (22.22.2+, 24.15.0+, or 26+; supported LTS recommended)
 - [Rust](https://www.rust-lang.org/tools/install)
 - [Tauri CLI dependencies](https://tauri.app/v1/guides/getting-started/prerequisites)
 
@@ -64,6 +64,20 @@ To build the application for your current operating system, run:
 npm run tauri build
 ```
 The compiled binaries will be available in the `src-tauri/target/release` directory.
+
+## Validation and benchmarks
+
+```bash
+npm run check
+npm run test:run
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+npm run benchmark:vault -- 1000 10000
+```
+
+The benchmark uses disposable temporary vaults. See [implementation and migration notes](docs/optimization-2026-10-23.md) for the storage, indexing, security and verification details.
 
 ## 🏗️ Project Structure
 

@@ -1,7 +1,8 @@
 import type { Note } from '../../shared/types'
+import { stableJson } from '../../shared/stableJson'
 
 export function noteRevision(note: Note): string {
-  return fnv1a(JSON.stringify({
+  return fnv1a(stableJson({
     path: note.path,
     title: note.title,
     category: note.category,
@@ -12,6 +13,10 @@ export function noteRevision(note: Note): string {
     priority: note.priority ?? '',
     project: note.project ?? '',
     body: note.body,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    frontmatter: note.frontmatter ?? {},
+    rawMarkdown: note.rawMarkdown,
   }))
 }
 

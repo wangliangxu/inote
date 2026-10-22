@@ -9,7 +9,7 @@ import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/
 import { orderedListStartPlugin } from './orderedListStartPlugin'
 import { captureRichTextSelection, restoreRichTextSelection, type RichTextSelectionSnapshot } from './richTextSelection'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
-import { Eye, TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, PanelRight, Archive, Sparkles, Link2, ListTree, ListOrdered } from 'lucide-react'
+import { TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, Archive, Link2, ListTree, ListOrdered } from 'lucide-react'
 import { $getNearestNodeFromDOMNode, $isElementNode } from 'lexical'
 import { computeScrollTopForChild, extractMarkdownHeadings, findActiveHeadingFromLine as findActiveHeadingIndexFromLine, findRichTextHeadingElementIndex, isScrollableOverflowY, type EditorHeading } from './editorToc'
 import {
@@ -113,7 +113,6 @@ export function Editor({
   onSave,
   onCheckExternal,
   previewMode = false,
-  onTogglePreview,
   onRename,
   onMove,
   onDelete,

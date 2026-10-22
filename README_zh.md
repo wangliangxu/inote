@@ -34,7 +34,7 @@ iNote 是一款功能强大、本地优先的 Markdown 知识库应用程序，�
 ## 📦 快速开始
 
 ### 环境依赖
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/)（22.22.2+、24.15.0+ 或 26+，建议使用受支持的 LTS 版本）
 - [Rust](https://www.rust-lang.org/tools/install)
 - [Tauri CLI 环境依赖](https://tauri.app/v1/guides/getting-started/prerequisites)
 
@@ -64,6 +64,20 @@ iNote 是一款功能强大、本地优先的 Markdown 知识库应用程序，�
 npm run tauri build
 ```
 编译完成的二进制文件将保存在 `src-tauri/target/release` 目录中。
+
+## 验证与性能基准
+
+```bash
+npm run check
+npm run test:run
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --locked --all-targets
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+npm run benchmark:vault -- 1000 10000
+```
+
+基准使用自动清理的临时笔记库，不访问个人笔记。实现说明、迁移行为和验收记录见 [优化实现说明](docs/optimization-2026-10-23.md)。
 
 ## 🏗️ 项目结构
 

@@ -150,8 +150,9 @@ describe('startup shell', () => {
 
     expect(config.app.security.assetProtocol).toMatchObject({
       enable: true,
-      scope: expect.arrayContaining(['$HOME/**']),
+      scope: [],
     })
+    expect(config.app.security.csp).toContain("object-src 'none'")
   })
 
   it('stores pasted images as local assets instead of embedding them in markdown', () => {

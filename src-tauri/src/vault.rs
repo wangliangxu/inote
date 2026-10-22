@@ -1,7 +1,8 @@
 use crate::markdown::{build_note, build_note_with_dates, parse_note, NoteMetadata};
 use chrono::{Datelike, Local, NaiveDate};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,8 @@ impl Vault {
         if !root.is_dir() {
             return Err("vault path must be a directory".to_string());
         }
+        let root =
+            fs::canonicalize(root).map_err(|error| format!("failed to resolve vault: {error}"))?;
         Ok(Self { root })
     }
 
@@ -45,7 +48,7 @@ impl Vault {
             "projects/inote",
             "resources/books",
         ] {
-            fs::create_dir_all(self.root.join(folder))
+            fs::create_dir_all(self.safe_path(folder)?)
                 .map_err(|error| format!("failed to create starter folder {folder}: {error}"))?;
         }
         Ok(())
@@ -58,9 +61,18 @@ impl Vault {
 
     pub fn scan(&self) -> Result<Vec<NoteMetadata>, String> {
         let mut notes = Vec::new();
-        for entry in WalkDir::new(&self.root).into_iter().filter_map(Result::ok) {
+        for entry in WalkDir::new(&self.root).into_iter().filter_entry(|entry| {
+            entry.depth() == 0
+                || !matches!(
+                    entry.file_name().to_str(),
+                    Some(".inote" | ".git" | "node_modules")
+                )
+        }) {
+            let entry = entry.map_err(|error| format!("failed to scan vault: {error}"))?;
             let path = entry.path();
-            if path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("md") {
+            if entry.file_type().is_file()
+                && path.extension().and_then(|value| value.to_str()) == Some("md")
+            {
                 notes.push(parse_note(&self.root, path)?);
             }
         }
@@ -73,26 +85,67 @@ impl Vault {
     }
 
     pub fn read_note(&self, relative_path: &str) -> Result<NoteMetadata, String> {
-        let path = self.safe_path(relative_path)?;
+        let path = self.note_path(relative_path)?;
         parse_note(&self.root, &path)
     }
 
     pub fn read_note_source(&self, relative_path: &str) -> Result<String, String> {
-        let path = self.safe_path(relative_path)?;
+        let path = self.note_path(relative_path)?;
         fs::read_to_string(path).map_err(|error| format!("failed to read note source: {error}"))
     }
 
     pub fn write_note(&self, relative_path: &str, content: &str) -> Result<NoteMetadata, String> {
-        let path = self.safe_path(relative_path)?;
+        let path = self.note_path(relative_path)?;
+        crate::markdown::parse_note_content(&self.root, &path, content)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|error| format!("failed to create note folder: {error}"))?;
         }
 
-        let tmp = path.with_extension("md.tmp");
-        fs::write(&tmp, content).map_err(|error| format!("failed to write temp note: {error}"))?;
-        fs::rename(&tmp, &path).map_err(|error| format!("failed to replace note: {error}"))?;
+        self.persist_content(&path, content, false)?;
         parse_note(&self.root, &path)
+    }
+
+    pub(crate) fn persist_content(
+        &self,
+        path: &Path,
+        content: &str,
+        no_clobber: bool,
+    ) -> Result<(), String> {
+        let parent = path.parent().ok_or("missing note directory")?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create note folder: {error}"))?;
+        let mut temporary = tempfile::Builder::new()
+            .prefix(".inote-tmp-")
+            .tempfile_in(parent)
+            .map_err(|error| format!("failed to create temporary note: {error}"))?;
+        temporary
+            .write_all(content.as_bytes())
+            .and_then(|_| temporary.as_file().sync_all())
+            .map_err(|error| format!("failed to write note: {error}"))?;
+        if no_clobber {
+            temporary.persist_noclobber(path).map_err(|error| {
+                format!("destination already exists or cannot be created: {error}")
+            })?;
+        } else {
+            temporary
+                .persist(path)
+                .map_err(|error| format!("failed to replace note: {error}"))?;
+        }
+        Ok(())
+    }
+
+    pub fn check_revision(&self, path: &str, expected: Option<&str>) -> Result<(), String> {
+        if let Some(expected) = expected {
+            let source = self.read_note_source(path).map_err(|_| "The note was removed on disk. Recover the draft to a new note instead of overwriting.".to_string())?;
+            if crate::markdown::source_revision(&source) != expected {
+                return Err(
+                    "The note changed on disk. Reload or resolve the conflict before saving."
+                        .to_string(),
+                );
+            }
+        }
+        Ok(())
     }
 
     pub fn write_note_image(
@@ -101,13 +154,19 @@ impl Vault {
         extension: &str,
         bytes: &[u8],
     ) -> Result<String, String> {
-        let note_path = self.safe_path(note_path)?;
+        let note_path = self.note_path(note_path)?;
         let note_directory = note_path.parent().unwrap_or(&self.root);
         let note_stem = note_path
             .file_stem()
             .and_then(|value| value.to_str())
             .unwrap_or("note");
-        let asset_directory = note_directory.join("_assets").join(note_stem);
+        let relative_directory = note_directory
+            .strip_prefix(&self.root)
+            .map_err(|error| error.to_string())?
+            .join("_assets")
+            .join(note_stem);
+        let asset_directory =
+            self.safe_path(&relative_directory.to_string_lossy().replace('\\', "/"))?;
         fs::create_dir_all(&asset_directory)
             .map_err(|error| format!("failed to create image asset folder: {error}"))?;
 
@@ -137,10 +196,11 @@ impl Vault {
     pub fn create_inbox_note(&self, title: &str) -> Result<NoteMetadata, String> {
         let date = Local::now().format("%Y-%m-%d").to_string();
         let slug = slugify(title);
-        let relative_path = format!("00-inbox/{date}-{slug}.md");
+        let relative_path = unique_note_path(&self.root, "00-inbox", &format!("{date}-{slug}"));
         let body = format!("# {title}\n\n");
         let content = build_note(title, "00-inbox", &["inbox".to_string()], &date, &body);
-        self.write_note(&relative_path, &content)
+        self.persist_content(&self.note_path(&relative_path)?, &content, true)?;
+        self.read_note(&relative_path)
     }
 
     pub fn create_note(&self, title: &str, category: &str) -> Result<NoteMetadata, String> {
@@ -160,15 +220,20 @@ impl Vault {
         let relative_path = unique_note_path(&self.root, clean_category, &filename);
         let body = format!("# {clean_title}\n\n");
         let content = build_note(clean_title, clean_category, &[], &date, &body);
-        self.write_note(&relative_path, &content)
+        self.persist_content(&self.note_path(&relative_path)?, &content, true)?;
+        self.read_note(&relative_path)
     }
 
     pub fn create_today_note(&self, category: &str) -> Result<NoteMetadata, String> {
         let clean_category = category.trim().trim_matches('/');
-        let effective_category = if clean_category.is_empty() { "journal" } else { clean_category };
+        let effective_category = if clean_category.is_empty() {
+            "journal"
+        } else {
+            clean_category
+        };
 
         let date = Local::now().format("%Y-%m-%d").to_string();
-        
+
         let relative_path = if effective_category == "journal" {
             let year = Local::now().format("%Y").to_string();
             let month = Local::now().format("%m").to_string();
@@ -176,14 +241,20 @@ impl Vault {
         } else {
             format!("{effective_category}/{date}.md")
         };
-        
+
         let path = self.safe_path(&relative_path)?;
         if path.exists() {
             return self.read_note(&relative_path);
         }
 
         let body = format!("# {date}\n\n## Notes\n\n## Review\n\n");
-        let content = build_note(&date, effective_category, &["journal".to_string()], &date, &body);
+        let content = build_note(
+            &date,
+            effective_category,
+            &["journal".to_string()],
+            &date,
+            &body,
+        );
         self.write_note(&relative_path, &content)
     }
 
@@ -229,15 +300,43 @@ impl Vault {
     }
 
     pub fn move_note(&self, from: &str, to: &str) -> Result<NoteMetadata, String> {
-        let from_path = self.safe_path(from)?;
-        let to_path = self.safe_path(to)?;
-        if let Some(parent) = to_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create destination folder: {error}"))?;
+        let source = self.read_note_source(from)?;
+        self.save_note_at(from, to, &source, None, None)
+    }
+
+    pub fn save_note_at(
+        &self,
+        from: &str,
+        to: &str,
+        content: &str,
+        expected: Option<&str>,
+        content_path: Option<&str>,
+    ) -> Result<NoteMetadata, String> {
+        let from_path = self.note_path(from)?;
+        let to_path = self.note_path(to)?;
+        self.check_revision(from, expected)?;
+        if from == to {
+            return self.write_note(from, content);
         }
-        fs::rename(&from_path, &to_path)
-            .map_err(|error| format!("failed to move note: {error}"))?;
-        parse_note(&self.root, &to_path)
+        if to_path.exists() {
+            return Err("destination already exists".to_string());
+        }
+        // Assets remain at their stable location; references follow the moved note.
+        let content =
+            crate::markdown_paths::rebase_markdown(content, content_path.unwrap_or(from), to);
+        self.persist_content(&to_path, &content, true)?;
+        let note = match self.read_note(to) {
+            Ok(note) => note,
+            Err(error) => {
+                let _ = fs::remove_file(&to_path);
+                return Err(error);
+            }
+        };
+        if let Err(error) = fs::remove_file(&from_path) {
+            let _ = fs::remove_file(&to_path);
+            return Err(format!("failed to remove original note: {error}"));
+        }
+        Ok(note)
     }
 
     pub fn archive_note(&self, input: ArchiveNote) -> Result<NoteMetadata, String> {
@@ -278,7 +377,7 @@ impl Vault {
     }
 
     pub fn delete_note(&self, relative_path: &str) -> Result<(), String> {
-        let path = self.safe_path(relative_path)?;
+        let path = self.note_path(relative_path)?;
         if !path.exists() {
             return Err("note does not exist".to_string());
         }
@@ -286,7 +385,7 @@ impl Vault {
             return fs::remove_file(path)
                 .map_err(|error| format!("failed to permanently delete note: {error}"));
         }
-        let trash_root = self.root.join(".trash");
+        let trash_root = self.safe_path(".trash")?;
         fs::create_dir_all(&trash_root)
             .map_err(|error| format!("failed to create trash folder: {error}"))?;
         let filename = path
@@ -302,12 +401,16 @@ impl Vault {
             destination = trash_root.join(format!("{date}-{stem}-{index}.md"));
             index += 1;
         }
-        fs::rename(path, destination)
-            .map_err(|error| format!("failed to move note to trash: {error}"))
+        let relative = destination
+            .strip_prefix(&self.root)
+            .map_err(|error| error.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        self.move_note(relative_path, &relative).map(|_| ())
     }
 
     pub fn empty_trash(&self) -> Result<(), String> {
-        let trash_root = self.root.join(".trash");
+        let trash_root = self.safe_path(".trash")?;
         if trash_root.exists() {
             fs::remove_dir_all(&trash_root)
                 .map_err(|error| format!("failed to empty trash: {error}"))?;
@@ -338,11 +441,42 @@ impl Vault {
         Ok(notes)
     }
 
-    fn safe_path(&self, relative_path: &str) -> Result<PathBuf, String> {
-        if relative_path.contains("..") || Path::new(relative_path).is_absolute() {
+    pub(crate) fn safe_path(&self, relative_path: &str) -> Result<PathBuf, String> {
+        let relative = Path::new(relative_path);
+        if relative_path.is_empty()
+            || relative_path.contains('\\')
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
             return Err("note path must stay inside the vault".to_string());
         }
-        Ok(self.root.join(relative_path))
+        let path = self.root.join(relative);
+        let mut ancestor = path.as_path();
+        while !ancestor.exists() {
+            if fs::symlink_metadata(ancestor).is_ok() {
+                return Err("broken symbolic links are not valid vault paths".to_string());
+            }
+            ancestor = ancestor.parent().ok_or("invalid vault path")?;
+        }
+        let resolved = fs::canonicalize(ancestor)
+            .map_err(|error| format!("failed to resolve note path: {error}"))?;
+        if !resolved.starts_with(&self.root) {
+            return Err("note path must stay inside the vault".to_string());
+        }
+        Ok(path)
+    }
+
+    pub(crate) fn note_path(&self, relative_path: &str) -> Result<PathBuf, String> {
+        let path = self.safe_path(relative_path)?;
+        if path.extension().and_then(|extension| extension.to_str()) != Some("md")
+            || relative_path
+                .split('/')
+                .any(|part| matches!(part, ".inote" | ".git"))
+        {
+            return Err("note path must refer to a Markdown file".to_string());
+        }
+        Ok(path)
     }
 }
 
@@ -372,7 +506,7 @@ fn slugify(title: &str) -> String {
 
 fn filename_for_title(title: &str) -> String {
     let trimmed = title.trim();
-    if trimmed.chars().any(|value| !value.is_ascii()) {
+    if !trimmed.is_ascii() {
         sanitize_filename(trimmed)
     } else {
         slugify(trimmed)
@@ -430,6 +564,37 @@ fn build_review_body(title: &str, notes: &[NoteMetadata]) -> String {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symbolic_links_outside_the_vault_for_notes_and_assets() {
+        let directory = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        fs::write(outside.path().join("private.md"), "private").unwrap();
+        std::os::unix::fs::symlink(outside.path(), vault.root().join("escape")).unwrap();
+        assert!(vault.read_note("escape/private.md").is_err());
+        assert!(vault.write_note("escape/new.md", "bad").is_err());
+        vault.write_note("notes/a.md", "# A").unwrap();
+        std::os::unix::fs::symlink(outside.path(), vault.root().join("notes/_assets")).unwrap();
+        assert!(vault
+            .write_note_image("notes/a.md", "png", b"bytes")
+            .is_err());
+        assert!(!outside.path().join("new.md").exists());
+    }
+
+    #[test]
+    fn invalid_frontmatter_remains_readable_as_raw_markdown() {
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        let source = "---\ntitle: [unfinished\n---\n\nBody";
+        fs::write(vault.root().join("broken.md"), source).unwrap();
+        let note = vault.read_note("broken.md").unwrap();
+        assert_eq!(note.raw_markdown.as_deref(), Some(source));
+        assert_eq!(vault.scan().unwrap().len(), 1);
+        assert!(vault.write_note("broken.md", source).is_err());
+        assert_eq!(vault.read_note_source("broken.md").unwrap(), source);
+    }
 
     #[test]
     fn creates_starter_structure() {

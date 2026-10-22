@@ -1,6 +1,6 @@
 use crate::agent_session::{
-    AgentConversation, AgentMessage, AgentOperationEvent, AgentPreference, AgentSession, AgentSessionStore,
-    AgentTurn, AgentUndoSnapshot,
+    AgentConversation, AgentMessage, AgentOperationEvent, AgentPreference, AgentSession,
+    AgentSessionStore, AgentTurn, AgentUndoSnapshot,
 };
 use crate::indexer::{NoteIndex, NoteLink, SearchResult};
 use crate::llm::{
@@ -8,6 +8,11 @@ use crate::llm::{
     LlmRequestPreview, LlmRequestState, LlmStreamSummary,
 };
 use crate::markdown::NoteMetadata;
+use crate::persistence::{mutation_lock, NoteCommitInput};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[derive(Default)]
+pub struct ExitState(pub AtomicBool);
 use crate::settings::{UserSettings, UserSettingsStore};
 use crate::vault::{ArchiveNote, Vault};
 use crate::watcher::WatcherState;
@@ -16,12 +21,98 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
 
+#[tauri::command(async)]
+pub fn commit_note(input: NoteCommitInput) -> Result<NoteMetadata, String> {
+    crate::persistence::commit_note_change(input)
+}
+
+#[tauri::command(async)]
+pub fn undo_agent_change(
+    vault_root: String,
+    note_path: String,
+) -> Result<crate::persistence::UndoResult, String> {
+    crate::persistence::undo_agent_change(vault_root, note_path)
+}
+
+#[tauri::command(async)]
+pub fn refresh_vault_paths(
+    vault_root: String,
+    paths: Vec<String>,
+) -> Result<crate::indexer::VaultDelta, String> {
+    let _lock = mutation_lock()?;
+    let vault = Vault::new(vault_root)?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
+    let before = index.affected_paths(vault.root(), &paths)?;
+    index.refresh_paths(vault.root(), &paths)?;
+    let after = index.affected_paths(vault.root(), &paths)?;
+    let present = after.iter().collect::<std::collections::HashSet<_>>();
+    let removed_paths = before
+        .into_iter()
+        .filter(|path| !present.contains(path))
+        .collect();
+    Ok(crate::indexer::VaultDelta {
+        notes: index.get_summaries_for_paths(&after)?,
+        removed_paths,
+    })
+}
+
+#[tauri::command(async)]
+pub fn load_note_drafts(vault_root: String) -> Result<Vec<serde_json::Value>, String> {
+    let vault = Vault::new(vault_root)?;
+    let path = vault.safe_path(".inote/drafts.json")?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let drafts: Vec<serde_json::Value> =
+        serde_json::from_str(&std::fs::read_to_string(path).map_err(|error| error.to_string())?)
+            .map_err(|error| format!("failed to load recovered drafts: {error}"))?;
+    for draft in &drafts {
+        vault.note_path(draft["path"].as_str().ok_or("invalid recovered draft")?)?;
+    }
+    Ok(drafts)
+}
+
+#[tauri::command(async)]
+pub fn save_note_drafts(vault_root: String, notes: Vec<serde_json::Value>) -> Result<(), String> {
+    let _lock = mutation_lock()?;
+    let vault = Vault::new(vault_root)?;
+    let mut drafts = Vec::new();
+    for note in notes {
+        vault.note_path(note["path"].as_str().ok_or("invalid draft path")?)?;
+        if note["isDirty"] == true {
+            if !note["body"].is_string() || note["bodyLoaded"] == false {
+                return Err("cannot save an unloaded draft".to_string());
+            }
+            drafts.push(note);
+        }
+    }
+    let source = serde_json::to_string(&drafts).map_err(|error| error.to_string())?;
+    vault.persist_content(&vault.safe_path(".inote/drafts.json")?, &source, false)
+}
+
+#[tauri::command]
+pub fn allow_vault_assets(app: AppHandle, vault_root: String) -> Result<(), String> {
+    let vault = Vault::new(vault_root)?;
+    let scope = app.asset_protocol_scope();
+    scope
+        .allow_directory(vault.root(), true)
+        .map_err(|error| error.to_string())?;
+    for directory in [".inote", ".git"] {
+        scope
+            .forbid_directory(vault.root().join(directory), true)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteNoteInput {
     pub vault_root: String,
     pub path: String,
     pub content: String,
+    #[serde(default)]
+    pub expected_revision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,62 +290,64 @@ pub struct AgentPreferenceInput {
     pub updated_at: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
     Vault::new(vault_root)?.scan()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rebuild_search_index(vault_root: String, is_full: bool) -> Result<(), String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     if is_full {
         let notes = vault.scan()?;
         index.full_rebuild(vault.root(), &notes)?;
     } else {
-        index.lightweight_rebuild(vault.root())?;
+        index.lightweight_rebuild_summaries(vault.root())?;
     }
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_vault_and_rebuild_index(vault_root: String) -> Result<Vec<NoteMetadata>, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
-    let index_path = vault.root().join(".inote/index.sqlite3");
+    let index_path = vault.safe_path(".inote/index.sqlite3")?;
     let exists = index_path.exists();
     let index = NoteIndex::open(&index_path)?;
     if exists {
-        index.lightweight_rebuild(vault.root())
+        index.lightweight_rebuild_summaries(vault.root())?;
     } else {
         let notes = vault.scan()?;
         index.full_rebuild(vault.root(), &notes)?;
-        index.get_all_notes()
     }
+    index.get_note_summaries()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn load_indexed_vault(vault_root: String) -> Result<Option<Vec<NoteMetadata>>, String> {
     let vault = Vault::new(&vault_root)?;
-    let index_path = vault.root().join(".inote/index.sqlite3");
+    let index_path = vault.safe_path(".inote/index.sqlite3")?;
     if !index_path.exists() {
         return Ok(None);
     }
 
     let index = NoteIndex::open(index_path)?;
-    Ok(Some(index.get_all_notes()?))
+    Ok(Some(index.get_note_summaries()?))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search_index(input: SearchIndexInput) -> Result<Vec<SearchResult>, String> {
     let vault = Vault::new(&input.vault_root)?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     index.search(&input.query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_note_links(input: NoteLinksInput) -> Result<NoteLinks, String> {
     let vault = Vault::new(&input.vault_root)?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     Ok(NoteLinks {
         outgoing: index.outgoing_links(&input.path)?,
         backlinks: index.backlinks(&input.path)?,
@@ -282,27 +375,39 @@ pub fn initialize_vault(vault_root: String) -> Result<Vec<NoteMetadata>, String>
     vault.scan()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_note(vault_root: String, path: String) -> Result<NoteMetadata, String> {
     Vault::new(vault_root)?.read_note(&path)
 }
 
 #[tauri::command]
 pub fn check_file_exists(vault_root: String, relative_path: String) -> bool {
-    let full = Path::new(&vault_root).join(&relative_path);
-    full.is_file()
+    Vault::new(vault_root)
+        .and_then(|vault| vault.safe_path(&relative_path))
+        .is_ok_and(|path| path.is_file())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_note(input: WriteNoteInput) -> Result<NoteMetadata, String> {
     let vault = Vault::new(&input.vault_root)?;
-    let note = vault.write_note(&input.path, &input.content)?;
-    update_index_for_note(&vault, &note)?;
-    Ok(note)
+    let create = !vault.note_path(&input.path)?.exists();
+    crate::persistence::commit_note_change(NoteCommitInput {
+        vault_root: input.vault_root,
+        path: input.path,
+        content: input.content,
+        expected_revision: input.expected_revision,
+        create,
+        target_path: None,
+        agent: None,
+        source_check: None,
+        content_path: None,
+        undo_snapshot_id: None,
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_note_image(input: SaveNoteImageInput) -> Result<String, String> {
+    let _lock = mutation_lock()?;
     let (metadata, encoded) = input
         .data_url
         .split_once(',')
@@ -323,8 +428,9 @@ pub fn save_note_image(input: SaveNoteImageInput) -> Result<String, String> {
     Vault::new(&input.vault_root)?.write_note_image(&input.note_path, extension, &bytes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn migrate_note_images(input: MigrateNoteImagesInput) -> Result<Option<NoteMetadata>, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&input.vault_root)?;
     let source = vault.read_note_source(&input.note_path)?;
     let mut output = String::with_capacity(source.len());
@@ -397,40 +503,45 @@ fn image_extension_for_mime_type(mime_type: &str) -> Result<&'static str, String
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_inbox_note(vault_root: String, title: String) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
     let note = vault.create_inbox_note(&title)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_today_note(vault_root: String, category: String) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
     let note = vault.create_today_note(&category)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_weekly_review(input: CreateReviewInput) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&input.vault_root)?;
     let note = vault.create_weekly_review(&input.date)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_monthly_review(input: CreateReviewInput) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&input.vault_root)?;
     let note = vault.create_monthly_review(&input.date)?;
     update_index_for_note(&vault, &note)?;
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_note(input: CreateNoteInput) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&input.vault_root)?;
     let note = vault.create_note(&input.title, &input.category)?;
     update_index_for_note(&vault, &note)?;
@@ -442,18 +553,27 @@ pub fn create_folder(input: CreateFolderInput) -> Result<(), String> {
     Vault::new(input.vault_root)?.create_folder(&input.path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_note(input: MoveNoteInput) -> Result<NoteMetadata, String> {
     let vault = Vault::new(&input.vault_root)?;
-    let note = vault.move_note(&input.from, &input.to)?;
-    update_index_for_move(&vault, &input.from, &note)?;
-    let agent_store = AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?;
-    agent_store.move_note_target(&input.from, &note.path, &note.title)?;
-    Ok(note)
+    let source = vault.read_note_source(&input.from)?;
+    crate::persistence::commit_note_change(NoteCommitInput {
+        vault_root: input.vault_root,
+        path: input.from,
+        target_path: Some(input.to),
+        expected_revision: Some(crate::markdown::source_revision(&source)),
+        content: source,
+        create: false,
+        agent: None,
+        source_check: None,
+        content_path: None,
+        undo_snapshot_id: None,
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&input.vault_root)?;
     let old_path = input.from.clone();
     let note = vault.archive_note(ArchiveNote {
@@ -468,19 +588,21 @@ pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
     vault.delete_note(&path)?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     index.delete_note(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn empty_trash(vault_root: String) -> Result<(), String> {
+    let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
     vault.empty_trash()?;
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     let notes = vault.scan()?;
     index.full_rebuild(vault.root(), &notes)
 }
@@ -606,22 +728,30 @@ pub fn clear_last_agent_undo_snapshot(input: AgentUndoSnapshotInput) -> Result<(
 }
 
 #[tauri::command]
-pub fn load_agent_preference(input: AgentPreferenceInput) -> Result<Option<AgentPreference>, String> {
-    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.load_preference(&input.note_path)
+pub fn load_agent_preference(
+    input: AgentPreferenceInput,
+) -> Result<Option<AgentPreference>, String> {
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .load_preference(&input.note_path)
 }
 
 #[tauri::command]
 pub fn save_agent_preference(input: AgentPreferenceInput) -> Result<(), String> {
-    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.save_preference(&AgentPreference {
-        note_path: input.note_path,
-        content: input.content.unwrap_or_default(),
-        updated_at: input.updated_at.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-    })
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.save_preference(
+        &AgentPreference {
+            note_path: input.note_path,
+            content: input.content.unwrap_or_default(),
+            updated_at: input
+                .updated_at
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        },
+    )
 }
 
 #[tauri::command]
 pub fn clear_agent_preference(input: AgentPreferenceInput) -> Result<(), String> {
-    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?.clear_preference(&input.note_path)
+    AgentSessionStore::open(agent_session_db_path(&input.vault_root)?)?
+        .clear_preference(&input.note_path)
 }
 
 #[tauri::command]
@@ -636,6 +766,7 @@ pub fn save_user_settings(app: AppHandle, settings: UserSettings) -> Result<(), 
 
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
+    app.state::<ExitState>().0.store(true, Ordering::SeqCst);
     app.exit(0);
 }
 
@@ -688,12 +819,14 @@ pub(crate) fn agent_session_db_path(vault_root: &str) -> Result<PathBuf, String>
         return Err("vault path does not exist".to_string());
     }
     let vault = Vault::new(vault_root)?;
-    Ok(vault.root().join(".inote").join("agent.sqlite3"))
+    vault.safe_path(".inote/agent.sqlite3")
 }
 
 fn update_index_for_note(vault: &Vault, note: &NoteMetadata) -> Result<(), String> {
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
-    let notes = vault.scan()?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
+    let mut notes = index.get_note_summaries()?;
+    notes.retain(|existing| existing.path != note.path);
+    notes.push(note.clone());
     index.update_note(vault.root(), note, &notes)
 }
 
@@ -702,9 +835,11 @@ fn update_index_for_move(
     old_path: &str,
     new_note: &NoteMetadata,
 ) -> Result<(), String> {
-    let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3"))?;
+    let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
     index.delete_note(old_path)?;
-    let notes = vault.scan()?;
+    let mut notes = index.get_note_summaries()?;
+    notes.retain(|existing| existing.path != new_note.path && existing.path != old_path);
+    notes.push(new_note.clone());
     index.update_note(vault.root(), new_note, &notes)
 }
 
@@ -713,6 +848,82 @@ mod tests {
     use super::*;
     use crate::agent_session::{AgentOperationEvent, AgentTurn, AgentUndoSnapshot};
     use tempfile::tempdir;
+
+    #[test]
+    fn watcher_refresh_returns_only_changed_metadata_and_removed_paths() {
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        for name in ["a", "b", "unchanged"] {
+            write_note(WriteNoteInput {
+                vault_root: vault.root().to_string_lossy().to_string(),
+                path: format!("{name}.md"),
+                content: format!("# {name}"),
+                expected_revision: None,
+            })
+            .unwrap();
+        }
+        std::fs::remove_file(vault.root().join("a.md")).unwrap();
+        vault.write_note("b.md", "# B updated").unwrap();
+        let delta = refresh_vault_paths(
+            vault.root().to_string_lossy().to_string(),
+            vec![
+                vault.root().join("a.md").to_string_lossy().to_string(),
+                vault.root().join("b.md").to_string_lossy().to_string(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(delta.removed_paths, ["a.md"]);
+        assert_eq!(delta.notes.len(), 1);
+        assert_eq!(delta.notes[0].path, "b.md");
+        assert!(!delta.notes[0].body_loaded);
+        assert!(delta.notes[0].body.is_empty());
+    }
+
+    #[test]
+    fn drafts_round_trip_and_invalid_paths_are_rejected() {
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        let root = vault.root().to_string_lossy().to_string();
+        let note = vault.write_note("a.md", "# Before").unwrap();
+        let mut draft = serde_json::to_value(note).unwrap();
+        draft["isDirty"] = true.into();
+        draft["body"] = "unsaved text".into();
+        save_note_drafts(root.clone(), vec![draft.clone()]).unwrap();
+        assert_eq!(load_note_drafts(root.clone()).unwrap(), [draft.clone()]);
+        draft["path"] = "../outside.md".into();
+        assert!(save_note_drafts(root.clone(), vec![draft]).is_err());
+        assert_eq!(load_note_drafts(root.clone()).unwrap().len(), 1);
+        save_note_drafts(root.clone(), Vec::new()).unwrap();
+        assert!(load_note_drafts(root).unwrap().is_empty());
+    }
+
+    #[test]
+    fn legacy_write_command_requires_a_version_for_existing_files() {
+        let directory = tempdir().unwrap();
+        let root = directory.path().to_string_lossy().to_string();
+        let before = write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "a.md".into(),
+            content: "# Before".into(),
+            expected_revision: None,
+        })
+        .unwrap();
+        assert!(write_note(WriteNoteInput {
+            vault_root: root.clone(),
+            path: "a.md".into(),
+            content: "# Unchecked".into(),
+            expected_revision: None
+        })
+        .is_err());
+        let saved = write_note(WriteNoteInput {
+            vault_root: root,
+            path: "a.md".into(),
+            content: "# Saved".into(),
+            expected_revision: Some(before.source_revision),
+        })
+        .unwrap();
+        assert_eq!(saved.body, "# Saved");
+    }
 
     fn sample_agent_turn(
         id: &str,
@@ -773,6 +984,7 @@ mod tests {
             active_path_after_apply: note_path.to_string(),
             created_note_path: None,
             created_at: created_at.to_string(),
+            applied_revision: None,
         }
     }
 
@@ -782,6 +994,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/test.md".to_string(),
             content: "# Test Note\n\nBody".to_string(),
@@ -803,6 +1016,7 @@ mod tests {
         assert!(load_indexed_vault(root.clone()).unwrap().is_none());
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/cached.md".to_string(),
             content: "# Cached Note\n\nBody".to_string(),
@@ -821,6 +1035,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/test.md".to_string(),
             content: "# Test Note".to_string(),
@@ -862,6 +1077,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "ideas/legacy.md".to_string(),
             content: "# Legacy\n\n![image](data:image/png;base64,cG5nLWJ5dGVz)\n".to_string(),
@@ -897,6 +1113,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "00-inbox/a.md".to_string(),
             content: "# A\n\nBody".to_string(),
@@ -923,6 +1140,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "00-inbox/raw.md".to_string(),
             content: "---\ntitle: Raw\ncategory: 00-inbox\ntags: [inbox]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# Raw\n\nBody.".to_string(),
@@ -983,6 +1201,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "journal/2026/06/2026-06-10.md".to_string(),
             content: "---\ntitle: Journal Day\ncategory: journal\ntags: [journal]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\n# Journal Day\n\nBody.".to_string(),
@@ -1012,6 +1231,7 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/search.md".to_string(),
             content: "---\ntitle: Searchable\ntags: [phase2]\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nIndexed body text".to_string(),
@@ -1035,12 +1255,14 @@ mod tests {
         let root = dir.path().to_string_lossy().to_string();
 
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/source.md".to_string(),
             content: "---\ntitle: Source\ncreated_at: 2026-06-10\nupdated_at: 2026-06-10\n---\n\nSee [[Target]].".to_string(),
         })
         .unwrap();
         write_note(WriteNoteInput {
+            expected_revision: None,
             vault_root: root.clone(),
             path: "knowledge/target.md".to_string(),
             content:
@@ -1068,7 +1290,13 @@ mod tests {
 
         let path = agent_session_db_path(&root).unwrap();
 
-        assert_eq!(path, dir.path().join(".inote").join("agent.sqlite3"));
+        assert_eq!(
+            path,
+            std::fs::canonicalize(dir.path())
+                .unwrap()
+                .join(".inote")
+                .join("agent.sqlite3")
+        );
     }
 
     #[test]

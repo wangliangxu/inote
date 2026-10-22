@@ -17,7 +17,16 @@ export interface Note {
   body: string
   wordCount: number
   isDirty?: boolean
+  sourceRevision?: string
+  sourceSize?: number
+  rawMarkdown?: string
+  bodyLoaded?: boolean
+  excerpt?: string
+  frontmatter?: Record<string, unknown>
+  frontmatterSource?: string
 }
+
+export interface VaultDelta { notes: Note[]; removedPaths: string[] }
 
 export interface CategoryGroup {
   name: string
@@ -155,6 +164,7 @@ export interface AgentUndoSnapshot {
   activePathAfterApply: string
   createdNotePath?: string | null
   createdAt: string
+  appliedRevision?: string | null
 }
 
 export type AgentMessageRole = 'user' | 'assistant' | 'system'

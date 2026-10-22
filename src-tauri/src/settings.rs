@@ -164,6 +164,10 @@ impl UserSettingsStore {
     }
 
     pub fn save(&self, settings: &UserSettings) -> Result<(), String> {
+        let transaction = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|error| format!("failed to start settings transaction: {error}"))?;
         self.set_value("vault_root", &settings.vault_root)?;
         self.set_value("active_path", &settings.active_path)?;
         self.set_value("active_view", &settings.active_view)?;
@@ -172,26 +176,66 @@ impl UserSettingsStore {
             .map_err(|error| format!("failed to serialize selected_search_categories: {error}"))?;
         self.set_value("selected_search_categories", &cats_json)?;
         self.set_value("default_category", &settings.default_category)?;
-        self.set_value("left_sidebar_visible", if settings.left_sidebar_visible { "true" } else { "false" })?;
-        self.set_value("right_sidebar_visible", if settings.right_sidebar_visible { "true" } else { "false" })?;
-        self.set_value("left_sidebar_width", &settings.left_sidebar_width.to_string())?;
-        self.set_value("right_sidebar_width", &settings.right_sidebar_width.to_string())?;
-        if let Some(w) = settings.window_width { self.set_value("window_width", &w.to_string())?; }
-        if let Some(h) = settings.window_height { self.set_value("window_height", &h.to_string())?; }
-        if let Some(x) = settings.window_x { self.set_value("window_x", &x.to_string())?; }
-        if let Some(y) = settings.window_y { self.set_value("window_y", &y.to_string())?; }
-        if let Some(m) = settings.window_maximized { self.set_value("window_maximized", if m { "true" } else { "false" })?; }
-        if let Some(val) = settings.show_today_note_button { self.set_value("show_today_note_button", if val { "true" } else { "false" })?; }
-        if let Some(val) = settings.lock_update_time { self.set_value("lock_update_time", if val { "true" } else { "false" })?; }
-        if let Some(val) = settings.auto_save_on_exit { self.set_value("auto_save_on_exit", if val { "true" } else { "false" })?; }
-        if let Some(val) = &settings.font_family { self.set_value("font_family", val)?; }
-        
+        self.set_value(
+            "left_sidebar_visible",
+            if settings.left_sidebar_visible {
+                "true"
+            } else {
+                "false"
+            },
+        )?;
+        self.set_value(
+            "right_sidebar_visible",
+            if settings.right_sidebar_visible {
+                "true"
+            } else {
+                "false"
+            },
+        )?;
+        self.set_value(
+            "left_sidebar_width",
+            &settings.left_sidebar_width.to_string(),
+        )?;
+        self.set_value(
+            "right_sidebar_width",
+            &settings.right_sidebar_width.to_string(),
+        )?;
+        if let Some(w) = settings.window_width {
+            self.set_value("window_width", &w.to_string())?;
+        }
+        if let Some(h) = settings.window_height {
+            self.set_value("window_height", &h.to_string())?;
+        }
+        if let Some(x) = settings.window_x {
+            self.set_value("window_x", &x.to_string())?;
+        }
+        if let Some(y) = settings.window_y {
+            self.set_value("window_y", &y.to_string())?;
+        }
+        if let Some(m) = settings.window_maximized {
+            self.set_value("window_maximized", if m { "true" } else { "false" })?;
+        }
+        if let Some(val) = settings.show_today_note_button {
+            self.set_value("show_today_note_button", if val { "true" } else { "false" })?;
+        }
+        if let Some(val) = settings.lock_update_time {
+            self.set_value("lock_update_time", if val { "true" } else { "false" })?;
+        }
+        if let Some(val) = settings.auto_save_on_exit {
+            self.set_value("auto_save_on_exit", if val { "true" } else { "false" })?;
+        }
+        if let Some(val) = &settings.font_family {
+            self.set_value("font_family", val)?;
+        }
+
         let mut llm_settings = settings.llm_settings.clone();
         llm_settings.api_key = self.encrypt_api_key(&llm_settings.api_key)?;
         let llm_settings = serde_json::to_string(&llm_settings)
             .map_err(|error| format!("failed to serialize LLM settings: {error}"))?;
         self.set_value("llm_settings", &llm_settings)?;
-        Ok(())
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit settings: {error}"))
     }
 
     fn create_schema(&self) -> Result<(), String> {
@@ -353,6 +397,24 @@ fn aead_key(key: &[u8; 32]) -> Result<LessSafeKey, String> {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn settings_failure_rolls_back_the_entire_workspace_update() {
+        let directory = tempdir().unwrap();
+        let store = UserSettingsStore::open(directory.path().join("settings.sqlite3")).unwrap();
+        let before = UserSettings {
+            vault_root: "before".into(),
+            ..UserSettings::default()
+        };
+        store.save(&before).unwrap();
+        store.conn.execute_batch("CREATE TRIGGER reject_settings BEFORE INSERT ON user_settings WHEN new.key = 'llm_settings' BEGIN SELECT RAISE(ABORT, 'test failure'); END").unwrap();
+        let after = UserSettings {
+            vault_root: "after".into(),
+            ..before.clone()
+        };
+        assert!(store.save(&after).is_err());
+        assert_eq!(store.load().unwrap(), before);
+    }
 
     #[test]
     fn empty_store_returns_default_user_settings() {

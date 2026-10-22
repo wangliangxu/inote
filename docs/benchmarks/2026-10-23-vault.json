@@ -1,0 +1,29 @@
+{
+  "arch": "aarch64",
+  "os": "macos",
+  "profile": "debug",
+  "results": [
+    {
+      "fullPayloadBytes": 2452561,
+      "fullRebuildMs": 283.720833,
+      "metadataLoadMs": 8.359,
+      "notes": 1000,
+      "searchMedianMs": 14.578667,
+      "searchP95Ms": 15.153,
+      "singleSaveMs": 37.972291999999996,
+      "summaryPayloadBytes": 655781,
+      "unchangedRefreshMs": 16.485334
+    },
+    {
+      "fullPayloadBytes": 24565561,
+      "fullRebuildMs": 2623.67725,
+      "metadataLoadMs": 92.19924999999999,
+      "notes": 10000,
+      "searchMedianMs": 108.55625,
+      "searchP95Ms": 117.287291,
+      "singleSaveMs": 59.847291,
+      "summaryPayloadBytes": 6577781,
+      "unchangedRefreshMs": 169.583833
+    }
+  ]
+}

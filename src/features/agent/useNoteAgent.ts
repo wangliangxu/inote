@@ -96,6 +96,11 @@ export function useNoteAgent({
   const abortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef<string | null>(null)
   const allMeaningfulRef = useRef<AgentMessage[]>([])
+  const scopeKey = `${vaultRoot}\u0000${note.path}`
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+  const generationRef = useRef(0)
+  const inScope = () => scopeRef.current === scopeKey
 
   // Load conversation on mount or when note changes
   useEffect(() => {
@@ -107,6 +112,8 @@ export function useNoteAgent({
     setError('')
     setCommand('')
     setActiveAction(undefined)
+    setStatus('idle')
+    allMeaningfulRef.current = []
     const vault = vaultRoot.trim()
     if (!vault) return
     setDisplayLimit(INITIAL_DISPLAY_LIMIT)
@@ -127,14 +134,21 @@ export function useNoteAgent({
       .catch(() => undefined)
     return () => {
       cancelled = true
+      generationRef.current += 1
+      abortRef.current?.abort()
+      abortRef.current = null
+      if (requestIdRef.current) void cancelLlmRequest(requestIdRef.current).catch(() => undefined)
+      requestIdRef.current = null
     }
   }, [vaultRoot, note.path])
 
   function appendLocalMessages(nextMessages: AgentMessage[]) {
+    if (!inScope()) return
     setMessages((current) => [...current, ...nextMessages])
   }
 
   function upsertLocalMessage(nextMessage: AgentMessage) {
+    if (!inScope()) return
     setMessages((current) => {
       const index = current.findIndex((message) => message.id === nextMessage.id)
       if (index === -1) return [...current, nextMessage]
@@ -150,6 +164,7 @@ export function useNoteAgent({
     const vault = vaultRoot.trim()
     if (!vault) return
     const loaded = await loadAgentConversation({ vaultRoot: vault, notePath: note.path, messageLimit: MAX_LOAD_LIMIT })
+    if (!inScope()) return
     setConversation(loaded)
     const meaningful = getRecentMeaningfulMessages(loaded.messages, MAX_LOAD_LIMIT)
     allMeaningfulRef.current = meaningful
@@ -182,6 +197,7 @@ export function useNoteAgent({
   }, [])
 
   async function runAgent(nextAction = activeAction, nextCommand = command) {
+    if (note.bodyLoaded === false) { setError('请等待笔记正文加载完成。'); return }
     setError('')
     const vault = vaultRoot.trim()
     if (!vault) {
@@ -220,6 +236,8 @@ export function useNoteAgent({
     cancelAgent()
     const abortController = new AbortController()
     abortRef.current = abortController
+    const generation = ++generationRef.current
+    const belongsToRequest = () => inScope() && generationRef.current === generation
 
     const turnId = makeAgentId('turn')
     requestIdRef.current = turnId
@@ -284,6 +302,8 @@ export function useNoteAgent({
         },
       })
 
+      if (!belongsToRequest() || abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+
       appendLocalMessages([userMessage, statusMessage])
       await recordAgentMessages({ vaultRoot: vault, messages: [userMessage, statusMessage] })
 
@@ -319,15 +339,19 @@ export function useNoteAgent({
         },
         callTool: (call) => executeAgentTool({ call, vaultRoot: vault, notes }),
         onStatus: (text) => {
+          if (!belongsToRequest() || abortController.signal.aborted) return
           statusMessage = { ...statusMessage, text, updatedAt: nowIso() }
           upsertLocalMessage(statusMessage)
         },
         onChunk: () => {
+          if (!belongsToRequest() || abortController.signal.aborted) return
           const charInfo = formatCharCount(currentResponseLength)
           statusMessage = { ...statusMessage, text: `正在接收响应... ${charInfo} 字符`, updatedAt: nowIso() }
           upsertLocalMessage(statusMessage)
         },
       })
+
+      if (!belongsToRequest() || abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
 
       statusMessage = { ...statusMessage, text: '正在构建审阅计划...', updatedAt: nowIso() }
       upsertLocalMessage(statusMessage)
@@ -366,6 +390,7 @@ export function useNoteAgent({
           completedAt,
         },
       })
+      if (!belongsToRequest() || abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError')
 
       const readyStatus = { ...statusMessage, text: '审阅计划已就绪。', status: 'ready' as const, updatedAt: completedAt }
       const resultMessage = buildAssistantResultMessage({
@@ -397,11 +422,11 @@ export function useNoteAgent({
       setResultsByTurn((current) => ({ ...current, [turnId]: parsed }))
       await recordAgentMessages({ vaultRoot: vault, messages: [readyStatus, resultMessage, reviewMessage] })
       await refreshConversation()
-      setStatus('idle')
+      if (belongsToRequest()) setStatus('idle')
     } catch (err) {
       if (abortController.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
         statusMessage = { ...statusMessage, text: '请求已取消。', status: 'ready' as const, updatedAt: nowIso() }
-        upsertLocalMessage(statusMessage)
+        if (belongsToRequest()) upsertLocalMessage(statusMessage)
         await updateAgentMessage({ vaultRoot: vault, message: statusMessage }).catch(() => undefined)
         await recordAgentTurn({
           vaultRoot: vault,
@@ -422,7 +447,7 @@ export function useNoteAgent({
             completedAt: nowIso(),
           },
         }).catch(() => undefined)
-        setStatus('idle')
+        if (belongsToRequest()) setStatus('idle')
         return
       }
       const text = err instanceof Error ? err.message : String(err)
@@ -434,7 +459,7 @@ export function useNoteAgent({
         now: nowIso(),
         text,
       })
-      appendLocalMessages([message])
+      if (belongsToRequest()) appendLocalMessages([message])
       await recordAgentMessages({ vaultRoot: vault, messages: [message] }).catch(() => undefined)
       await recordAgentTurn({
         vaultRoot: vault,
@@ -455,8 +480,7 @@ export function useNoteAgent({
           completedAt: nowIso(),
         },
       }).catch(() => undefined)
-      setStatus('error')
-      setError(text)
+      if (belongsToRequest()) { setStatus('error'); setError(text) }
     } finally {
       if (abortRef.current === abortController) {
         abortRef.current = null
@@ -467,19 +491,13 @@ export function useNoteAgent({
 
   function toggleReviewGroup(messageId: string, groupId: string) {
     const vault = vaultRoot.trim()
-    let nextMessage: AgentMessage | null = null
-    setMessages((current) => current.map((message) => {
-      if (message.id !== messageId || message.kind !== 'review_plan') return message
-      const plan = decodeReviewPlanPayload(message.payloadJson)
-      if (!plan) return message
-      const nextPlan = {
-        ...plan,
-        groups: plan.groups.map((group) => group.id === groupId ? { ...group, selected: !group.selected } : group),
-      }
-      nextMessage = { ...message, payloadJson: encodeReviewPlanPayload(nextPlan), updatedAt: nowIso() }
-      return nextMessage
-    }))
-    if (vault && nextMessage) {
+    const message = messages.find((item) => item.id === messageId && item.kind === 'review_plan')
+    const plan = message && decodeReviewPlanPayload(message.payloadJson)
+    if (!message || !plan) return
+    const nextPlan = { ...plan, groups: plan.groups.map((group) => group.id === groupId ? { ...group, selected: !group.selected } : group) }
+    const nextMessage = { ...message, payloadJson: encodeReviewPlanPayload(nextPlan), updatedAt: nowIso() }
+    upsertLocalMessage(nextMessage)
+    if (vault) {
       updateAgentMessage({ vaultRoot: vault, message: nextMessage }).catch((err) => {
         setError(err instanceof Error ? err.message : String(err))
       })

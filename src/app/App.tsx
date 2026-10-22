@@ -16,34 +16,22 @@ import { confirm as tauriConfirm } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
-  Bot,
   CalendarDays,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
-  FileMinus2,
   FilePlus2,
   Flag,
-  FolderPlus,
-  FolderTree,
-  Eye,
   LayoutGrid,
-  Link2,
   List,
   ListTodo,
-  MoveRight,
   PanelLeft,
   PanelRight,
   Pencil,
-  RefreshCw,
-  Save,
   Search,
   Settings,
-  Sparkles,
   Tags,
   Trash,
-  Trash2,
   XCircle,
 } from "lucide-react";
 const CalendarView = lazy(() =>
@@ -51,7 +39,16 @@ const CalendarView = lazy(() =>
     default: m.CalendarView,
   })),
 );
-import { Editor } from "../features/editor/Editor";
+const Editor = lazy(() => import("../features/editor/Editor").then((module) => ({ default: module.Editor })));
+import { FeatureBoundary } from "./FeatureBoundary";
+import { buildAgentNoteCommit } from "../features/agent/agentNoteCommit";
+import { useNoteWorkspace } from "./useNoteWorkspace";
+import { useVaultSync } from "./useVaultSync";
+import { prepareWorkspaceClose } from "./closeWorkspace";
+import { useWorkspaceSettings } from "./useWorkspaceSettings";
+import { useIndexedSearch } from "./useIndexedSearch";
+import { acknowledgeSave, mergeDiskNotes, createSerialQueue } from "../shared/notePersistence";
+import { newNotePath, noteSavePath } from "../shared/notePaths";
 const NoteAgent = lazy(() =>
   import("../features/agent/NoteAgent").then((m) => ({ default: m.NoteAgent })),
 );
@@ -80,9 +77,6 @@ import {
   type ColorTheme,
 } from "../shared/theme";
 import type {
-  AgentOperationEvent,
-  AgentMessage,
-  AgentUndoSnapshot,
   LlmProviderSettings,
   Note,
   NoteLinks,
@@ -91,18 +85,8 @@ import type {
   WorkspaceView,
 } from "../shared/types";
 import { hasNoteChanges } from "../shared/noteChanges";
-import {
-  applyCurrentNoteOperations,
-  filterOperationsByIndexes,
-  getCreateNoteDraft,
-} from "../features/agent/applyAgentOperations";
-import { buildOperationEventMessage } from "../features/agent/agentConversation";
 import type { AgentResult } from "../features/agent/agentTypes";
-import { makeAgentId, nowIso } from "../features/agent/agentUtils";
-import { noteRevision } from "../features/agent/noteRevision";
 import {
-  archiveNote,
-  clearLastAgentUndoSnapshot,
   createFolder,
   createNote,
   createTodayNote,
@@ -113,24 +97,20 @@ import {
   loadLastAgentUndoSnapshot,
   migrateNoteImages,
   initializeVault,
-  moveNote,
   noteToMarkdown,
   readNote,
   rebuildSearchIndex,
   loadUserSettings,
-  saveUserSettings,
   saveWindowState,
-  scanVault,
   scanVaultAndRebuildIndex,
-  searchIndex,
-  writeNote,
-  startVaultWatcher,
-  stopVaultWatcher,
   parseMarkdownWithFrontmatter,
-  recordAgentOperationEvent,
-  recordAgentMessages,
   getSetting,
   quitApp,
+  commitNote,
+  undoAgentChange,
+  loadNoteDrafts,
+  saveNoteDrafts,
+  type NoteCommitInput,
 } from "../shared/api";
 import {
   filterNotesByCategory,
@@ -176,14 +156,11 @@ const excerptCache = new WeakMap<Note | SearchResult, string>();
 function noteExcerpt(note: Note | SearchResult): string {
   const cached = excerptCache.get(note);
   if (cached !== undefined) return cached;
-  const excerpt =
-    "excerpt" in note
-      ? note.excerpt
-      : (note.summary ??
-        note.body
+  const excerpt = note.excerpt ?? note.summary ??
+        ("body" in note ? note.body
           .replace(/^# .*\n?/, "")
           .trim()
-          .slice(0, 96));
+          .slice(0, 96) : "");
   const result = stripMarkdownForSummary(excerpt);
   excerptCache.set(note, result);
   return result;
@@ -335,19 +312,6 @@ function localDateString(date = new Date()): string {
   return localDate.toISOString().slice(0, 10);
 }
 
-function getFilenameForTitle(title: string) {
-  const trimmed = title.trim();
-  if (/[^\x00-\x7F]/.test(trimmed)) {
-    let sanitized = trimmed.replace(/[\\/:\*\?"<>\|]/g, "-");
-    sanitized = sanitized.replace(/^[ -]+|[ -]+$/g, "");
-    return sanitized || "note";
-  } else {
-    let slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    slug = slug.replace(/^-|-$/g, "");
-    return slug || "note";
-  }
-}
-
 export function App() {
   const { t } = useTranslation();
   const initialWorkspace = useMemo(
@@ -357,10 +321,8 @@ export function App() {
       ),
     [],
   );
-  const [notes, setNotes] = useState<Note[]>(initialWorkspace.notes);
   const [activeView, setActiveView] = useState<WorkspaceView>("today");
   const [activeCategory, setActiveCategory] = useState("journal");
-  const [activeTag, setActiveTag] = useState("");
   const [activePath, setActivePath] = useState(initialWorkspace.activePath);
   const [query, setQuery] = useState("");
   const [selectedSearchCategories, setSelectedSearchCategories] = useState<
@@ -380,16 +342,19 @@ export function App() {
   const [autoSaveOnExit, setAutoSaveOnExit] = useState(false);
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot);
+  const [vaultPathInput, setVaultPathInput] = useState(initialWorkspace.vaultRoot);
+  const { notes, setNotes, notesRef, vaultRef } = useNoteWorkspace(initialWorkspace.notes, vaultRoot);
   const [status, setStatus] = useState(initialWorkspace.status);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-  const [indexedResults, setIndexedResults] = useState<SearchResult[]>([]);
   const [noteLinks, setNoteLinks] = useState<NoteLinks>({
     outgoing: [],
     backlinks: [],
   });
   const [linkVersion, setLinkVersion] = useState(0);
+  const [indexedResults, setIndexedResults] = useIndexedSearch(vaultRoot, query, linkVersion, setStatus);
   const [llmSettings, setLlmSettings] =
     useState<LlmProviderSettings>(defaultLlmSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -432,8 +397,9 @@ export function App() {
   }, []);
   const categoryFilterRef = useRef<HTMLDetailsElement>(null);
   const categoryFilterPointerInsideRef = useRef(false);
-  const skipNextSettingsSaveRef = useRef(true);
-  const skipNextVaultChangeUntilRef = useRef(0);
+  const loadSequenceRef = useRef(0);
+  const loadedRootRef = useRef(initialWorkspace.vaultRoot);
+  const saveQueueRef = useRef(createSerialQueue());
   const closeRequestInProgressRef = useRef(false);
   const activeNoteRef = useRef<Note | undefined>(undefined);
   const autoSaveOnExitRef = useRef(false);
@@ -609,8 +575,19 @@ export function App() {
     ) => {
       const trimmedRoot = root.trim();
       if (!trimmedRoot) return;
+      const sequence = ++loadSequenceRef.current;
+      const sameVault = loadedRootRef.current === trimmedRoot;
+      if (!sameVault && loadedRootRef.current) {
+        const previousRoot = loadedRootRef.current;
+        await saveQueueRef.current(() => saveNoteDrafts(previousRoot, notesRef.current.filter((note) => note.isDirty)));
+      }
       const loadedNotes = await scanVaultAndRebuildIndex(trimmedRoot);
-      setNotes(loadedNotes);
+      const drafts = !sameVault ? await loadNoteDrafts(trimmedRoot) : [];
+      if (sequence !== loadSequenceRef.current) return;
+      loadedRootRef.current = trimmedRoot;
+      setVaultRoot(trimmedRoot);
+      setVaultPathInput(trimmedRoot);
+      setNotes((current) => mergeDiskNotes(sameVault ? current : drafts.map((note) => ({ ...note, isDirty: true })), loadedNotes));
       setLinkVersion((current) => current + 1);
       setActivePath((current) => {
         if (
@@ -635,6 +612,7 @@ export function App() {
     ) => {
       const trimmedRoot = root.trim();
       if (!trimmedRoot) return;
+      const sequence = ++loadSequenceRef.current;
 
       let cachedNotes: Note[] | null = null;
       try {
@@ -643,12 +621,20 @@ export function App() {
         console.warn("Failed to restore cached vault index", error);
       }
 
+      if (sequence !== loadSequenceRef.current) return;
+
       if (cachedNotes === null) {
         await loadVaultFromDisk(trimmedRoot, reason, preferredPath);
+        const recovered = await loadNoteDrafts(trimmedRoot);
+        if (loadedRootRef.current === trimmedRoot) setNotes((current) => mergeDiskNotes(mergeDiskNotes(current, recovered.map((note) => ({ ...note, isDirty: true }))), current));
         return;
       }
 
-      setNotes(cachedNotes);
+      const recovered = await loadNoteDrafts(trimmedRoot);
+      if (sequence !== loadSequenceRef.current) return;
+      loadedRootRef.current = trimmedRoot;
+      setVaultPathInput(trimmedRoot);
+      setNotes(mergeDiskNotes(recovered.map((note) => ({ ...note, isDirty: true })), cachedNotes));
       setActivePath((current) => {
         if (
           preferredPath &&
@@ -692,7 +678,7 @@ export function App() {
           setStartupMigrationPath("");
         }
 
-        await loadVaultFromDisk(trimmedRoot, reason, preferredPath);
+        if (sequence === loadSequenceRef.current) await loadVaultFromDisk(trimmedRoot, reason, preferredPath);
       })().catch((error) => {
         setSaveError(true);
         setStatus(error instanceof Error ? error.message : String(error));
@@ -855,74 +841,11 @@ export function App() {
     };
   }, [loadDemoWorkspace, restoreVaultOnStartup]);
 
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    if (skipNextSettingsSaveRef.current) {
-      skipNextSettingsSaveRef.current = false;
-      return;
-    }
-    const timeout = window.setTimeout(() => {
-      const activePathForStorage = vaultRoot.trim() ? activePath : "";
-      saveUserSettings({
-        vaultRoot: vaultRoot.trim(),
-        activePath: activePathForStorage,
-        activeView,
-        activeCategory,
-        selectedSearchCategories,
-        llmSettings,
-        defaultCategory,
-        leftSidebarVisible,
-        rightSidebarVisible,
-        leftSidebarWidth,
-        rightSidebarWidth,
-        showTodayNoteButton,
-        lockUpdateTime,
-        autoSaveOnExit,
-        fontFamily,
-      })
-        .then(() => {
-          window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim());
-          window.localStorage.setItem(
-            LAST_ACTIVE_PATH_KEY,
-            activePathForStorage,
-          );
-          window.localStorage.removeItem(LLM_SETTINGS_KEY);
-        })
-        .catch((e) => {
-          setStatus("Settings Save Error: " + String(e));
-          window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim());
-          window.localStorage.setItem(
-            LAST_ACTIVE_PATH_KEY,
-            activePathForStorage,
-          );
-          window.localStorage.setItem(
-            LLM_SETTINGS_KEY,
-            JSON.stringify({ ...llmSettings, apiKey: "" }),
-          );
-        });
-    }, 300);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [
-    activePath,
-    activeView,
-    activeCategory,
-    selectedSearchCategories,
-    llmSettings,
-    settingsLoaded,
-    vaultRoot,
-    defaultCategory,
-    leftSidebarVisible,
-    rightSidebarVisible,
-    leftSidebarWidth,
-    rightSidebarWidth,
-    showTodayNoteButton,
-    lockUpdateTime,
-    autoSaveOnExit,
-    fontFamily,
-  ]);
+  useWorkspaceSettings(settingsLoaded, {
+    vaultRoot: vaultRoot.trim(), activePath: vaultRoot.trim() ? activePath : "", activeView, activeCategory,
+    selectedSearchCategories, llmSettings, defaultCategory, leftSidebarVisible, rightSidebarVisible,
+    leftSidebarWidth, rightSidebarWidth, showTodayNoteButton, lockUpdateTime, autoSaveOnExit, fontFamily,
+  }, setStatus);
 
   useEffect(() => {
     if (
@@ -974,34 +897,7 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!vaultRoot.trim()) return;
-    let disposed = false;
-
-    startVaultWatcher(vaultRoot.trim()).catch(() => {
-      // Browser-only dev mode has no Tauri backend; keep the UI usable.
-    });
-
-    const unlistenPromise = listen("vault://changed", () => {
-      if (!disposed) {
-        if (Date.now() < skipNextVaultChangeUntilRef.current) {
-          skipNextVaultChangeUntilRef.current = 0;
-          return;
-        }
-        refreshVaultFromDisk(
-          "Markdown files changed on disk. Vault refreshed.",
-        );
-      }
-    });
-
-    return () => {
-      disposed = true;
-      unlistenPromise.then((dispose) => dispose()).catch(() => { });
-      stopVaultWatcher().catch(() => {
-        // Ignore when not running inside Tauri.
-      });
-    };
-  }, [refreshVaultFromDisk, vaultRoot]);
+  useVaultSync({ vaultRoot, notes, notesRef, activeNote, settingsLoaded, loadedRoot: loadedRootRef, vaultRef, queue: saveQueueRef, setNotes, setActivePath, setLinkVersion, setStatus });
 
   useEffect(() => {
     if (!categoryFilterOpen) return;
@@ -1135,18 +1031,27 @@ export function App() {
       if (closeRequestInProgressRef.current) return;
 
       closeRequestInProgressRef.current = true;
+      setIsClosing(true);
+      setIsSaving(true);
       try {
-        if (autoSaveOnExitRef.current && activeNoteRef.current?.isDirty) {
-          const saved = await saveActiveNoteRef.current();
-          if (!saved) {
-            closeRequestInProgressRef.current = false;
-            return;
-          }
+        const root = vaultRef.current.trim();
+        if (root) {
+          const close = await prepareWorkspaceClose({
+            autoSave: autoSaveOnExitRef.current,
+            getNotes: () => notesRef.current,
+            save: (note) => saveNoteWithPathSyncRef.current(note),
+            persistDrafts: (drafts) => saveQueueRef.current(() => saveNoteDrafts(root, drafts)),
+            confirmClose: () => safeConfirm("有未保存的笔记。草稿已保留，是否退出？"),
+          });
+          if (!close) { closeRequestInProgressRef.current = false; return; }
         }
         await quitApp();
       } catch (error) {
         closeRequestInProgressRef.current = false;
         setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setIsClosing(false);
+        setIsSaving(false);
       }
     });
 
@@ -1250,7 +1155,6 @@ export function App() {
   ]);
 
   const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
 
   // Reset rendered count when the view/category/search switch
@@ -1411,27 +1315,6 @@ export function App() {
     [existingNotePaths, noteHistory],
   );
 
-  useEffect(() => {
-    if (!vaultRoot.trim() || !query.trim()) {
-      setIndexedResults([]);
-      return;
-    }
-    let cancelled = false;
-    searchIndex({ vaultRoot: vaultRoot.trim(), query })
-      .then((results) => {
-        if (!cancelled) setIndexedResults(results);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setIndexedResults([]);
-          setStatus(error instanceof Error ? error.message : String(error));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query, vaultRoot]);
-
   const activeNotePath = activeNote?.path;
 
   useEffect(() => {
@@ -1454,11 +1337,18 @@ export function App() {
 
   function updateActiveNote(fullContent: string) {
     if (!activeNote) return;
-
-    const { body, metadata } = parseMarkdownWithFrontmatter(fullContent);
+    let parsed: ReturnType<typeof parseMarkdownWithFrontmatter>;
+    try { parsed = parseMarkdownWithFrontmatter(fullContent); }
+    catch (error) {
+      setNotes((current) => current.map((note) => note.path === activeNote.path ? { ...note, rawMarkdown: fullContent, isDirty: true } : note));
+      setSaveError(true);
+      setStatus(String(error));
+      return;
+    }
+    const { body, metadata } = parsed;
     const hasChanges = hasNoteChanges(activeNote, { body, metadata });
 
-    if (!hasChanges) {
+    if (!hasChanges && activeNote.rawMarkdown === undefined) {
       return;
     }
 
@@ -1469,7 +1359,8 @@ export function App() {
             ...note,
             ...metadata,
             body,
-            updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+            rawMarkdown: undefined,
+            updatedAt: metadata.updatedAt && metadata.updatedAt !== note.updatedAt ? metadata.updatedAt : (lockUpdateTime ? note.updatedAt : localDateString()),
             wordCount: body.trim() ? body.trim().split(/\s+/).length : 0,
             isDirty: true,
           }
@@ -1568,19 +1459,13 @@ export function App() {
     }
 
     try {
+      const loaded = noteToUpdate.bodyLoaded === false ? await readNote(vaultRoot.trim(), path) : noteToUpdate;
       const updatedNote = {
-        ...noteToUpdate,
+        ...loaded,
         status,
         updatedAt: lockUpdateTime ? noteToUpdate.updatedAt : localDateString(),
       };
-      const saved = await writeNote({
-        vaultRoot: vaultRoot.trim(),
-        path: updatedNote.path,
-        content: noteToMarkdown(updatedNote),
-      });
-      setNotes((current) =>
-        current.map((note) => (note.path === path ? saved : note)),
-      );
+      const saved = await saveNoteWithPathSync(updatedNote, undefined, noteToUpdate);
       setStatus(`Updated status for ${saved.title}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1641,13 +1526,13 @@ export function App() {
   }
 
   async function openVault() {
-    if (!vaultRoot.trim()) {
+    if (!vaultPathInput.trim()) {
       setStatus("Enter a vault path first.");
       return;
     }
     try {
-      await refreshVaultFromDisk("Vault opened. Markdown notes indexed.");
-      window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim());
+      await loadVaultFromDisk(vaultPathInput.trim(), "Vault opened. Markdown notes indexed.");
+      window.localStorage.setItem(LAST_VAULT_KEY, vaultPathInput.trim());
       setSaveError(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1655,16 +1540,14 @@ export function App() {
   }
 
   async function initVault() {
-    if (!vaultRoot.trim()) {
+    if (!vaultPathInput.trim()) {
       setStatus("Enter a vault path first.");
       return;
     }
     try {
-      const loadedNotes = await initializeVault(vaultRoot.trim());
-      await rebuildSearchIndex(vaultRoot.trim(), true);
-      setNotes(loadedNotes.length ? loadedNotes : []);
-      setActivePath(loadedNotes[0]?.path ?? "");
-      window.localStorage.setItem(LAST_VAULT_KEY, vaultRoot.trim());
+      await initializeVault(vaultPathInput.trim());
+      await loadVaultFromDisk(vaultPathInput.trim(), "Starter vault folders are ready.");
+      window.localStorage.setItem(LAST_VAULT_KEY, vaultPathInput.trim());
       setSaveError(false);
       setStatus("Starter vault folders are ready.");
     } catch (error) {
@@ -1674,6 +1557,8 @@ export function App() {
   }
 
   async function saveActiveNote(): Promise<boolean> {
+    if (closeRequestInProgressRef.current) return false;
+    const savingRoot = vaultRef.current.trim();
     if (!activeNote || !vaultRoot.trim()) {
       setStatus("Open a real vault before saving.");
       return false;
@@ -1701,16 +1586,11 @@ export function App() {
         }
       }
 
-      const saved = await saveNoteWithPathSync(noteToSave);
+      const saved = await saveNoteWithPathSync(noteToSave, undefined, activeNote);
+      if (savingRoot !== vaultRef.current.trim()) return true;
       setLinkVersion((current) => current + 1);
-      setNotes((current) =>
-        current.map((note) => (note.path === activeNote.path ? saved : note)),
-      );
-
-      if (activeNote.path !== saved.path) {
-        setActivePath(saved.path);
-      }
-      setActiveCategory(saved.category);
+      if (activeNote.path !== saved.path) setActivePath((path) => path === activeNote.path ? saved.path : path);
+      if (activeNoteRef.current?.path === activeNote.path) setActiveCategory(saved.category);
       setSaveError(false);
       setStatus(`Saved ${saved.path}.`);
       return true;
@@ -1723,154 +1603,43 @@ export function App() {
     }
   }
 
-  async function saveNoteWithPathSync(note: Note): Promise<Note> {
-    let noteToSave = { ...note };
-
-    const expectedFilename = `${getFilenameForTitle(noteToSave.title)}.md`;
-    let expectedPath = noteToSave.category
-      ? `${noteToSave.category}/${expectedFilename}`
-      : expectedFilename;
-    expectedPath = expectedPath.replace(/\/+/g, "/");
-
-    let finalPath = noteToSave.path;
-
-    if (noteToSave.path !== expectedPath) {
-      const currentFilename = noteToSave.path.split('/').pop() || '';
-      const currentName = currentFilename.replace(/\.md$/, '');
-      const isUntitledLike = /^(?:untitled|无标题|note)(?:-\d+)?$/i.test(currentName) || /^\d{14}-\d{4}$/.test(currentName);
-
-      if (!isUntitledLike) {
-        expectedPath = noteToSave.category
-          ? `${noteToSave.category}/${currentFilename}`
-          : currentFilename;
-        expectedPath = expectedPath.replace(/\/+/g, "/");
-      }
-    }
-
-    if (noteToSave.path !== expectedPath) {
-      try {
-        const moved = await moveNote({
-          vaultRoot: vaultRoot.trim(),
-          from: noteToSave.path,
-          to: expectedPath,
-        });
-        finalPath = moved.path;
-      } catch {
-        const newExpectedPath = expectedPath.replace(
-          /\.md$/,
-          `-${Math.floor(1000 + Math.random() * 9000)}.md`,
-        );
-        const moved = await moveNote({
-          vaultRoot: vaultRoot.trim(),
-          from: noteToSave.path,
-          to: newExpectedPath,
-        });
-        finalPath = moved.path;
-      }
-      noteToSave.path = finalPath;
-    }
-
-    return writeNote({
-      vaultRoot: vaultRoot.trim(),
-      path: finalPath,
-      content: noteToMarkdown(noteToSave),
+  async function saveNoteWithPathSync(note: Note, agent?: NoteCommitInput['agent'], submitted = note): Promise<Note> {
+    const root = vaultRef.current.trim();
+    return saveQueueRef.current(async () => {
+      if (root !== vaultRef.current.trim()) throw new Error("The active vault changed before saving.");
+      const saved = await commitNote({
+        vaultRoot: root,
+        path: note.path,
+        targetPath: noteSavePath(note),
+        expectedRevision: note.sourceRevision,
+        content: noteToMarkdown(note),
+        agent,
+      });
+      if (root === vaultRef.current.trim()) setNotes((current) => acknowledgeSave(current, submitted, saved));
+      return saved;
     });
   }
+  const saveNoteWithPathSyncRef = useRef(saveNoteWithPathSync);
+  saveNoteWithPathSyncRef.current = saveNoteWithPathSync;
 
-  async function applyAgentCurrentNote(
-    result: AgentResult,
-    selectedOperationIndexes: number[],
-    turnId: string,
-    sessionId: string,
-  ) {
-    if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before applying agent changes.");
-      return;
-    }
-    if (result.baseNoteRevision && result.baseNoteRevision !== noteRevision(activeNote)) {
-      throw new Error("The note changed after this review was generated. Run the Agent again to avoid overwriting newer edits.");
-    }
-
-    const selectedOperations = selectedOperationIndexes.length
-      ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
-      : result.operations;
+  async function applyAgentCurrentNote(result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) {
+    const before = activeNoteRef.current;
+    if (!before || !vaultRef.current.trim()) throw new Error("Open a real vault before applying agent changes.");
+    const root = vaultRef.current;
+    const change = buildAgentNoteCommit(before, result, selectedOperationIndexes, turnId, sessionId, lockUpdateTime ? before.updatedAt : localDateString(), false);
     setIsSaving(true);
     try {
-      let workingNote = activeNote;
-      const operationMessages: AgentMessage[] = [];
-      const allChangedFields: string[] = [];
-      for (const operation of selectedOperations) {
-        const before = workingNote;
-        const applied = applyCurrentNoteOperations(
-          before,
-          [operation],
-          lockUpdateTime ? before.updatedAt : localDateString(),
-        );
-        const saved = await saveNoteWithPathSync(applied.note);
-        const now = nowIso();
-        const event: AgentOperationEvent = {
-          id: makeAgentId("event"),
-          sessionId,
-          turnId,
-          notePath: saved.path,
-          operationTypes: [operation.type],
-          changedFields: applied.changedFields,
-          createdNotePath: null,
-          appliedAt: now,
-        };
-        const snapshot: AgentUndoSnapshot = {
-          id: makeAgentId("undo"),
-          sessionId,
-          eventId: event.id,
-          notePath: saved.path,
-          noteBeforeMarkdown: noteToMarkdown(before),
-          noteBeforePath: before.path,
-          activePathAfterApply: saved.path,
-          createdNotePath: null,
-          createdAt: now,
-        };
-        await recordAgentOperationEvent({
-          vaultRoot: vaultRoot.trim(),
-          noteTitle: saved.title,
-          event,
-          undoSnapshot: snapshot,
-        });
-        operationMessages.push(
-          buildOperationEventMessage({
-            id: makeAgentId("message"),
-            sessionId,
-            notePath: saved.path,
-            turnId,
-            now,
-            event,
-            action: "applied",
-            canUndo: true,
-          }),
-        );
-        allChangedFields.push(...applied.changedFields);
-        workingNote = saved;
-      }
-      await recordAgentMessages({
-        vaultRoot: vaultRoot.trim(),
-        messages: operationMessages,
-      });
-      setLinkVersion((current) => current + 1);
-      setNotes((current) =>
-        current.map((note) => (note.path === activeNote.path ? workingNote : note)),
-      );
-      if (activeNote.path !== workingNote.path) {
-        setActivePath(workingNote.path);
-      }
-      setActiveCategory(workingNote.category);
+      const saved = await saveNoteWithPathSync(change.note, change.agent, before);
+      if (vaultRef.current !== root) return;
+      setLinkVersion((version) => version + 1);
+      setActivePath((path) => path === before.path ? saved.path : path);
       setSaveError(false);
-      setStatus(`Agent updated ${Array.from(new Set(allChangedFields)).join(", ") || "note"}.`);
+      setStatus(`Agent updated ${change.changedFields.join(", ") || "note"}.`);
     } catch (error) {
       setSaveError(true);
-      setStatus(error instanceof Error ? error.message : String(error));
+      setStatus(String(error));
       throw error;
-    } finally {
-      setIsSaving(false);
-    }
+    } finally { setIsSaving(false); }
   }
 
   async function checkExternalActiveNote() {
@@ -1880,16 +1649,7 @@ export function App() {
     }
     try {
       const diskNote = await readNote(vaultRoot.trim(), activeNote.path);
-      const changedOnDisk =
-        diskNote.body !== activeNote.body ||
-        diskNote.title !== activeNote.title ||
-        diskNote.updatedAt !== activeNote.updatedAt ||
-        diskNote.tags.join("\n") !== activeNote.tags.join("\n") ||
-        diskNote.category !== activeNote.category ||
-        diskNote.summary !== activeNote.summary ||
-        diskNote.due !== activeNote.due ||
-        diskNote.status !== activeNote.status ||
-        diskNote.project !== activeNote.project;
+      const changedOnDisk = diskNote.sourceRevision !== activeNote.sourceRevision;
 
       if (!changedOnDisk) {
         setStatus("Disk version matches the editor.");
@@ -1903,7 +1663,7 @@ export function App() {
         setStatus("Kept editor version. Save to overwrite disk when ready.");
         setNotes((current) =>
           current.map((note) =>
-            note.path === diskNote.path ? { ...note, isDirty: true } : note,
+            note.path === diskNote.path ? { ...note, isDirty: true, sourceRevision: diskNote.sourceRevision } : note,
           ),
         );
         return;
@@ -1939,20 +1699,14 @@ export function App() {
     );
     if (!category) return;
     try {
-      const archived = await archiveNote({
-        vaultRoot: vaultRoot.trim(),
-        from: activeNote.path,
-        title,
-        category,
-        tags: activeNote.tags.filter((tag) => tag !== "inbox"),
-        createdAt: activeNote.createdAt,
-        body: activeNote.body,
-      });
+      const before = activeNote;
+      const root = vaultRef.current.trim();
+      const targetPath = newNotePath(title, category, notesRef.current.filter((note) => note.path !== before.path).map((note) => note.path));
+      const next = { ...before, title, category, tags: before.tags.filter((tag) => tag !== "inbox") };
+      const archived = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path: before.path, targetPath, expectedRevision: before.sourceRevision, content: noteToMarkdown(next) }));
+      if (vaultRef.current.trim() !== root) return;
       setLinkVersion((current) => current + 1);
-      setNotes((current) => [
-        archived,
-        ...current.filter((note) => note.path !== activeNote.path),
-      ]);
+      setNotes((current) => acknowledgeSave(current, before, archived));
       setActivePath(archived.path);
       setActiveCategory(archived.category);
       setActiveView("category");
@@ -1985,10 +1739,7 @@ export function App() {
     try {
       const note = await createTodayNote(vaultRoot.trim(), category);
       setLinkVersion((current) => current + 1);
-      setNotes((current) => [
-        note,
-        ...current.filter((item) => item.path !== note.path),
-      ]);
+      setNotes((current) => mergeDiskNotes(current, [note, ...current.filter((item) => item.path !== note.path)]));
       setActivePath(note.path);
       setActiveCategory(note.category);
       setActiveView("category");
@@ -2036,211 +1787,37 @@ export function App() {
     }
   }
 
-  async function createAgentNote(
-    result: AgentResult,
-    selectedOperationIndexes: number[],
-    turnId: string,
-    sessionId: string,
-  ) {
-    if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before creating notes.");
-      return;
-    }
-    if (activeNote && result.baseNoteRevision && result.baseNoteRevision !== noteRevision(activeNote)) {
-      throw new Error("The source note changed after this review was generated. Run the Agent again before creating linked notes.");
-    }
-
-    const selectedOperations = selectedOperationIndexes.length
-      ? filterOperationsByIndexes(result.operations, selectedOperationIndexes)
-      : result.operations;
-    const draft = getCreateNoteDraft(selectedOperations);
-    try {
-      const created = await createNote({
-        vaultRoot: vaultRoot.trim(),
-        title: draft.title,
-        category: draft.category,
-      });
-      const backlink =
-        draft.linkBackToCurrent && activeNote
-          ? `\n\nRelated: [[${activeNote.title}]]`
-          : "";
-      const noteToSave = {
-        ...created,
-        tags: draft.tags ?? [],
-        summary: draft.summary,
-        body: `${draft.body.trimEnd()}${backlink}`,
-        updatedAt: localDateString(),
-      };
-      const saved = await writeNote({
-        vaultRoot: vaultRoot.trim(),
-        path: created.path,
-        content: noteToMarkdown(noteToSave),
-      });
-      const event: AgentOperationEvent = {
-        id: makeAgentId("event"),
-        sessionId,
-        turnId,
-        notePath: activeNote?.path ?? saved.path,
-        operationTypes: selectedOperations.map((operation) => operation.type),
-        changedFields: [],
-        createdNotePath: saved.path,
-        appliedAt: nowIso(),
-      };
-      const undoSnapshot: AgentUndoSnapshot = {
-        id: makeAgentId("undo"),
-        sessionId,
-        eventId: event.id,
-        notePath: event.notePath,
-        noteBeforeMarkdown: activeNote ? noteToMarkdown(activeNote) : "",
-        noteBeforePath: activeNote?.path ?? event.notePath,
-        activePathAfterApply: saved.path,
-        createdNotePath: saved.path,
-        createdAt: event.appliedAt,
-      };
-      await recordAgentOperationEvent({
-        vaultRoot: vaultRoot.trim(),
-        noteTitle: activeNote?.title ?? saved.title,
-        event,
-        undoSnapshot,
-      });
-      await recordAgentMessages({
-        vaultRoot: vaultRoot.trim(),
-        messages: [
-          buildOperationEventMessage({
-            id: makeAgentId("message"),
-            sessionId,
-            notePath: event.notePath,
-            turnId,
-            now: event.appliedAt,
-            event,
-            action: "created",
-            canUndo: true,
-          }),
-        ],
-      });
-      setLinkVersion((current) => current + 1);
-      setNotes((current) => [
-        saved,
-        ...current.filter((note) => note.path !== saved.path),
-      ]);
-      setActivePath(saved.path);
-      setActiveCategory(saved.category);
-      setActiveView("category");
-      setSaveError(false);
-      setStatus(`Agent created ${saved.path}.`);
-    } catch (error) {
-      setSaveError(true);
-      setStatus(error instanceof Error ? error.message : String(error));
-      throw error;
-    }
+  async function createAgentNote(result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) {
+    const before = activeNoteRef.current;
+    const root = vaultRef.current.trim();
+    if (!before || !root) throw new Error("Open a real vault before creating notes.");
+    const change = buildAgentNoteCommit(before, result, selectedOperationIndexes, turnId, sessionId, localDateString(), true, notesRef.current.map((note) => note.path));
+    const saved = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path: change.note.path, create: true, content: noteToMarkdown(change.note), agent: change.agent, sourceCheck: before.sourceRevision ? { path: before.path, revision: before.sourceRevision } : undefined }));
+    if (vaultRef.current.trim() !== root) return;
+    setNotes((current) => [saved, ...current.filter((note) => note.path !== saved.path)]);
+    setLinkVersion((version) => version + 1);
+    setActivePath((path) => path === before.path ? saved.path : path);
+    setSaveError(false);
+    setStatus(`Agent created ${saved.path}.`);
   }
 
   async function undoLastAgentApply() {
-    if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before undoing agent changes.");
-      return;
-    }
-    try {
-      const snapshot = await loadLastAgentUndoSnapshot({
-        vaultRoot: vaultRoot.trim(),
-        notePath: activeNote.path,
-      });
-      if (!snapshot) {
-        setStatus("No agent apply snapshot is available for this note.");
-        return;
-      }
-      if (snapshot.createdNotePath) {
-        await deleteNote(vaultRoot.trim(), snapshot.createdNotePath);
-        await clearLastAgentUndoSnapshot({
-          vaultRoot: vaultRoot.trim(),
-          notePath: snapshot.notePath,
-        });
-        setNotes((current) => current.filter((note) => note.path !== snapshot.createdNotePath));
-        if (activePath === snapshot.createdNotePath) setActivePath(snapshot.noteBeforePath);
-        const event: AgentOperationEvent = {
-          id: makeAgentId("event"),
-          sessionId: snapshot.sessionId,
-          turnId: "",
-          notePath: snapshot.noteBeforePath,
-          operationTypes: ["undo_agent_create"],
-          changedFields: [],
-          createdNotePath: snapshot.createdNotePath,
-          appliedAt: nowIso(),
-        };
-        await recordAgentMessages({
-          vaultRoot: vaultRoot.trim(),
-          messages: [buildOperationEventMessage({
-            id: makeAgentId("message"),
-            sessionId: snapshot.sessionId,
-            notePath: snapshot.noteBeforePath,
-            turnId: null,
-            now: event.appliedAt,
-            event,
-            action: "undone",
-            canUndo: false,
-          })],
-        });
-        setLinkVersion((current) => current + 1);
-        setStatus(`Removed Agent-created note ${snapshot.createdNotePath}.`);
-        return;
-      }
-
-      let restorePath = snapshot.noteBeforePath;
-      if (activeNote.path !== snapshot.noteBeforePath) {
-        const moved = await moveNote({
-          vaultRoot: vaultRoot.trim(),
-          from: activeNote.path,
-          to: snapshot.noteBeforePath,
-        });
-        restorePath = moved.path;
-      }
-      const restored = await writeNote({
-        vaultRoot: vaultRoot.trim(),
-        path: restorePath,
-        content: snapshot.noteBeforeMarkdown,
-      });
-      await clearLastAgentUndoSnapshot({
-        vaultRoot: vaultRoot.trim(),
-        notePath: restorePath,
-      });
-      const event: AgentOperationEvent = {
-        id: makeAgentId("event"),
-        sessionId: snapshot.sessionId,
-        turnId: "",
-        notePath: restored.path,
-        operationTypes: ["undo_agent_apply"],
-        changedFields: ["body"],
-        createdNotePath: null,
-        appliedAt: nowIso(),
-      };
-      await recordAgentMessages({
-        vaultRoot: vaultRoot.trim(),
-        messages: [
-          buildOperationEventMessage({
-            id: makeAgentId("message"),
-            sessionId: snapshot.sessionId,
-            notePath: restored.path,
-            turnId: null,
-            now: event.appliedAt,
-            event,
-            action: "undone",
-            canUndo: false,
-          }),
-        ],
-      });
-      setLinkVersion((current) => current + 1);
-      setNotes((current) =>
-        current.map((note) => (note.path === activeNote.path ? restored : note)),
-      );
-      setActivePath(restored.path);
-      setActiveCategory(restored.category);
-      setSaveError(false);
-      setStatus(`Undid last agent apply for ${restored.path}.`);
-    } catch (error) {
-      setSaveError(true);
-      setStatus(error instanceof Error ? error.message : String(error));
-      throw error;
-    }
+    const before = activeNoteRef.current;
+    const root = vaultRef.current.trim();
+    if (!before || !root) throw new Error("Open a real vault before undoing Agent changes.");
+    const snapshot = await loadLastAgentUndoSnapshot({ vaultRoot: root, notePath: before.path });
+    if (!snapshot) throw new Error("No Agent undo snapshot is available.");
+    if (notesRef.current.some((note) => note.isDirty && (note.path === before.path || note.path === snapshot.createdNotePath))) throw new Error("请先保存当前草稿，再撤销 Agent 修改。");
+    const result = await saveQueueRef.current(() => undoAgentChange(root, before.path));
+    if (vaultRef.current.trim() !== root) return;
+    setNotes((current) => {
+      const remaining = current.filter((note) => note.path !== result.removedPath);
+      return result.restored ? acknowledgeSave(remaining, before, result.restored) : remaining;
+    });
+    setActivePath((path) => path === before.path || path === result.removedPath ? result.activePath : path);
+    setLinkVersion((version) => version + 1);
+    setSaveError(false);
+    setStatus("已撤销上次 Agent 修改。");
   }
 
   async function addFolder() {
@@ -2255,8 +1832,6 @@ export function App() {
     if (!path) return;
     try {
       await createFolder({ vaultRoot: vaultRoot.trim(), path });
-      const loadedNotes = await scanVault(vaultRoot.trim());
-      setNotes(loadedNotes);
       setActiveCategory(path);
       setActiveView("category");
       setStatus(`Created folder ${path}.`);
@@ -2291,28 +1866,20 @@ export function App() {
   }
 
   async function moveActiveNote(to: string) {
-    if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before moving notes.");
-      return;
-    }
+    const before = activeNoteRef.current;
+    const root = vaultRef.current.trim();
+    if (!before || !root) return;
     try {
-      const moved = await moveNote({
-        vaultRoot: vaultRoot.trim(),
-        from: activeNote.path,
-        to,
-      });
-      setNotes((current) =>
-        current.map((note) => (note.path === activeNote.path ? moved : note)),
-      );
-      setActivePath(moved.path);
-      setActiveCategory(moved.category);
+      setIsSaving(true);
+      const moved = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path: before.path, targetPath: to, expectedRevision: before.sourceRevision, content: noteToMarkdown(before) }));
+      if (vaultRef.current.trim() !== root) return;
+      setNotes((current) => acknowledgeSave(current, before, moved));
+      setActivePath((path) => path === before.path ? moved.path : path);
+      setLinkVersion((version) => version + 1);
       setSaveError(false);
       setStatus(`Moved to ${moved.path}.`);
-
-      setLinkVersion((current) => current + 1);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
+    } catch (error) { setStatus(String(error)); }
+    finally { setIsSaving(false); }
   }
 
   async function deleteNoteByPath(path: string) {
@@ -2326,10 +1893,9 @@ export function App() {
     );
     if (!confirmed) return;
     try {
-      skipNextVaultChangeUntilRef.current = Date.now() + 1500;
       await deleteNote(vaultRoot.trim(), path);
-      const remaining = notes.filter((note) => note.path !== path);
-      setNotes(remaining);
+      const remaining = notesRef.current.filter((note) => note.path !== path);
+      setNotes((current) => current.filter((note) => note.path !== path));
       setIndexedResults((current) =>
         current.filter((note) => note.path !== path),
       );
@@ -2342,7 +1908,6 @@ export function App() {
         isTrash ? `Permanently deleted ${path}.` : `Moved ${path} to trash.`,
       );
     } catch (error) {
-      skipNextVaultChangeUntilRef.current = 0;
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
@@ -2418,6 +1983,7 @@ export function App() {
 
   return (
     <main
+      inert={isClosing}
       className="flex flex-col h-screen w-screen bg-base-100 text-base-content overflow-hidden"
       data-theme={themeDatasetValue}
     >
@@ -2867,10 +2433,10 @@ export function App() {
           ) : activeNote ? (
             startupMigrationPath === activeNote.path ? (
               <div className="empty">Optimizing embedded note images…</div>
-            ) : !editorPaintReady ? (
+            ) : !editorPaintReady || activeNote.bodyLoaded === false ? (
               <div className="empty">Loading note…</div>
             ) : (
-              <Editor
+              <FeatureBoundary resetKey={activeNote.path}><Suspense fallback={<div className="empty">Loading note…</div>}><Editor
                 key={activeNote.path}
                 vaultRoot={vaultRoot.trim()}
                 note={activeNote}
@@ -2880,7 +2446,7 @@ export function App() {
                 onMove={moveActiveNotePrompt}
                 onCheckExternal={checkExternalActiveNote}
                 onDelete={deleteActiveNote}
-                previewMode={previewMode}
+                previewMode={previewMode || isSaving}
                 onTogglePreview={() => setPreviewMode((current) => !current)}
                 saveState={saveState}
                 noteLinks={noteLinks}
@@ -2894,7 +2460,7 @@ export function App() {
                 onUpdateTags={updateActiveNoteTags}
                 onArchiveInboxNote={archiveActiveInboxNote}
                 onNavigateLink={setActivePath}
-              />
+              /></Suspense></FeatureBoundary>
             )
           ) : (
             <div className="empty">
@@ -2916,8 +2482,8 @@ export function App() {
         <aside
           className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightSidebarVisible ? "border-l" : "invisible opacity-0 border-none"}`}
         >
-          {activeNote ? (
-            <>
+          {rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false ? (
+            <FeatureBoundary resetKey={activeNote.path}>
               <Suspense
                 fallback={<div className="empty">Loading note agent...</div>}
               >
@@ -2931,7 +2497,7 @@ export function App() {
                   onUndoLastApply={undoLastAgentApply}
                 />
               </Suspense>
-            </>
+            </FeatureBoundary>
           ) : null}
         </aside>
       </div>
@@ -2951,7 +2517,7 @@ export function App() {
           >
             <Suspense fallback={<div className="empty">Loading settings…</div>}>
               <SettingsPanel
-                vaultRoot={vaultRoot}
+                vaultRoot={vaultPathInput}
                 status={status}
                 llmSettings={llmSettings}
                 themePreference={themePreference}
@@ -2966,7 +2532,7 @@ export function App() {
                 onLockUpdateTimeChange={setLockUpdateTime}
                 autoSaveOnExit={autoSaveOnExit}
                 onAutoSaveOnExitChange={setAutoSaveOnExit}
-                onVaultRootChange={setVaultRoot}
+                onVaultRootChange={setVaultPathInput}
                 onLlmSettingsChange={setLlmSettings}
                 onThemePreferenceChange={setThemePreference}
                 onColorThemeChange={setColorTheme}

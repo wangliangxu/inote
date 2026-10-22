@@ -2,7 +2,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use tokio_util::sync::CancellationToken;
+
+fn http_client() -> Result<reqwest::Client, String> {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(180))
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(CLIENT.get_or_init(|| client).clone())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LlmProviderKind {
@@ -110,7 +125,11 @@ pub fn build_chat_request_preview(
             }),
         ),
         LlmProviderKind::Anthropic => (
-            if base.ends_with("/v1") { format!("{base}/messages") } else { format!("{base}/v1/messages") },
+            if base.ends_with("/v1") {
+                format!("{base}/messages")
+            } else {
+                format!("{base}/v1/messages")
+            },
             "x-api-key: ****".to_string(),
             json!({
                 "model": settings.model,
@@ -120,7 +139,11 @@ pub fn build_chat_request_preview(
             }),
         ),
     };
-    Ok(LlmRequestPreview { url, redacted_authorization, body })
+    Ok(LlmRequestPreview {
+        url,
+        redacted_authorization,
+        body,
+    })
 }
 
 pub async fn send_chat_request(
@@ -129,7 +152,7 @@ pub async fn send_chat_request(
     context: &str,
 ) -> Result<LlmChatResponse, String> {
     let preview = build_chat_request_preview(settings, prompt, context)?;
-    let client = reqwest::Client::new();
+    let client = http_client()?;
     let response = provider_request(&client, settings, &preview.url, &preview.body)
         .send()
         .await
@@ -163,26 +186,38 @@ pub async fn send_chat_request_stream(
     if let Some(body) = preview.body.as_object_mut() {
         body.insert("stream".to_string(), json!(true));
         if structured_output && provider == LlmProviderKind::OpenAiCompatible {
+            body.insert("response_format".to_string(), agent_response_format());
             body.insert(
-                "response_format".to_string(),
-                agent_response_format(),
+                "stream_options".to_string(),
+                json!({ "include_usage": true }),
             );
-            body.insert("stream_options".to_string(), json!({ "include_usage": true }));
         }
     }
 
-    let mut structured_output_mode = if structured_output && provider == LlmProviderKind::OpenAiCompatible { "json_schema" } else { "prompt" }.to_string();
+    let mut structured_output_mode =
+        if structured_output && provider == LlmProviderKind::OpenAiCompatible {
+            "json_schema"
+        } else {
+            "prompt"
+        }
+        .to_string();
 
-    let client = reqwest::Client::new();
+    let client = http_client()?;
     let request = provider_request(&client, settings, &preview.url, &preview.body).send();
     let mut response = tokio::select! {
         _ = cancellation.cancelled() => return Err("LLM request cancelled".to_string()),
         response = request => response.map_err(|error| format!("failed to call LLM API: {error}"))?,
     };
 
-    if provider == LlmProviderKind::OpenAiCompatible && structured_output && matches!(response.status().as_u16(), 400 | 422) {
+    if provider == LlmProviderKind::OpenAiCompatible
+        && structured_output
+        && matches!(response.status().as_u16(), 400 | 422)
+    {
         if let Some(body) = preview.body.as_object_mut() {
-            body.insert("response_format".to_string(), json!({ "type": "json_object" }));
+            body.insert(
+                "response_format".to_string(),
+                json!({ "type": "json_object" }),
+            );
         }
         structured_output_mode = "json_object".to_string();
         let fallback = provider_request(&client, settings, &preview.url, &preview.body).send();
@@ -192,7 +227,10 @@ pub async fn send_chat_request_stream(
         };
     }
 
-    if provider == LlmProviderKind::OpenAiCompatible && structured_output && matches!(response.status().as_u16(), 400 | 422) {
+    if provider == LlmProviderKind::OpenAiCompatible
+        && structured_output
+        && matches!(response.status().as_u16(), 400 | 422)
+    {
         if let Some(body) = preview.body.as_object_mut() {
             body.remove("response_format");
             body.remove("stream_options");
@@ -217,7 +255,7 @@ pub async fn send_chat_request_stream(
         ));
     }
 
-    let mut buffer = String::new();
+    let mut decoder = crate::sse::SseDecoder::default();
     let mut summary = LlmStreamSummary {
         structured_output_mode,
         ..LlmStreamSummary::default()
@@ -228,25 +266,26 @@ pub async fn send_chat_request_stream(
             chunk = response.chunk() => chunk.map_err(|error| format!("failed to read LLM stream: {error}"))?,
         };
         let Some(chunk) = chunk else { break };
-        let chunk_str = String::from_utf8_lossy(&chunk);
-        buffer.push_str(&chunk_str);
-
-        while let Some(pos) = buffer.find('\n') {
-            let line = buffer[..pos].to_string();
-            buffer = buffer[pos + 1..].to_string();
-
-            let line = line.trim();
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    continue;
-                }
-                if let Ok(value) = serde_json::from_str::<Value>(data) {
-                    if let Some(content) = parse_stream_event(&value, provider, &mut summary) {
-                        on_chunk(content);
-                    }
-                }
+        for data in decoder.feed(&chunk)? {
+            if data == "[DONE]" {
+                continue;
             }
+            let value = serde_json::from_str::<Value>(&data)
+                .map_err(|error| format!("invalid LLM stream event: {error}"))?;
+            if let Some(content) = parse_stream_event(&value, provider, &mut summary) {
+                on_chunk(content);
+            }
+        }
+    }
+
+    for data in decoder.finish()? {
+        if data == "[DONE]" {
+            continue;
+        }
+        let value = serde_json::from_str::<Value>(&data)
+            .map_err(|error| format!("invalid final LLM stream event: {error}"))?;
+        if let Some(content) = parse_stream_event(&value, provider, &mut summary) {
+            on_chunk(content);
         }
     }
 
@@ -416,17 +455,29 @@ fn provider_request(
     }
 }
 
-fn parse_stream_event(value: &Value, provider: LlmProviderKind, summary: &mut LlmStreamSummary) -> Option<String> {
+fn parse_stream_event(
+    value: &Value,
+    provider: LlmProviderKind,
+    summary: &mut LlmStreamSummary,
+) -> Option<String> {
     match provider {
         LlmProviderKind::OpenAiCompatible => {
             if let Some(reason) = value["choices"][0]["finish_reason"].as_str() {
                 summary.finish_reason = Some(reason.to_string());
             }
             if let Some(usage) = value.get("usage") {
-                summary.input_tokens = usage.get("prompt_tokens").or_else(|| usage.get("input_tokens")).and_then(Value::as_u64);
-                summary.output_tokens = usage.get("completion_tokens").or_else(|| usage.get("output_tokens")).and_then(Value::as_u64);
+                summary.input_tokens = usage
+                    .get("prompt_tokens")
+                    .or_else(|| usage.get("input_tokens"))
+                    .and_then(Value::as_u64);
+                summary.output_tokens = usage
+                    .get("completion_tokens")
+                    .or_else(|| usage.get("output_tokens"))
+                    .and_then(Value::as_u64);
             }
-            value["choices"][0]["delta"]["content"].as_str().map(ToOwned::to_owned)
+            value["choices"][0]["delta"]["content"]
+                .as_str()
+                .map(ToOwned::to_owned)
         }
         LlmProviderKind::Anthropic => {
             if value["type"] == "message_start" {
@@ -434,7 +485,11 @@ fn parse_stream_event(value: &Value, provider: LlmProviderKind, summary: &mut Ll
             }
             if value["type"] == "message_delta" {
                 summary.finish_reason = value["delta"]["stop_reason"].as_str().map(|reason| {
-                    if reason == "max_tokens" { "length".to_string() } else { reason.to_string() }
+                    if reason == "max_tokens" {
+                        "length".to_string()
+                    } else {
+                        reason.to_string()
+                    }
                 });
                 summary.output_tokens = value["usage"]["output_tokens"].as_u64();
             }
@@ -502,7 +557,11 @@ mod tests {
     #[test]
     fn rejects_response_without_message_content() {
         assert_eq!(
-            extract_chat_content(r#"{"choices":[{"message":{}}]}"#, LlmProviderKind::OpenAiCompatible).unwrap_err(),
+            extract_chat_content(
+                r#"{"choices":[{"message":{}}]}"#,
+                LlmProviderKind::OpenAiCompatible
+            )
+            .unwrap_err(),
             "LLM API response did not include message content"
         );
     }
@@ -523,7 +582,10 @@ mod tests {
         let format = agent_response_format();
         assert_eq!(format["type"], "json_schema");
         assert_eq!(format["json_schema"]["strict"], true);
-        assert_eq!(format["json_schema"]["schema"]["properties"]["version"]["const"], 1);
+        assert_eq!(
+            format["json_schema"]["schema"]["properties"]["version"]["const"],
+            1
+        );
         assert_eq!(
             format["json_schema"]["schema"]["properties"]["operations"]["anyOf"][0]["maxItems"],
             12

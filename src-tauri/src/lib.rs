@@ -5,8 +5,11 @@ pub mod commands;
 pub mod indexer;
 pub mod llm;
 pub mod markdown;
+pub mod markdown_paths;
 pub mod menu;
+pub mod persistence;
 pub mod settings;
+pub mod sse;
 pub mod vault;
 pub mod watcher;
 
@@ -62,6 +65,7 @@ pub fn run() {
         })
         .manage(watcher::WatcherState::default())
         .manage(llm::LlmRequestState::default())
+        .manage(commands::ExitState::default())
         .menu(menu::build)
         .on_menu_event(menu::handle_event)
         .on_page_load(|webview, payload| {
@@ -82,6 +86,12 @@ pub fn run() {
             commands::read_note,
             commands::check_file_exists,
             commands::write_note,
+            commands::commit_note,
+            commands::undo_agent_change,
+            commands::refresh_vault_paths,
+            commands::load_note_drafts,
+            commands::save_note_drafts,
+            commands::allow_vault_assets,
             commands::save_note_image,
             commands::migrate_note_images,
             commands::create_inbox_note,
@@ -118,6 +128,23 @@ pub fn run() {
             commands::save_agent_preference,
             commands::clear_agent_preference
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run iNote");
+        .build(tauri::generate_context!())
+        .expect("failed to build iNote")
+        .run(|app, event| {
+            use std::sync::atomic::Ordering;
+            use tauri::Manager;
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if !app.state::<commands::ExitState>().0.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.close();
+                    } else {
+                        app.state::<commands::ExitState>()
+                            .0
+                            .store(true, Ordering::SeqCst);
+                        app.exit(0);
+                    }
+                }
+            }
+        });
 }

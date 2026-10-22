@@ -23,14 +23,13 @@ describe('note agent integration', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
 
     expect(app).toContain('async function saveNoteWithPathSync')
-    expect(app).toContain('await saveNoteWithPathSync(applied.note')
-    expect(app).toContain('moveNote({')
+    expect(app).toContain('await saveNoteWithPathSync(change.note')
+    expect(app).toContain('commitNote({')
   })
 
-  it('rejects stale agent reviews before current-note writes or linked-note creation', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
-    expect(app).toContain('result.baseNoteRevision !== noteRevision(activeNote)')
-    expect(app).toContain('changed after this review was generated')
+  it('validates stale reviews in the shared commit builder', () => {
+    const commit = readFileSync(resolve(__dirname, '../features/agent/agentNoteCommit.ts'), 'utf8')
+    expect(commit.includes('result.baseNoteRevision !== noteRevision(before)')).toBe(true)
   })
 
   it('wires persisted NoteAgent conversation props via useNoteAgent hook', () => {
@@ -58,21 +57,12 @@ describe('note agent integration', () => {
     expect(firstMessageWrite).toBeGreaterThan(runningTurn)
   })
 
-  it('records agent operation events and supports current-note undo wiring', () => {
+  it('uses the transactional commit and version-checked undo APIs', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
-
-    expect(app).toContain('recordAgentOperationEvent')
-    expect(app).toContain('buildOperationEventMessage')
-    expect(app).toContain('recordAgentMessages({')
-    expect(app).toContain('loadLastAgentUndoSnapshot')
-    expect(app).toContain('clearLastAgentUndoSnapshot')
-    expect(app).toContain('noteBeforeMarkdown: noteToMarkdown(before)')
-    expect(app).toContain('noteTitle: saved.title')
-    expect(app).toContain('undo_agent_create')
-    expect(app).toContain('Removed Agent-created note')
-    expect(app).toContain('action: "applied"')
-    expect(app).toContain('action: "created"')
-    expect(app).toContain('action: "undone"')
+    const commit = readFileSync(resolve(__dirname, '../features/agent/agentNoteCommit.ts'), 'utf8')
+    expect(app.includes('undoAgentChange(root, before.path)')).toBe(true)
+    expect(app.includes('change.agent, before')).toBe(true)
+    expect(commit.includes('noteBeforeMarkdown: noteToMarkdown(before)')).toBe(true)
   })
 
   it('uses Codex-style conversation components for NoteAgent', () => {
@@ -114,12 +104,12 @@ describe('note agent integration', () => {
   })
 
   it('uses shared agentUtils for ID generation', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const app = readFileSync(resolve(__dirname, '../features/agent/agentNoteCommit.ts'), 'utf8')
     const utils = readFileSync(resolve(__dirname, '../features/agent/agentUtils.ts'), 'utf8')
 
     expect(app).toContain('makeAgentId')
     expect(app).toContain('nowIso')
-    expect(app).toContain('from "../features/agent/agentUtils"')
+    expect(app).toContain("from './agentUtils'")
     expect(utils).toContain('export function makeAgentId')
     expect(utils).toContain('export function nowIso')
   })
