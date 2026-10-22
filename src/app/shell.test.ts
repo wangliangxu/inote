@@ -45,7 +45,7 @@ describe('startup shell', () => {
     const tauriConfig = JSON.parse(readFileSync(resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'))
     const cargoToml = readFileSync(resolve(__dirname, '../../src-tauri/Cargo.toml'), 'utf8')
 
-    expect(packageJson.version).toBe('0.9.0')
+    expect(packageJson.version).toBe('0.10.0')
     expect(tauriConfig.version).toBe(packageJson.version)
     expect(cargoToml).toContain(`version = "${packageJson.version}"`)
   })
