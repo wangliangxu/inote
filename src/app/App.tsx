@@ -410,21 +410,20 @@ export function App() {
     view: WorkspaceView;
     category: string;
     path: string;
-  }>({ view: "today", category: "journal", path: "" });
+  }>({ view: "search", category: "journal", path: "" });
 
   const toggleSpecialView = useCallback(
-    (view: "archive" | "trash" | "calendar") => {
+    (view: "archive" | "trash" | "calendar" | "todo") => {
       if (activeView === view) {
         setActiveView(previousViewRef.current.view);
         setActiveCategory(previousViewRef.current.category);
-        if (previousViewRef.current.path) {
-          setActivePath(previousViewRef.current.path);
-        }
+        setActivePath(previousViewRef.current.path);
       } else {
         if (
           activeView !== "archive" &&
           activeView !== "trash" &&
-          activeView !== "calendar"
+          activeView !== "calendar" &&
+          activeView !== "todo"
         ) {
           previousViewRef.current = {
             view: activeView,
@@ -433,6 +432,7 @@ export function App() {
           };
         }
         setActiveView(view);
+        if (view === "todo") setActivePath("");
       }
     },
     [activeView, activeCategory, activePath],
@@ -2132,29 +2132,7 @@ export function App() {
           <button
             className={`btn btn-ghost btn-sm btn-square ${activeView === "todo" ? "bg-base-content/10 text-primary" : ""}`}
             type="button"
-            onClick={() => {
-              if (activeView === "todo") {
-                setActiveView(previousViewRef.current.view);
-                setActiveCategory(previousViewRef.current.category);
-                if (previousViewRef.current.path) {
-                  setActivePath(previousViewRef.current.path);
-                }
-              } else {
-                if (
-                  activeView !== "archive" &&
-                  activeView !== "trash" &&
-                  activeView !== "calendar"
-                ) {
-                  previousViewRef.current = {
-                    view: activeView,
-                    category: activeCategory,
-                    path: activePath,
-                  };
-                }
-                setActiveView("todo");
-                setActivePath("");
-              }
-            }}
+            onClick={() => toggleSpecialView("todo")}
             title="Todo List"
             aria-label="Toggle Todo List"
           >
