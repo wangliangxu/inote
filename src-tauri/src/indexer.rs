@@ -374,7 +374,9 @@ impl NoteIndex {
                     body: row.get(11)?,
                     tags: tags_map.remove(&path).unwrap_or_default(),
                     source_revision: row.get(12)?,
-                    source_size: row.get(16)?,
+                    // Legacy caches use -1 (or NULL) for an unknown size. Keep that
+                    // sentinel in SQLite for refresh detection, but expose a valid u64.
+                    source_size: row.get::<_, Option<i64>>(16)?.unwrap_or_default().max(0) as u64,
                     body_loaded: include_body,
                     frontmatter: serde_json::from_str(&row.get::<_, String>(13)?).map_err(
                         |error| {
@@ -1128,6 +1130,105 @@ mod tests {
     use crate::vault::Vault;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn legacy_unknown_file_sizes_load_before_incremental_refresh() {
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        let source = "# Legacy note\n\nKeep the original body.";
+        vault.write_note("legacy.md", source).unwrap();
+        let db_path = vault.root().join(".inote/index.sqlite3");
+        let old_index = NoteIndex::open(&db_path).unwrap();
+        old_index
+            .full_rebuild(vault.root(), &vault.scan().unwrap())
+            .unwrap();
+        // Model an existing cache from before the file-size column was introduced.
+        old_index
+            .conn
+            .execute("ALTER TABLE notes DROP COLUMN file_size", [])
+            .unwrap();
+        drop(old_index);
+
+        let index = NoteIndex::open(&db_path).unwrap();
+        let cached_size = || {
+            index
+                .conn
+                .query_row(
+                    "SELECT file_size FROM notes WHERE path='legacy.md'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(cached_size(), -1);
+        let summaries = index.get_note_summaries().unwrap();
+        assert_eq!(summaries[0].source_size, 0);
+        assert!(!summaries[0].body_loaded);
+        assert_eq!(index.get_all_notes().unwrap()[0].body, source);
+        assert_eq!(
+            index
+                .get_summaries_for_paths(&["legacy.md".into()])
+                .unwrap()[0]
+                .source_size,
+            0
+        );
+        // Loading the cache must not erase the sentinel used to detect stale entries.
+        assert_eq!(cached_size(), -1);
+
+        let refreshed = index.lightweight_rebuild_summaries(vault.root()).unwrap();
+        assert_eq!(refreshed[0].source_size, source.len() as u64);
+        assert_eq!(cached_size(), source.len() as i64);
+        assert_eq!(vault.read_note_source("legacy.md").unwrap(), source);
+    }
+
+    #[test]
+    fn cached_nullable_empty_and_known_file_sizes_load_without_changing_the_cache() {
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        vault.write_note("empty.md", "").unwrap();
+        vault.write_note("known.md", "# Known").unwrap();
+        vault.write_note("unknown.md", "# Unknown").unwrap();
+        let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3")).unwrap();
+        index
+            .full_rebuild(vault.root(), &vault.scan().unwrap())
+            .unwrap();
+        index
+            .conn
+            .execute(
+                "UPDATE notes SET file_size=NULL WHERE path='unknown.md'",
+                [],
+            )
+            .unwrap();
+        let summaries = index.get_note_summaries().unwrap();
+        let size = |path: &str| {
+            summaries
+                .iter()
+                .find(|note| note.path == path)
+                .unwrap()
+                .source_size
+        };
+        assert_eq!(size("empty.md"), 0);
+        assert_eq!(size("known.md"), "# Known".len() as u64);
+        assert_eq!(size("unknown.md"), 0);
+        let cached: Option<i64> = index
+            .conn
+            .query_row(
+                "SELECT file_size FROM notes WHERE path='unknown.md'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(cached, None);
+        let refreshed = index.lightweight_rebuild_summaries(vault.root()).unwrap();
+        assert_eq!(
+            refreshed
+                .iter()
+                .find(|note| note.path == "unknown.md")
+                .unwrap()
+                .source_size,
+            "# Unknown".len() as u64
+        );
+    }
 
     #[test]
     fn incremental_refresh_detects_subsecond_changes_and_preserves_incoming_links() {
