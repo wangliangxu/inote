@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useReminderSync } from './useReminderSync'
-import { configureReminders, connectReminders, syncReminders, type ReminderCalendar } from './reminders'
+import { configureReminders, connectReminders, resolveReminderConflict, syncReminders, type ReminderCalendar } from './reminders'
 
 export function RemindersSettings({ vaultRoot }: { vaultRoot: string }) {
   const { t } = useTranslation()
-  const { config, error } = useReminderSync(vaultRoot, false)
+  const { config, error, conflicts = [] } = useReminderSync(vaultRoot, false)
   const [calendars, setCalendars] = useState<ReminderCalendar[]>([])
   const [selected, setSelected] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,6 +53,16 @@ export function RemindersSettings({ vaultRoot }: { vaultRoot: string }) {
           <button type="button" className="btn btn-primary btn-sm justify-self-start" disabled={busy || !selected || !vaultRoot} onClick={() => void run(async () => { await configureReminders(true, selected) })}>{t(config.enabled ? 'reminders.saveList' : 'reminders.enable')}</button>
         </>}
         {!vaultRoot && <p className="text-sm opacity-70">{t('reminders.openVault')}</p>}
+        {conflicts.map((conflict) => <div className="grid gap-2 rounded-lg border border-warning p-3 text-sm" key={conflict.path}>
+          <strong className="break-all">{conflict.path}</strong>
+          <p>{t('reminders.conflictHint')}</p>
+          <p>{t('reminders.localVersion')}: {conflict.local.due || t('reminders.noDate')} · {t(conflict.local.completed ? 'todo.doneStatus' : 'todo.todoStatus')}</p>
+          <p>{t('reminders.remoteVersion')}: {conflict.remote.due || t('reminders.noDate')} · {t(conflict.remote.completed ? 'todo.doneStatus' : 'todo.todoStatus')}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => void run(() => resolveReminderConflict(vaultRoot, conflict, 'local'))}>{t('reminders.keepLocal')}</button>
+            <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => void run(() => resolveReminderConflict(vaultRoot, conflict, 'remote'))}>{t('reminders.useRemote')}</button>
+          </div>
+        </div>)}
         {busy && <p role="status" className="text-sm">{t('reminders.working')}</p>}
         {message && !error && !problem && <p role="status" className="text-sm">{message}</p>}
         {(problem || error) && <p role="alert" className="whitespace-pre-wrap break-words text-sm text-error">{problem || error}</p>}

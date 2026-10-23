@@ -1179,9 +1179,13 @@ export function Editor({
                 <span>{t('editor.updated')}</span>
                 <input type="date" value={note.updatedAt.slice(0, 10)} onChange={(event) => onUpdateUpdatedAt?.(event.target.value)} />
               </label>
-              <label className="metadata-editor">
+              <label className="metadata-editor reminder-metadata">
                 <span>{t('editor.due')}</span>
-                <input type="datetime-local" value={note.due || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
+                <input type={note.due?.length === 10 ? 'date' : 'datetime-local'} value={note.due || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
+                {note.due && <small><button type="button" className="underline" onClick={(event) => {
+                  event.preventDefault()
+                  onUpdateDue?.(note.due?.length === 10 ? `${note.due}T09:00` : note.due!.slice(0, 10))
+                }}>{t(note.due.length === 10 ? 'reminders.addTime' : 'reminders.dateOnly')}</button></small>}
               </label>
               <label className="metadata-editor reminder-metadata">
                 <span>{t('reminders.timing')}</span>

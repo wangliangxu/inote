@@ -30,6 +30,16 @@ describe('note persistence', () => {
     expect(acknowledgeSave([later], submitted, saved)[0]).toMatchObject({ body: later.body, isDirty: true, sourceRevision: 'disk-v2' })
     expect(acknowledgeSave([submitted], submitted, saved)[0]).toMatchObject({ isDirty: false, sourceRevision: 'disk-v2' })
   })
+  it('merges system date and completion changes while preserving text typed during a save', () => {
+    const submitted = { ...base, due: '2030-01-01T09:00', status: 'in_progress', isDirty: true }
+    const later = { ...submitted, body: 'typed during system sync' }
+    const saved = { ...submitted, due: '2030-02-02T10:00', status: 'done', sourceRevision: 'system-v2' }
+    expect(acknowledgeSave([later], submitted, saved)[0]).toMatchObject({ body: later.body, due: saved.due, status: 'done', sourceRevision: 'system-v2', isDirty: true })
+    const editedDate = { ...later, due: '2030-03-03T11:00' }
+    expect(acknowledgeSave([editedDate], submitted, saved)[0].due).toBe(editedDate.due)
+    const rawDraft = { ...later, rawMarkdown: '---\ntitle: [unfinished' }
+    expect(acknowledgeSave([rawDraft], submitted, saved)[0].sourceRevision).toBe('disk-v1')
+  })
   it('retains edits and changes the path when an in-flight save moves the note', () => {
     const later = { ...base, title: 'New title', isDirty: true }
     expect(acknowledgeSave([later], base, { ...base, path: 'new/a.md', sourceRevision: 'moved' })[0]).toMatchObject({ title: later.title, path: 'new/a.md', isDirty: true })

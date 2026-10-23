@@ -43,6 +43,44 @@ static NSDictionary *requestAccess(EKEventStore *store) {
     return nil;
 }
 
+static void (*changeCallback)(void) = NULL;
+static EKEventStore *watchedStore;
+static id changeObserver;
+
+void inote_reminders_set_change_callback(void (*callback)(void)) { changeCallback = callback; }
+
+static void ensureObserver(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (watchedStore) return;
+        watchedStore = [[EKEventStore alloc] init];
+        changeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:EKEventStoreChangedNotification object:watchedStore queue:nil usingBlock:^(NSNotification *notification) {
+            (void)notification;
+            if (changeCallback) changeCallback();
+        }];
+    });
+}
+
+static NSDictionary *snapshot(EKReminder *reminder) {
+    NSDateComponents *components = reminder.dueDateComponents;
+    id due = [NSNull null];
+    if (components) {
+        BOOL allDay = components.hour == NSDateComponentUndefined;
+        NSCalendar *calendar = [components.calendar copy] ?: [NSCalendar currentCalendar];
+        calendar.timeZone = components.timeZone ?: [NSTimeZone localTimeZone];
+        NSDate *date = [calendar dateFromComponents:components];
+        if (date) {
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+            formatter.timeZone = allDay ? calendar.timeZone : [NSTimeZone localTimeZone];
+            formatter.dateFormat = allDay ? @"yyyy-MM-dd" : @"yyyy-MM-dd'T'HH:mm:ss";
+            due = [formatter stringFromDate:date];
+        } else { return failure(@"The system reminder has an invalid due date. Fix it in Reminders before syncing."); }
+    }
+    return @{ @"identifier": reminder.calendarItemIdentifier, @"due": due, @"completed": @(reminder.completed),
+        @"modifiedAt": @((long long)(reminder.lastModifiedDate.timeIntervalSince1970 * 1000)) };
+}
+
 static NSDictionary *perform(NSDictionary *input) {
     EKEventStore *store = [[EKEventStore alloc] init];
     NSString *operation = input[@"operation"];
@@ -52,6 +90,7 @@ static NSDictionary *perform(NSDictionary *input) {
     }
     if (!hasAccess()) return failure(@"Reminders access is unavailable. Connect in iNote Settings, or allow iNote in System Settings > Privacy & Security > Reminders.");
 
+    ensureObserver();
     if ([operation isEqualToString:@"connect"] || [operation isEqualToString:@"calendars"]) {
         NSMutableArray *calendars = [NSMutableArray array];
         for (EKCalendar *calendar in [store calendarsForEntityType:EKEntityTypeReminder]) {
@@ -86,6 +125,7 @@ static NSDictionary *perform(NSDictionary *input) {
             if ([candidate.URL.absoluteString isEqualToString:marker]) { reminder = candidate; break; }
         }
     }
+    if ([operation isEqualToString:@"read"]) return reminder ? snapshot(reminder) : @{ @"missing": @YES };
     NSError *error = nil;
     if ([operation isEqualToString:@"remove"]) {
         if (reminder && ![store removeReminder:reminder commit:YES error:&error]) return failure(error.localizedDescription);
@@ -96,27 +136,38 @@ static NSDictionary *perform(NSDictionary *input) {
     if (!calendar || !calendar.allowsContentModifications || !(calendar.allowedEntityTypes & EKEntityMaskReminder)) {
         return failure(@"The selected reminders list is missing or read-only. Choose another list in iNote Settings.");
     }
+    NSDictionary *expected = input[@"expectedRemote"];
+    if (([expected isKindOfClass:[NSDictionary class]] && (!reminder || ![snapshot(reminder) isEqualToDictionary:expected])) || ([input[@"expectedMissing"] boolValue] && reminder)) {
+        return failure(@"The system reminder changed during sync. Retry to merge the latest version.");
+    }
     if (!reminder) reminder = [EKReminder reminderWithEventStore:store];
     reminder.calendar = calendar;
     reminder.title = input[@"title"];
     reminder.URL = [NSURL URLWithString:marker];
     reminder.notes = input[@"notes"];
     reminder.priority = [input[@"priority"] unsignedIntegerValue];
-    NSDate *due = [NSDate dateWithTimeIntervalSince1970:[input[@"dueTimestamp"] doubleValue]];
-    NSCalendar *local = [NSCalendar currentCalendar];
-    NSCalendarUnit units = NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay;
-    if (![input[@"allDay"] boolValue]) units |= NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond;
-    NSDateComponents *components = [local components:units fromDate:due];
-    components.timeZone = local.timeZone;
-    reminder.dueDateComponents = components;
-    reminder.completed = [input[@"completed"] boolValue];
+    NSNumber *dueTimestamp = input[@"dueTimestamp"];
+    if ([dueTimestamp isKindOfClass:[NSNumber class]]) {
+        NSDate *due = [NSDate dateWithTimeIntervalSince1970:dueTimestamp.doubleValue];
+        NSCalendar *local = [NSCalendar currentCalendar];
+        NSCalendarUnit units = NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay;
+        if (![input[@"allDay"] boolValue]) units |= NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond;
+        NSDateComponents *components = [local components:units fromDate:due];
+        components.timeZone = local.timeZone;
+        reminder.dueDateComponents = components;
+    } else {
+        reminder.dueDateComponents = nil;
+        reminder.startDateComponents = nil;
+    }
+    BOOL completed = [input[@"completed"] boolValue];
+    if (reminder.completed != completed) reminder.completed = completed;
     reminder.alarms = @[];
     NSNumber *alarm = input[@"alarmTimestamp"];
     if (!reminder.completed && [alarm isKindOfClass:[NSNumber class]] && alarm.doubleValue > [NSDate date].timeIntervalSince1970) {
         [reminder addAlarm:[EKAlarm alarmWithAbsoluteDate:[NSDate dateWithTimeIntervalSince1970:alarm.doubleValue]]];
     }
     if (![store saveReminder:reminder commit:YES error:&error]) return failure(error.localizedDescription);
-    return @{ @"identifier": reminder.calendarItemIdentifier };
+    return snapshot(reminder);
 }
 
 char *inote_reminders_call(const char *request) {

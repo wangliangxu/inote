@@ -359,7 +359,7 @@ export function App() {
   const [llmSettings, setLlmSettings] =
     useState<LlmProviderSettings>(defaultLlmSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const { config: reminderConfig, error: reminderError } = useReminderSync(vaultRoot.trim(), settingsLoaded);
+  const { config: reminderConfig, error: reminderError, conflicts: reminderConflicts } = useReminderSync(vaultRoot.trim(), settingsLoaded);
   const [startupMigrationPath, setStartupMigrationPath] = useState("");
   const [editorPaintReady, setEditorPaintReady] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>(
@@ -2641,7 +2641,7 @@ export function App() {
         </span>
         <span>{notes.length} notes</span>
         <span>{status}</span>
-        {reminderError && <button type="button" className="text-error" title={reminderError} onClick={() => setSettingsOpen(true)}>{t('reminders.syncFailed')}</button>}
+        {(reminderError || reminderConflicts.length > 0) && <button type="button" className="text-error" title={reminderError || t('reminders.conflictHint')} onClick={() => setSettingsOpen(true)}>{t('reminders.syncFailed')}</button>}
         <span>{activeNote ? activeNote.path : "No note"}</span>
         <span>
           {activeNote

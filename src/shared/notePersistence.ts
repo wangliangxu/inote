@@ -35,7 +35,15 @@ export function acknowledgeSave(current: Note[], submitted: Note, saved: Note): 
   return current.map((note) => {
     if (note.path !== submitted.path) return note
     if (editableRevision(note) === editableRevision(submitted)) return { ...saved, isDirty: false }
-    return { ...note, path: saved.path, sourceRevision: saved.sourceRevision, isDirty: true }
+    const taskChangedDuringSave = saved.due !== submitted.due || saved.status !== submitted.status
+    return {
+      ...note, path: saved.path,
+      // Keep newer system values for fields the user did not edit while saving.
+      due: note.due === submitted.due ? saved.due : note.due,
+      status: note.status === submitted.status ? saved.status : note.status,
+      sourceRevision: note.rawMarkdown !== undefined && taskChangedDuringSave ? note.sourceRevision : saved.sourceRevision,
+      isDirty: true,
+    }
   })
 }
 

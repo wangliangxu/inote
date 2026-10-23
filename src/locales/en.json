@@ -168,7 +168,7 @@
   },
   "reminders": {
     "title": "macOS Reminders",
-    "description": "Sync tasks with due dates to the selected list for system notifications. Only saved notes sync; changes in Reminders do not sync back yet.",
+    "description": "Sync tasks with due dates to the selected list. Date and completion changes in Reminders sync back to saved notes.",
     "macOnly": "Available in the macOS desktop app only.",
     "enabled": "Sync enabled",
     "disabled": "Sync disabled",
@@ -190,6 +190,14 @@
     "1_day": "One day before",
     "none": "Do not sync this task",
     "saveHint": "Takes effect after saving. Date-only tasks notify at 09:00.",
-    "enableHint": "Enable macOS Reminders sync in Settings. Save the note to apply changes."
+    "enableHint": "Enable macOS Reminders sync in Settings. Save the note to apply changes.",
+    "conflictHint": "Both sides changed the same field. Choose which side to keep for conflicting fields; other changes will still merge.",
+    "localVersion": "iNote",
+    "remoteVersion": "Apple Reminders",
+    "keepLocal": "Keep iNote changes",
+    "useRemote": "Use system changes",
+    "noDate": "No due date",
+    "addTime": "Add a time",
+    "dateOnly": "Date only"
   }
 }

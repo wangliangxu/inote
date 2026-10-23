@@ -8,6 +8,7 @@ pub mod markdown;
 pub mod markdown_paths;
 pub mod menu;
 pub mod persistence;
+mod reminder_markdown;
 pub mod reminders;
 pub mod settings;
 pub mod sse;
@@ -21,6 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
             use tauri::Manager;
+            reminders::install_change_observer(app.handle().clone());
             if let Ok(db_path) = crate::commands::settings_db_path(app.handle()) {
                 if let Ok(store) = crate::settings::UserSettingsStore::open(&db_path) {
                     if let Ok(settings) = store.load() {
@@ -79,6 +81,7 @@ pub fn run() {
             reminders::connect_reminders,
             reminders::configure_reminders,
             reminders::sync_reminders,
+            reminders::resolve_reminder_conflict,
             reminders::sync_note_reminder,
             commands::scan_vault,
             commands::rebuild_search_index,

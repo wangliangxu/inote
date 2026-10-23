@@ -1,21 +1,27 @@
 // @vitest-environment jsdom
-import { cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   config: { supported: true, enabled: true, calendarId: 'list' },
   load: vi.fn(async () => undefined), sync: vi.fn(async () => undefined),
+  listen: vi.fn(), unlisten: vi.fn(), callback: undefined as undefined | (() => void),
+  conflicts: [] as unknown[],
 }))
+vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }))
 vi.mock('./reminders', () => ({
   subscribeReminders: () => () => undefined,
   getReminderSettingsSnapshot: () => mocks.config,
   getReminderError: () => '',
+  getReminderConflicts: () => mocks.conflicts,
   loadReminderSettings: mocks.load,
   syncReminders: mocks.sync,
 }))
 import { useReminderSync } from './useReminderSync'
 
-beforeEach(() => { vi.clearAllMocks(); mocks.config = { supported: true, enabled: true, calendarId: 'list' } })
-afterEach(cleanup)
+beforeEach(() => {
+  mocks.listen.mockImplementation(async (_event: string, callback: () => void) => { mocks.callback = callback; return mocks.unlisten })
+  vi.clearAllMocks(); mocks.config = { supported: true, enabled: true, calendarId: 'list' } })
+afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('automatic reminder reconciliation', () => {
   it('waits for workspace restoration and syncs only when the vault changes', () => {
@@ -41,4 +47,29 @@ describe('automatic reminder reconciliation', () => {
     rerender()
     expect(mocks.sync).not.toHaveBeenCalled()
   })
+  it('debounces system notifications and stops listening after unmount', async () => {
+    vi.useFakeTimers()
+    const { unmount } = renderHook(() => useReminderSync('/notes'))
+    await act(async () => { await Promise.resolve() })
+    expect(mocks.listen).toHaveBeenCalledWith('reminders://changed', expect.any(Function))
+    act(() => { mocks.callback?.(); mocks.callback?.() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.sync).toHaveBeenCalledTimes(2)
+    unmount()
+    await act(async () => { await Promise.resolve() })
+    expect(mocks.unlisten).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('checks again on focus and periodically after missed system events', async () => {
+    vi.useFakeTimers()
+    const { unmount } = renderHook(() => useReminderSync('/notes'))
+    await act(async () => { await Promise.resolve() })
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(mocks.sync).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(mocks.sync).toHaveBeenCalledTimes(3)
+    unmount()
+  })
+
 })

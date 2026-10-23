@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke, isTauri: () => true, Channel: class {} }))
 import { commitNote, deleteNote, refreshVaultPaths, undoAgentChange } from '../../shared/api'
-import { getReminderError, syncReminders } from './reminders'
+import { getReminderConflicts, getReminderError, resolveReminderConflict, syncReminders } from './reminders'
 
 beforeEach(() => { invoke.mockReset() })
 
@@ -59,4 +59,21 @@ describe('reminder sync after persistence', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'sync_note_reminder', { vaultRoot: '/undo', oldPath: 'created.md', path: null })
     expect(invoke).toHaveBeenNthCalledWith(3, 'sync_note_reminder', { vaultRoot: '/undo', oldPath: 'after.md', path: 'before.md' })
   })
+  it('returns the latest system-merged note version to the save acknowledgement', async () => {
+    const saved = { path: 'task.md', due: '2030-01-01', sourceRevision: 'before-pull' }
+    const merged = { ...saved, due: '2030-02-02', status: 'done', sourceRevision: 'after-pull' }
+    invoke.mockResolvedValueOnce(saved).mockResolvedValueOnce({ updated: 1, errors: [], notes: [merged] })
+    expect(await commitNote({ vaultRoot: '/pull', path: 'task.md', content: 'body' })).toBe(merged)
+  })
+  it('keeps reported conflicts until resolved and uses the displayed versions as preconditions', async () => {
+    const conflict = { path: 'task.md', fields: ['due'], localRevision: 'revision', local: { due: '2030-01-01', completed: false }, remote: { identifier: 'system', due: '2030-02-02', completed: false, modifiedAt: 1 } }
+    invoke.mockResolvedValueOnce({ updated: 0, errors: [], conflicts: [conflict] })
+    await syncReminders('/conflict')
+    expect(getReminderConflicts('/conflict')).toEqual([conflict])
+    invoke.mockResolvedValueOnce({ updated: 1, errors: [], conflicts: [] })
+    await resolveReminderConflict('/conflict', conflict, 'remote')
+    expect(invoke).toHaveBeenLastCalledWith('resolve_reminder_conflict', { vaultRoot: '/conflict', resolution: { conflict, choice: 'remote' } })
+    expect(getReminderConflicts('/conflict')).toEqual([])
+  })
+
 })

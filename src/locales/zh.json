@@ -168,7 +168,7 @@
   },
   "reminders": {
     "title": "macOS 提醒事项",
-    "description": "将有截止时间的任务同步到所选清单，由系统发送到期通知。仅同步已保存的笔记；系统端的修改暂不回写。",
+    "description": "有截止时间的任务同步到所选清单；系统端修改日期或完成状态会回写已保存的笔记。",
     "macOnly": "此功能仅在 macOS 桌面版中可用。",
     "enabled": "同步已开启",
     "disabled": "同步未开启",
@@ -190,6 +190,14 @@
     "1_day": "提前一天",
     "none": "不同步此任务",
     "saveHint": "保存笔记后生效；仅日期的任务在当天 09:00 提醒。",
-    "enableHint": "请在设置中开启 macOS 提醒事项同步；保存笔记后生效。"
+    "enableHint": "请在设置中开启 macOS 提醒事项同步；保存笔记后生效。",
+    "conflictHint": "两边修改了同一个字段。请选择该字段采用哪一边的修改；其他改动仍会合并。",
+    "localVersion": "iNote",
+    "remoteVersion": "系统提醒事项",
+    "keepLocal": "保留 iNote 修改",
+    "useRemote": "采用系统修改",
+    "noDate": "无截止日期",
+    "addTime": "添加具体时间",
+    "dateOnly": "仅设置日期"
   }
 }

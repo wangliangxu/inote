@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReminderConflict } from './reminders'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
-  state: { config: { supported: true, enabled: false, calendarId: '' }, error: '' },
-  connect: vi.fn(), configure: vi.fn(), sync: vi.fn(),
+  state: { config: { supported: true, enabled: false, calendarId: '' }, error: '', conflicts: [] as ReminderConflict[] },
+  connect: vi.fn(), configure: vi.fn(), sync: vi.fn(), resolve: vi.fn(),
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('./useReminderSync', () => ({ useReminderSync: () => mocks.state }))
-vi.mock('./reminders', () => ({ connectReminders: mocks.connect, configureReminders: mocks.configure, syncReminders: mocks.sync }))
+vi.mock('./reminders', () => ({ connectReminders: mocks.connect, configureReminders: mocks.configure, syncReminders: mocks.sync, resolveReminderConflict: mocks.resolve }))
 import { RemindersSettings } from './RemindersSettings'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.state = { config: { supported: true, enabled: false, calendarId: '' }, error: '' }
+  mocks.state = { config: { supported: true, enabled: false, calendarId: '' }, error: '', conflicts: [] }
 })
 afterEach(cleanup)
 
@@ -37,7 +38,7 @@ describe('Reminders connection settings', () => {
     expect((screen.getByRole('button', { name: 'reminders.connect' }) as HTMLButtonElement).disabled).toBe(false)
   })
   it('shows sync failures separately and provides retry and disable actions', async () => {
-    mocks.state = { config: { supported: true, enabled: true, calendarId: 'list' }, error: 'List removed' }
+    mocks.state = { config: { supported: true, enabled: true, calendarId: 'list' }, error: 'List removed', conflicts: [] }
     mocks.configure.mockResolvedValue({ supported: true, enabled: false, calendarId: 'list' })
     render(<RemindersSettings vaultRoot="/notes" />)
     expect(screen.getByRole('alert').textContent).toBe('List removed')
@@ -46,6 +47,17 @@ describe('Reminders connection settings', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'reminders.disable' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'reminders.disable' }))
     await waitFor(() => expect(mocks.configure).toHaveBeenCalledWith(false, 'list'))
+  })
+  it.each(['local', 'remote'] as const)('shows both conflicting values and resolves with the chosen %s version', async (choice) => {
+    const conflict: ReminderConflict = { path: 'task.md', fields: ['due'], localRevision: 'revision', local: { due: '2030-01-01', completed: false }, remote: { identifier: 'system', due: '2030-02-02', completed: true, modifiedAt: 1 } }
+    mocks.state = { config: { supported: true, enabled: true, calendarId: 'list' }, error: '', conflicts: [conflict] }
+    mocks.resolve.mockResolvedValue(undefined)
+    render(<RemindersSettings vaultRoot="/notes" />)
+    expect(screen.getByText('task.md')).toBeTruthy()
+    expect(screen.getByText(/2030-01-01/)).toBeTruthy()
+    expect(screen.getByText(/2030-02-02/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: choice === 'local' ? 'reminders.keepLocal' : 'reminders.useRemote' }))
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith('/notes', conflict, choice))
   })
   it('does not offer native actions on unsupported platforms', () => {
     mocks.state.config.supported = false
