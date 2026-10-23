@@ -50,6 +50,7 @@ import { withLatestFrom } from '@mdxeditor/gurx'
 import '@mdxeditor/editor/style.css'
 import { EditorView } from '@codemirror/view'
 import { installTableCellBackspaceGuard } from './tableCellBackspacePlugin'
+import { getCodeMirrorCspExtensions } from './codeMirrorCsp'
 
 interface EditorProps {
   vaultRoot?: string
@@ -938,6 +939,8 @@ export function Editor({
     return () => observer.disconnect()
   }, [])
 
+  const codeMirrorExtensions = useMemo(() => getCodeMirrorCspExtensions(), [])
+
   const plugins = useMemo(() => [
     headingsPlugin(),
     listsPlugin(),
@@ -970,10 +973,11 @@ export function Editor({
       }
     }),
     codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
-    codeMirrorPlugin({ 
+    codeMirrorPlugin({
+      codeMirrorExtensions,
       codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript (React)', css: 'CSS', txt: 'Text', markdown: 'Markdown', json: 'JSON', html: 'HTML', python: 'Python', bash: 'Bash' } 
     }),
-    diffSourcePlugin({ viewMode: savedViewMode as any, diffMarkdown: diffBaseline }),
+    diffSourcePlugin({ viewMode: savedViewMode as any, diffMarkdown: diffBaseline, codeMirrorExtensions }),
     toolbarPlugin({
       toolbarContents: () => (
         <DiffSourceToggleWrapper>
@@ -990,7 +994,7 @@ export function Editor({
       )
     }),
     realmTrackerPlugin()
-  ], [note.path, vaultRoot, isDark, diffBaseline, realmTrackerPlugin])
+  ], [note.path, vaultRoot, isDark, diffBaseline, realmTrackerPlugin, codeMirrorExtensions])
 
   return (
     <article className="editor">
