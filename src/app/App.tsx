@@ -1,3 +1,4 @@
+import { useReminderSync } from '../features/todo/useReminderSync';
 import {
   lazy,
   memo,
@@ -358,6 +359,7 @@ export function App() {
   const [llmSettings, setLlmSettings] =
     useState<LlmProviderSettings>(defaultLlmSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const { config: reminderConfig, error: reminderError } = useReminderSync(vaultRoot.trim(), settingsLoaded);
   const [startupMigrationPath, setStartupMigrationPath] = useState("");
   const [editorPaintReady, setEditorPaintReady] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference>(
@@ -1432,6 +1434,16 @@ export function App() {
     );
   }
 
+  function updateActiveNoteReminder(reminder: string) {
+    if (!activeNote) return;
+    setNotes((current) => current.map((note) => note.path === activeNote.path ? {
+      ...note,
+      frontmatter: { ...note.frontmatter, reminder },
+      updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+      isDirty: true,
+    } : note));
+  }
+
   function updateActiveNoteStatus(status: string) {
     if (!activeNote) return;
     setNotes((current) =>
@@ -2432,6 +2444,8 @@ export function App() {
                 onUpdateCreatedAt={updateActiveNoteCreatedAt}
                 onUpdateUpdatedAt={updateActiveNoteUpdatedAt}
                 onUpdateDue={updateActiveNoteDue}
+                remindersEnabled={reminderConfig.enabled && reminderConfig.supported}
+                onUpdateReminder={updateActiveNoteReminder}
                 onUpdateStatus={updateActiveNoteStatus}
                 onUpdatePriority={updateActiveNotePriority}
                 onUpdateProject={updateActiveNoteProject}
@@ -2496,6 +2510,7 @@ export function App() {
             <Suspense fallback={<div className="empty">Loading settings…</div>}>
               <SettingsPanel
                 vaultRoot={vaultPathInput}
+                reminderVaultRoot={vaultRoot.trim()}
                 status={status}
                 llmSettings={llmSettings}
                 themePreference={themePreference}
@@ -2626,6 +2641,7 @@ export function App() {
         </span>
         <span>{notes.length} notes</span>
         <span>{status}</span>
+        {reminderError && <button type="button" className="text-error" title={reminderError} onClick={() => setSettingsOpen(true)}>{t('reminders.syncFailed')}</button>}
         <span>{activeNote ? activeNote.path : "No note"}</span>
         <span>
           {activeNote

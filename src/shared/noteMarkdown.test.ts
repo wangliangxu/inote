@@ -23,6 +23,14 @@ describe('Markdown frontmatter round trips', () => {
     expect(saved).toContain('# Keep this comment')
     expect(second.body).toBe('正文\n')
   })
+  it('persists reminder timing with custom frontmatter and detects timing-only changes', () => {
+    const parsed = parseMarkdownWithFrontmatter('---\ntitle: Task\nreminder: at_due\ncustom: keep\n---\nBody')
+    const original = { ...demoNotes[0], ...parsed.metadata, body: parsed.body }
+    const changed = { ...original, frontmatter: { ...original.frontmatter, reminder: '10_minutes' } }
+    const roundTrip = parseMarkdownWithFrontmatter(noteToMarkdown(changed))
+    expect(roundTrip.metadata.frontmatter).toEqual({ reminder: '10_minutes', custom: 'keep' })
+    expect(hasNoteChanges(original, roundTrip)).toBe(true)
+  })
   it('handles CRLF and an exact closing delimiter without consuming similar body text', () => {
     const parsed = parseMarkdownWithFrontmatter('---\r\ntitle: Test\r\n---\r\n\r\n---body\r\n')
     expect(parsed.metadata.title).toBe('Test')

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>iNote 将您选择的待办任务同步到提醒事项，以便在截止时间发送系统通知。</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>iNote 将您选择的待办任务同步到提醒事项，以便在截止时间发送系统通知。</string>
+</dict>
+</plist>

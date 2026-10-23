@@ -104,7 +104,15 @@
     "goToday": "回到今天",
     "notesCount": "{{count}} 篇笔记",
     "noNotesThisDay": "这一天没有笔记",
-    "weekdays": ["一", "二", "三", "四", "五", "六", "日"]
+    "weekdays": [
+      "一",
+      "二",
+      "三",
+      "四",
+      "五",
+      "六",
+      "日"
+    ]
   },
   "search": {
     "title": "搜索",
@@ -157,5 +165,31 @@
     "words": "词",
     "toc": "目录",
     "toggleNumbering": "切换编号"
+  },
+  "reminders": {
+    "title": "macOS 提醒事项",
+    "description": "将有截止时间的任务同步到所选清单，由系统发送到期通知。仅同步已保存的笔记；系统端的修改暂不回写。",
+    "macOnly": "此功能仅在 macOS 桌面版中可用。",
+    "enabled": "同步已开启",
+    "disabled": "同步未开启",
+    "disableHint": "关闭后停止同步，已创建的系统提醒会保留。",
+    "connect": "授权并加载清单",
+    "syncNow": "立即同步 / 重试",
+    "disable": "关闭同步",
+    "list": "目标提醒事项清单",
+    "enable": "开启同步",
+    "saveList": "保存目标清单",
+    "openVault": "请先打开本地笔记库。",
+    "working": "正在处理…",
+    "noLists": "没有可写入的清单，请先在系统「提醒事项」中创建一个清单，再重新加载。",
+    "syncFinished": "同步检查已完成。",
+    "syncFailed": "提醒事项同步失败 · 查看",
+    "timing": "系统提醒",
+    "at_due": "到期时提醒",
+    "10_minutes": "提前 10 分钟",
+    "1_day": "提前一天",
+    "none": "不同步此任务",
+    "saveHint": "保存笔记后生效；仅日期的任务在当天 09:00 提醒。",
+    "enableHint": "请在设置中开启 macOS 提醒事项同步；保存笔记后生效。"
   }
 }

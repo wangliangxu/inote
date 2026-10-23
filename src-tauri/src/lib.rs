@@ -8,6 +8,7 @@ pub mod markdown;
 pub mod markdown_paths;
 pub mod menu;
 pub mod persistence;
+pub mod reminders;
 pub mod settings;
 pub mod sse;
 pub mod vault;
@@ -74,6 +75,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            reminders::get_reminders_settings,
+            reminders::connect_reminders,
+            reminders::configure_reminders,
+            reminders::sync_reminders,
+            reminders::sync_note_reminder,
             commands::scan_vault,
             commands::rebuild_search_index,
             commands::scan_vault_and_rebuild_index,

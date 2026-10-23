@@ -65,6 +65,16 @@ npm run tauri build
 ```
 The compiled binaries will be available in the `src-tauri/target/release` directory.
 
+## macOS due-date reminders
+
+In the desktop app, open **Settings → General → macOS Reminders**, authorize access, select a writable list, and enable sync. You can create an `iNote` list in Apple Reminders first. If access is denied, allow iNote in **System Settings → Privacy & Security → Reminders** and connect again.
+
+Set a note's due date and system reminder in its metadata panel, then save. Options include at due time (the default), 10 minutes before, one day before, and excluding the task from sync. Date-only tasks notify at 09:00 local time. Past notification times are not replayed. Notification presentation and sounds follow macOS Reminders settings.
+
+Titles, due dates, priorities, and completion sync to the same system reminder, including after renaming or moving a note. Cancelling, deleting, archiving, clearing the due date, or excluding a task removes its reminder. Startup, vault/list changes, and enabling sync reconcile saved disk tasks; external Markdown changes also sync. Use **Sync now / retry** after resolving access, list, or temporary failures. Sync errors are shown separately and never reject a successful note save.
+
+This is **one-way sync from iNote to Reminders**, with one task per note; inline checkboxes are not separate tasks. Historical completed tasks are not imported on first sync. Disabling sync leaves existing system reminders and their notifications in place. System identifiers live in the local app-data `reminders.sqlite3`; Markdown stores only the portable `reminder` frontmatter (`at_due`, `10_minutes`, `1_day`, `none`). Other platforms can edit this metadata without invoking Apple Reminders.
+
 ## Validation and benchmarks
 
 ```bash

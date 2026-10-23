@@ -104,7 +104,15 @@
     "goToday": "Go to today",
     "notesCount": "{{count}} notes",
     "noNotesThisDay": "No notes on this day",
-    "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    "weekdays": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ]
   },
   "search": {
     "title": "Search",
@@ -157,5 +165,31 @@
     "words": "words",
     "toc": "Table of Contents",
     "toggleNumbering": "Toggle Numbering"
+  },
+  "reminders": {
+    "title": "macOS Reminders",
+    "description": "Sync tasks with due dates to the selected list for system notifications. Only saved notes sync; changes in Reminders do not sync back yet.",
+    "macOnly": "Available in the macOS desktop app only.",
+    "enabled": "Sync enabled",
+    "disabled": "Sync disabled",
+    "disableHint": "Disabling stops sync. Reminders already created will remain.",
+    "connect": "Authorize and load lists",
+    "syncNow": "Sync now / retry",
+    "disable": "Disable sync",
+    "list": "Reminders list",
+    "enable": "Enable sync",
+    "saveList": "Save target list",
+    "openVault": "Open a local vault first.",
+    "working": "Working…",
+    "noLists": "No writable lists found. Create a list in Apple Reminders, then load lists again.",
+    "syncFinished": "Sync check completed.",
+    "syncFailed": "Reminders sync failed · View",
+    "timing": "System reminder",
+    "at_due": "At due time",
+    "10_minutes": "10 minutes before",
+    "1_day": "One day before",
+    "none": "Do not sync this task",
+    "saveHint": "Takes effect after saving. Date-only tasks notify at 09:00.",
+    "enableHint": "Enable macOS Reminders sync in Settings. Save the note to apply changes."
   }
 }

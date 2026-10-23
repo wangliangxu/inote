@@ -1,3 +1,4 @@
+import { RemindersSettings } from '../todo/RemindersSettings'
 import { useState } from 'react'
 import { Settings, Palette, Bot, X } from 'lucide-react'
 import type { CategoryGroup, LlmProviderSettings } from '../../shared/types'
@@ -9,6 +10,7 @@ import { useEffect } from 'react'
 
 interface SettingsPanelProps {
   vaultRoot: string
+  reminderVaultRoot?: string
   status: string
   llmSettings: LlmProviderSettings
   themePreference: ThemePreference
@@ -42,6 +44,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({
   vaultRoot,
+  reminderVaultRoot = vaultRoot,
   status,
   llmSettings,
   themePreference,
@@ -188,6 +191,7 @@ export function SettingsPanel({
                 />
                 <span className="label-text">{t('settings.autoSaveOnExit')}</span>
               </label>
+              <RemindersSettings vaultRoot={reminderVaultRoot} />
               <div className="action-row flex flex-wrap gap-2">
                 <button className="secondary-action btn btn-outline btn-sm" type="button" onClick={onOpenVault}>
                   {t('settings.openVault')}

@@ -1,4 +1,5 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
+import { syncCommittedReminder } from '../features/todo/reminders'
 import type {
   AgentConversation,
   AgentMessage,
@@ -37,11 +38,16 @@ export interface NoteCommitInput extends WriteNoteInput {
 }
 
 export async function commitNote(input: NoteCommitInput): Promise<Note> {
-  return invoke<Note>('commit_note', { input })
+  const saved = await invoke<Note>('commit_note', { input })
+  await syncCommittedReminder(input.vaultRoot, input.path, saved.path)
+  return saved
 }
 
 export async function undoAgentChange(vaultRoot: string, notePath: string): Promise<{ restored: Note | null; removedPath: string | null; activePath: string }> {
-  return invoke('undo_agent_change', { vaultRoot, notePath })
+  const result = await invoke<{ restored: Note | null; removedPath: string | null; activePath: string }>('undo_agent_change', { vaultRoot, notePath })
+  if (result.removedPath) await syncCommittedReminder(vaultRoot, result.removedPath, null)
+  if (result.restored) await syncCommittedReminder(vaultRoot, notePath, result.restored.path)
+  return result
 }
 
 export async function loadNoteDrafts(vaultRoot: string): Promise<Note[]> {
@@ -185,7 +191,10 @@ export async function scanVaultAndRebuildIndex(vaultRoot: string): Promise<Note[
 }
 
 export async function refreshVaultPaths(vaultRoot: string, paths: string[]): Promise<VaultDelta> {
-  return invoke<VaultDelta>('refresh_vault_paths', { vaultRoot, paths })
+  const delta = await invoke<VaultDelta>('refresh_vault_paths', { vaultRoot, paths })
+  for (const note of delta.notes) await syncCommittedReminder(vaultRoot, note.path, note.path)
+  for (const path of delta.removedPaths) await syncCommittedReminder(vaultRoot, path, null)
+  return delta
 }
 
 export async function loadIndexedVault(vaultRoot: string): Promise<Note[] | null> {
@@ -221,7 +230,9 @@ export async function initializeVault(vaultRoot: string): Promise<Note[]> {
 }
 
 export async function writeNote(input: WriteNoteInput): Promise<Note> {
-  return invoke<Note>('write_note', { input })
+  const saved = await invoke<Note>('write_note', { input })
+  await syncCommittedReminder(input.vaultRoot, input.path, saved.path)
+  return saved
 }
 
 export async function saveNoteImage(input: SaveNoteImageInput): Promise<string> {
@@ -257,15 +268,20 @@ export async function createInboxNote(vaultRoot: string, title: string): Promise
 }
 
 export async function moveNote(input: MoveNoteInput): Promise<Note> {
-  return invoke<Note>('move_note', { input })
+  const saved = await invoke<Note>('move_note', { input })
+  await syncCommittedReminder(input.vaultRoot, input.from, saved.path)
+  return saved
 }
 
 export async function archiveNote(input: ArchiveNoteInput): Promise<Note> {
-  return invoke<Note>('archive_note', { input })
+  const saved = await invoke<Note>('archive_note', { input })
+  await syncCommittedReminder(input.vaultRoot, input.from, saved.path)
+  return saved
 }
 
 export async function deleteNote(vaultRoot: string, path: string): Promise<void> {
-  return invoke<void>('delete_note', { vaultRoot, path })
+  await invoke<void>('delete_note', { vaultRoot, path })
+  await syncCommittedReminder(vaultRoot, path, null)
 }
 
 export async function emptyTrash(vaultRoot: string): Promise<void> {

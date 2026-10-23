@@ -1,3 +1,4 @@
+import { reminderTimings } from '../todo/reminders'
 import { useMemo, useState, useEffect, useRef, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Note, SaveState, NoteLinks } from '../../shared/types'
@@ -67,6 +68,8 @@ interface EditorProps {
   onUpdateCreatedAt?: (date: string) => void
   onUpdateUpdatedAt?: (date: string) => void
   onUpdateDue?: (date: string) => void
+  remindersEnabled?: boolean
+  onUpdateReminder?: (timing: string) => void
   onUpdateStatus?: (status: string) => void
   onUpdatePriority?: (priority: string) => void
   onUpdateProject?: (project: string) => void
@@ -122,6 +125,8 @@ export function Editor({
   onUpdateCreatedAt,
   onUpdateUpdatedAt,
   onUpdateDue,
+  remindersEnabled = false,
+  onUpdateReminder,
   onUpdateStatus,
   onUpdatePriority,
   onUpdateProject,
@@ -1177,6 +1182,13 @@ export function Editor({
               <label className="metadata-editor">
                 <span>{t('editor.due')}</span>
                 <input type="datetime-local" value={note.due || ''} onChange={(event) => onUpdateDue?.(event.target.value)} />
+              </label>
+              <label className="metadata-editor reminder-metadata">
+                <span>{t('reminders.timing')}</span>
+                <select value={typeof note.frontmatter?.reminder === 'string' ? note.frontmatter.reminder : 'at_due'} onChange={(event) => onUpdateReminder?.(event.target.value)}>
+                  {reminderTimings.map((timing) => <option key={timing} value={timing}>{t(`reminders.${timing}`)}</option>)}
+                </select>
+                <small>{t(remindersEnabled ? 'reminders.saveHint' : 'reminders.enableHint')}</small>
               </label>
               <label className="metadata-editor">
                 <span>{t('editor.status')}</span>
