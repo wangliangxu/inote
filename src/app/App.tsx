@@ -48,6 +48,8 @@ import { useVaultSync } from "./useVaultSync";
 import { prepareWorkspaceClose } from "./closeWorkspace";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { useIndexedSearch } from "./useIndexedSearch";
+import { HighlightedText, SearchMatchMetadata } from "../features/search/HighlightedText";
+import { excerptAroundMatch } from "../features/search/searchHighlight";
 import { acknowledgeSave, mergeDiskNotes, createSerialQueue } from "../shared/notePersistence";
 import { newNotePath, noteSavePath } from "../shared/notePaths";
 const NoteAgent = lazy(() =>
@@ -154,7 +156,15 @@ const defaultLlmSettings: LlmProviderSettings = {
 
 const excerptCache = new WeakMap<Note | SearchResult, string>();
 
-function noteExcerpt(note: Note | SearchResult): string {
+function noteExcerpt(note: Note | SearchResult, query = ""): string {
+  if (query.trim()) {
+    for (const value of [note.excerpt, note.summary, "body" in note ? note.body : ""]) {
+      if (!value) continue;
+      const text = stripMarkdownForSummary(value.replace(/```[^\n]*\n?/g, ""));
+      const excerpt = excerptAroundMatch(text, query);
+      if (excerpt !== null) return excerpt;
+    }
+  }
   const cached = excerptCache.get(note);
   if (cached !== undefined) return cached;
   const excerpt = note.excerpt ?? note.summary ??
@@ -173,12 +183,14 @@ interface NoteItemProps {
   note: Note | SearchResult;
   isActive: boolean;
   onSelect: (path: string) => void;
+  searchQuery: string;
 }
 
 const NoteCardItem = memo(function NoteCardItem({
   note,
   isActive,
   onSelect,
+  searchQuery,
 }: NoteItemProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -198,7 +210,7 @@ const NoteCardItem = memo(function NoteCardItem({
         <div className="card-body h-full p-0 gap-2">
           <div className="flex items-start justify-between gap-2">
             <strong className="text-sm font-bold leading-tight flex-1">
-              {note.title}
+              <HighlightedText text={note.title} query={searchQuery} />
             </strong>
             {"priority" in note &&
               note.priority &&
@@ -210,8 +222,9 @@ const NoteCardItem = memo(function NoteCardItem({
               )}
           </div>
           <small className="text-xs text-base-content/60 leading-relaxed">
-            {noteExcerpt(note)}
+            <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
           </small>
+          <SearchMatchMetadata note={note} query={searchQuery} />
           <div className="note-card-footer flex items-center justify-between text-[10px] text-base-content/40 mt-auto font-mono">
             <time>{note.updatedAt || note.createdAt}</time>
             {"due" in note && note.due && (
@@ -234,6 +247,7 @@ const NoteRowItem = memo(function NoteRowItem({
   note,
   isActive,
   onSelect,
+  searchQuery,
 }: NoteItemProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -254,7 +268,7 @@ const NoteRowItem = memo(function NoteRowItem({
           <strong
             className={`text-sm font-semibold truncate min-w-0 max-w-full ${isActive ? "text-primary" : "text-base-content"}`}
           >
-            {note.title}
+            <HighlightedText text={note.title} query={searchQuery} />
           </strong>
           {"priority" in note && note.priority && note.priority !== "none" && (
             <Flag
@@ -265,8 +279,9 @@ const NoteRowItem = memo(function NoteRowItem({
         </div>
         <div className="flex flex-col items-start w-full mt-0.5 gap-1">
           <small className="text-xs text-base-content/50 break-words whitespace-normal line-clamp-2 w-full text-left">
-            {noteExcerpt(note)}
+            <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
           </small>
+          <SearchMatchMetadata note={note} query={searchQuery} />
           <div className="flex items-center justify-end gap-2 w-full shrink-0">
             {"due" in note && note.due && (
               <span
@@ -2358,6 +2373,7 @@ export function App() {
                         note={note}
                         isActive={note.path === activePath}
                         onSelect={setActivePath}
+                        searchQuery={activeView === "search" ? query : ""}
                       />
                     ) : (
                       <NoteRowItem
@@ -2365,6 +2381,7 @@ export function App() {
                         note={note}
                         isActive={note.path === activePath}
                         onSelect={setActivePath}
+                        searchQuery={activeView === "search" ? query : ""}
                       />
                     ),
                   )}
@@ -2430,6 +2447,7 @@ export function App() {
                 key={activeNote.path}
                 vaultRoot={vaultRoot.trim()}
                 note={activeNote}
+                searchQuery={activeView === "search" ? query : ""}
                 onChange={updateActiveNote}
                 onSave={saveActiveNote}
                 onRename={renameActiveNote}

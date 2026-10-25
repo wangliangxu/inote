@@ -1,5 +1,7 @@
 import type { Note, SearchResult } from '../../shared/types'
 import { useTranslation } from 'react-i18next'
+import { HighlightedText, SearchMatchMetadata } from './HighlightedText'
+import { excerptAroundMatch } from './searchHighlight'
 
 interface SearchPanelProps {
   query: string
@@ -27,11 +29,12 @@ export function SearchPanel({ query, notes, onQueryChange, onSelectNote, backend
         {notes.map((note) => (
           <button className="result-item" key={note.path} onClick={() => onSelectNote(note.path)}>
             <span className="note-row-top">
-              <strong>{note.title}</strong>
+              <strong><HighlightedText text={note.title} query={query} /></strong>
               <time>{note.updatedAt}</time>
             </span>
-            <p>{'excerpt' in note ? note.excerpt : note.summary ?? note.body.slice(0, 140)}</p>
-            <span>{note.category}</span>
+            <p><HighlightedText text={excerptAroundMatch(note.excerpt ?? note.summary ?? ('body' in note ? note.body : ''), query) ?? note.excerpt ?? note.summary ?? ('body' in note ? note.body.slice(0, 140) : '')} query={query} /></p>
+            <span><HighlightedText text={note.category} query={query} /></span>
+            <SearchMatchMetadata note={note} query={query} />
           </button>
         ))}
       </div>

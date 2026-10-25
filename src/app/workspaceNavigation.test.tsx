@@ -55,6 +55,28 @@ describe('workspace view navigation', () => {
   })
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
+  it.each(['Card view', 'Summary view'])('highlights matching titles and body context in %s', async (mode) => {
+    await openWorkspace()
+    fireEvent.click(screen.getByRole('button', { name: mode }))
+    const input = screen.getByRole('textbox', { name: 'app.searchPlaceholder' })
+    fireEvent.change(input, { target: { value: 'Tauri' } })
+    const result = screen.getByRole('button', { name: /Tauri Architecture Notes/ })
+    expect(result.querySelector('strong mark')?.textContent).toBe('Tauri')
+    fireEvent.change(input, { target: { value: 'vault' } })
+    const bodyResult = screen.getByRole('button', { name: /Tauri Architecture Notes/ })
+    expect(bodyResult.querySelector('small mark')?.textContent).toBe('vault')
+    fireEvent.click(screen.getByRole('button', { name: 'app.clearSearch' }))
+    expect(document.querySelector('.note-list mark')).toBeNull()
+  })
+
+  it('shows highlighted matching tags when the title and summary do not match', async () => {
+    await openWorkspace()
+    fireEvent.change(screen.getByRole('textbox', { name: 'app.searchPlaceholder' }), { target: { value: '#desk' } })
+    const result = screen.getByRole('button', { name: /Tauri Architecture Notes/ })
+    expect(result.querySelector('.search-match-metadata')?.textContent).toContain('#desktop')
+    expect(result.querySelector('.search-match-metadata mark')?.textContent).toBe('desk')
+  })
+
   it('returns to all notes and the original selection on repeated Todo toggles', async () => {
     await openWorkspace()
     for (let cycle = 0; cycle < 2; cycle += 1) {

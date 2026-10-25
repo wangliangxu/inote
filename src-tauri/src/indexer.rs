@@ -765,7 +765,7 @@ impl NoteIndex {
             .prepare(
                 "
                 SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.summary,
-                       COALESCE(snippet(search_index, 2, '[', ']', ' ... ', 18), substr(search_index.body, 1, 180)) AS excerpt
+                       COALESCE(snippet(search_index, 2, '', '', ' ... ', 18), substr(search_index.body, 1, 180)) AS excerpt
                 FROM search_index
                 JOIN notes n ON n.path = search_index.path
                 WHERE search_index MATCH ?1
@@ -796,7 +796,9 @@ impl NoteIndex {
             .prepare(
                 "
                 SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.summary,
-                       substr(search_index.body, 1, 180) AS excerpt
+                       substr(search_index.body,
+                              max(1, instr(lower(search_index.body), lower(?2)) - 24),
+                              max(180, length(?2) + 24)) AS excerpt
                 FROM search_index
                 JOIN notes n ON n.path = search_index.path
                 WHERE n.title LIKE ?1 ESCAPE '\\'
@@ -811,7 +813,7 @@ impl NoteIndex {
             .map_err(|error| format!("failed to prepare fallback search: {error}"))?;
 
         let fallback_rows = fallback
-            .query_map(params![like_query], |row| self.search_row(row))
+            .query_map(params![like_query, clean_query], |row| self.search_row(row))
             .map_err(|error| format!("failed to run fallback search: {error}"))?;
 
         for row in fallback_rows.flatten() {
@@ -1356,6 +1358,27 @@ mod tests {
         assert_eq!(by_body[0].path, "knowledge/ai/城市网络大模型.md");
         assert_eq!(by_tag[0].path, "knowledge/ai/城市网络大模型.md");
         assert_eq!(by_summary[0].path, "knowledge/ai/城市网络大模型.md");
+    }
+
+    #[test]
+    fn search_excerpts_preserve_brackets_and_include_deep_substring_matches() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        let body = format!(
+            "# Example\n\n[rust] is useful.\n\n{}前缀中文搜索后缀。",
+            "普通内容。".repeat(100)
+        );
+        vault.write_note("example.md", &body).unwrap();
+        let index = NoteIndex::open(dir.path().join(".inote/index.sqlite3")).unwrap();
+        index
+            .full_rebuild(vault.root(), &vault.scan().unwrap())
+            .unwrap();
+
+        let fts_results = index.search("rust").unwrap();
+        assert!(fts_results[0].excerpt.contains("[rust]"));
+        assert!(!fts_results[0].excerpt.contains("[[rust]]"));
+        let substring_results = index.search("中文搜索").unwrap();
+        assert!(substring_results[0].excerpt.contains("前缀中文搜索后缀"));
     }
 
     #[test]

@@ -51,10 +51,13 @@ import '@mdxeditor/editor/style.css'
 import { EditorView } from '@codemirror/view'
 import { installTableCellBackspaceGuard } from './tableCellBackspacePlugin'
 import { getCodeMirrorCspExtensions } from './codeMirrorCsp'
+import { installSearchHighlights } from './searchHighlights'
+import { HighlightedText } from '../search/HighlightedText'
 
 interface EditorProps {
   vaultRoot?: string
   note: Note
+  searchQuery?: string
   onChange: (body: string) => void
   onSave?: () => void
   onCheckExternal?: () => void
@@ -113,6 +116,7 @@ const TagsInput = memo(function TagsInput({ tags, onChange }: { tags: string[], 
 export function Editor({
   vaultRoot = '',
   note,
+  searchQuery = '',
   onChange,
   onSave,
   onCheckExternal,
@@ -138,6 +142,11 @@ export function Editor({
   const { t } = useTranslation()
   const editorRef = useRef<MDXEditorMethods>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!editorWrapperRef.current || !searchQuery.trim()) return
+    return installSearchHighlights(editorWrapperRef.current, searchQuery)
+  }, [searchQuery, note.path])
+
   const isInternalChangeRef = useRef(false)
   const pendingBlockTypeSelectionRef = useRef<RichTextSelectionSnapshot | null>(null)
 
@@ -1001,7 +1010,7 @@ export function Editor({
       <header className="editor-header">
         <div className="editor-title-row">
           <div>
-            <h2>{note.title}</h2>
+            <h2><HighlightedText text={note.title} query={searchQuery} /></h2>
           </div>
           <div className="editor-actions">
             <button className={`secondary-action icon-action ${tocPanelOpen ? 'active' : ''}`} type="button" onClick={() => setTocPanelOpen(!tocPanelOpen)} title={t('editor.toc') || 'Table of Contents'}>
@@ -1043,11 +1052,11 @@ export function Editor({
         </div>
         <div className="metadata">
           <span className={`save-state ${saveState}`}>{saveLabel}</span>
-          <span>{note.category}</span>
+          <span><HighlightedText text={note.category} query={searchQuery} /></span>
           <span>{note.createdAt}</span>
           <span>{note.wordCount} {t('editor.words')}</span>
           {note.tags.map((tag) => (
-            <span key={tag}>#{tag}</span>
+            <span key={tag}>#<HighlightedText text={tag} query={searchQuery} /></span>
           ))}
         </div>
       </header>
