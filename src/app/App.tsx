@@ -2454,7 +2454,7 @@ export function App() {
                 onMove={moveActiveNotePrompt}
                 onCheckExternal={checkExternalActiveNote}
                 onDelete={deleteActiveNote}
-                previewMode={previewMode || isSaving}
+                previewMode={previewMode}
                 onTogglePreview={() => setPreviewMode((current) => !current)}
                 saveState={saveState}
                 noteLinks={noteLinks}
