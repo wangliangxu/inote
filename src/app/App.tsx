@@ -24,6 +24,7 @@ import {
   FilePlus2,
   Flag,
   LayoutGrid,
+  Network,
   List,
   ListTodo,
   PanelLeft,
@@ -40,7 +41,10 @@ const CalendarView = lazy(() =>
     default: m.CalendarView,
   })),
 );
-const Editor = lazy(() => import("../features/editor/Editor").then((module) => ({ default: module.Editor })));
+const Editor = lazy(() => import("../features/mindmap/MindMapEditor").then((module) => ({ default: module.Editor })));
+import { MINDMAP_KEY, withMindMap } from "../features/mindmap/mindmap";
+import type { MapCreation } from "../features/mindmap/MindMapDialog";
+const MindMapDialog = lazy(() => import("../features/mindmap/MindMapDialog").then(m => ({ default: m.MindMapDialog })));
 import { FeatureBoundary } from "./FeatureBoundary";
 import { buildAgentNoteCommit } from "../features/agent/agentNoteCommit";
 import { useNoteWorkspace } from "./useNoteWorkspace";
@@ -353,6 +357,7 @@ export function App() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(268);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(336);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mindMapTarget, setMindMapTarget] = useState<{ root: string; category: string } | null>(null);
   const [showTodayNoteButton, setShowTodayNoteButton] = useState(false);
   const [lockUpdateTime, setLockUpdateTime] = useState(false);
   const [autoSaveOnExit, setAutoSaveOnExit] = useState(false);
@@ -1814,6 +1819,28 @@ export function App() {
     }
   }
 
+  async function createMindMapNote(item: MapCreation) {
+    const target = mindMapTarget;
+    if (!target?.root || vaultRef.current.trim() !== target.root) throw new Error(t("mindmap.openVault"));
+    const saved = await saveQueueRef.current(async () => {
+      if (vaultRef.current.trim() !== target.root) throw new Error(t("mindmap.openVault"));
+      // Imported root text may be a paragraph; keep filenames within filesystem limits.
+      const fileTitle = Array.from(item.title.split(/\r?\n/)[0]).slice(0, 60).join("");
+      const path = newNotePath(fileTitle, target.category, notesRef.current.map(note => note.path));
+      const date = localDateString();
+      const note: Note = withMindMap({ path, title: item.title, category: target.category, tags: [], createdAt: date, updatedAt: date, body: "", wordCount: 0 }, item.map);
+      return commitNote({ vaultRoot: target.root, path, create: true, content: noteToMarkdown(note) });
+    });
+    if (vaultRef.current.trim() !== target.root) return;
+    setNotes(current => [saved, ...current.filter(note => note.path !== saved.path)]);
+    setActivePath(saved.path);
+    setActiveCategory(saved.category);
+    setActiveView("category");
+    setLinkVersion(version => version + 1);
+    setSaveError(false);
+    setStatus(t("mindmap.created", { path: saved.path }));
+  }
+
   async function createAgentNote(result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) {
     const before = activeNoteRef.current;
     const root = vaultRef.current.trim();
@@ -2133,6 +2160,11 @@ export function App() {
             aria-label={t("app.createNote")}
           >
             <Pencil size={18} className="text-accent" />
+          </button>
+
+          <button className="btn btn-ghost btn-sm btn-square" type="button" title={t("mindmap.title")} aria-label={t("mindmap.title")}
+            onClick={() => setMindMapTarget({ root: vaultRoot.trim(), category: activeView === "category" ? activeCategory : activeView === "search" && selectedSearchCategories.length === 1 ? selectedSearchCategories[0] : defaultCategory || "knowledge" })}>
+            <Network size={18} className="text-accent" />
           </button>
 
           {showTodayNoteButton ? (
@@ -2492,7 +2524,7 @@ export function App() {
         <aside
           className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightSidebarVisible ? "border-l" : "invisible opacity-0 border-none"}`}
         >
-          {rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false ? (
+          {rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false && activeNote.frontmatter?.[MINDMAP_KEY] !== undefined ? <div className="p-5 text-sm text-base-content/60">{t("mindmap.agentHint")}</div> : rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false ? (
             <FeatureBoundary resetKey={activeNote.path}>
               <Suspense
                 fallback={<div className="empty">Loading note agent...</div>}
@@ -2511,6 +2543,8 @@ export function App() {
           ) : null}
         </aside>
       </div>
+
+      {mindMapTarget && <Suspense fallback={null}><MindMapDialog onClose={() => setMindMapTarget(null)} onCreate={createMindMapNote} canCreate={!!mindMapTarget.root && mindMapTarget.root === vaultRoot.trim()} /></Suspense>}
 
       {settingsOpen ? (
         <div

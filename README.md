@@ -65,6 +65,10 @@ npm run tauri build
 ```
 The compiled binaries will be available in the `src-tauri/target/release` directory.
 
+## Mind maps
+
+Use the mind map button in the title bar to create editable maps, switch to an outline, and batch import FreeMind, OPML or iNote mind map JSON. Edit node notes, links and hierarchy; fold branches, undo changes and export backups. For MindNode files, export as FreeMind or OPML first. See the [mind map guide (Chinese)](docs/mindmaps.md).
+
 ## macOS due-date reminders
 
 In the desktop app, open **Settings → General → macOS Reminders**, authorize access, select a writable list, and enable sync. You can create an `iNote` list in Apple Reminders first. If access is denied, allow iNote in **System Settings → Privacy & Security → Reminders** and connect again.

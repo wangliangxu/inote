@@ -1,6 +1,6 @@
 [package]
 name = "inote"
-version = "0.10.2"
+version = "0.11.0"
 description = "Local-first Markdown knowledge base"
 authors = ["iNote contributors"]
 edition = "2021"

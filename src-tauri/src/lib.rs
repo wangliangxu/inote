@@ -7,6 +7,7 @@ pub mod llm;
 pub mod markdown;
 pub mod markdown_paths;
 pub mod menu;
+pub mod mindmap_files;
 pub mod persistence;
 mod reminder_markdown;
 pub mod reminders;
@@ -83,6 +84,8 @@ pub fn run() {
             reminders::sync_reminders,
             reminders::resolve_reminder_conflict,
             reminders::sync_note_reminder,
+            mindmap_files::pick_mindmap_files,
+            mindmap_files::export_mindmap_file,
             commands::scan_vault,
             commands::rebuild_search_index,
             commands::scan_vault_and_rebuild_index,

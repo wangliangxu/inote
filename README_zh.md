@@ -65,6 +65,10 @@ npm run tauri build
 ```
 编译完成的二进制文件将保存在 `src-tauri/target/release` 目录中。
 
+## 思维导图
+
+点击标题栏的思维导图按钮，可新建可编辑导图、切换大纲，并批量导入 FreeMind、OPML 和 iNote 导图 JSON。支持节点备注、链接、层级调整、折叠、撤销及导出。MindNode 文件请先导出为 FreeMind 或 OPML。详情见 [思维导图使用说明](docs/mindmaps.md)。
+
 ## macOS 到期提醒
 
 在桌面版「设置 → 常规 → macOS 提醒事项」中点击「授权并加载清单」，允许系统权限，选择可写入的清单后开启同步。可先在系统「提醒事项」中创建一个 `iNote` 清单。授权失败时可在「系统设置 → 隐私与安全性 → 提醒事项」中允许 iNote，然后重新连接。
