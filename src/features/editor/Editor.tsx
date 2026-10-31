@@ -6,7 +6,7 @@ import { noteToMarkdown, parseMarkdownWithFrontmatter, setSetting, checkFileExis
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
-import { normalizeMarkdownBody, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
+import { normalizeMarkdownBody, preserveMarkdownTrailingWhitespace, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
 import { orderedListStartPlugin } from './orderedListStartPlugin'
 import { captureRichTextSelection, restoreRichTextSelection, type RichTextSelectionSnapshot } from './richTextSelection'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
@@ -41,6 +41,8 @@ import {
   codeMirrorPlugin,
   InsertCodeBlock,
   viewMode$,
+  markdown$,
+  muteChange$,
   rootEditor$,
   activeEditor$,
   convertSelectionToNode$,
@@ -285,22 +287,27 @@ export function Editor({
     return frontmatter + normalizeMarkdownBody(body)
   }, [note])
 
-  // MDXEditor trims its initial input and can publish the same Markdown again
-  // when CodeMirror only changes selection or focus. Compare with the editor's
-  // baseline, keeping the note's original body (including trailing blank lines).
-  const lastEditorMarkdownRef = useRef({ path: note.path, markdown: normalizedMarkdown.trim() })
+  const lastEditorMarkdownRef = useRef({ path: note.path, markdown: normalizedMarkdown })
+  const sourceEditRef = useRef<{ markdown: string } | null>(null)
+  const restoreEditorWhitespaceRef = useRef<(() => void) | null>(null)
   if (lastEditorMarkdownRef.current.path !== note.path) {
-    lastEditorMarkdownRef.current = { path: note.path, markdown: normalizedMarkdown.trim() }
+    lastEditorMarkdownRef.current = { path: note.path, markdown: normalizedMarkdown }
+    sourceEditRef.current = null
     isInternalChangeRef.current = false
   }
 
   const handleEditorChange = useCallback((body: string, initialMarkdownNormalize: boolean) => {
     const previous = lastEditorMarkdownRef.current.markdown
-    lastEditorMarkdownRef.current.markdown = body
-    // Initial serialization is a display update, never a user edit.
-    if (initialMarkdownNormalize || body === previous) return
+    const sourceEdit = sourceEditRef.current?.markdown === body
+    if (sourceEdit) sourceEditRef.current = null
+    // Source/diff editors also publish focus, selection and programmatic updates.
+    // Only document edits may replace the original trailing whitespace.
+    if (!initialMarkdownNormalize && currentViewModeRef.current !== 'rich-text' && !sourceEdit) return
+    const markdown = sourceEdit ? body : preserveMarkdownTrailingWhitespace(body, previous)
+    lastEditorMarkdownRef.current.markdown = markdown
+    if (initialMarkdownNormalize || markdown === previous) return
     isInternalChangeRef.current = true
-    onChange(body)
+    onChange(markdown)
   }, [onChange])
 
   const [savedViewMode] = useState<'rich-text' | 'diff' | 'source'>(() => {
@@ -630,7 +637,28 @@ export function Editor({
   const realmTrackerPlugin = useMemo(() => realmPlugin({
     init: (realm) => {
       realmRef.current = realm
+      const path = lastEditorMarkdownRef.current.path
+      // The core exporter trims even when trim={false}. Restore its Markdown
+      // cell as well as our onChange output, so source/diff panes retain EOF
+      // whitespace. Defer until the export has finished and mute this repair.
+      const restoreWhitespace = () => {
+        const exported = realm.getValue(markdown$)
+        queueMicrotask(() => {
+          if (realmRef.current !== realm || !editorWrapperRef.current?.isConnected) return
+          if (lastEditorMarkdownRef.current.path !== path) return
+          if (realm.getValue(markdown$) !== exported) return
+          const restored = preserveMarkdownTrailingWhitespace(exported, lastEditorMarkdownRef.current.markdown)
+          if (restored === exported) return
+          const muted = realm.getValue(muteChange$)
+          realm.pub(muteChange$, true)
+          try { realm.pub(markdown$, restored) }
+          finally { realm.pub(muteChange$, muted) }
+        })
+      }
+      restoreEditorWhitespaceRef.current = restoreWhitespace
+      realm.sub(markdown$, restoreWhitespace)
       realm.sub(viewMode$, (mode: string) => {
+        restoreWhitespace()
         const oldMode = currentViewModeRef.current
         
         // --- Save Cursor Context ---
@@ -922,8 +950,9 @@ export function Editor({
         normalizeMarkdownBody(currentBody) !== normalizeMarkdownBody(newBody)
 
       if (changed) {
-        lastEditorMarkdownRef.current.markdown = normalizedMarkdown.trim()
+        lastEditorMarkdownRef.current.markdown = normalizedMarkdown
         editorRef.current.setMarkdown(normalizedMarkdown)
+        restoreEditorWhitespaceRef.current?.()
       }
     }
   }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.priority, note.project, normalizedMarkdown])
@@ -962,7 +991,18 @@ export function Editor({
     return () => observer.disconnect()
   }, [])
 
-  const codeMirrorExtensions = useMemo(() => getCodeMirrorCspExtensions(), [])
+  const codeMirrorExtensions = useMemo(() => [
+    ...getCodeMirrorCspExtensions(),
+    EditorView.updateListener.of((update) => {
+      if (!update.docChanged || update.state.readOnly) return
+      if (!update.view.dom.closest('.mdxeditor-source-editor, .mdxeditor-diff-editor')) return
+      const edit = { markdown: update.state.doc.toString() }
+      sourceEditRef.current = edit
+      queueMicrotask(() => {
+        if (sourceEditRef.current === edit) sourceEditRef.current = null
+      })
+    }),
+  ], [])
 
   const plugins = useMemo(() => [
     headingsPlugin(),
@@ -1081,6 +1121,7 @@ export function Editor({
             key={note.path} // Force re-mount on note change so internal state resets
             className={`mdx-editor-main ${isDark ? 'dark-theme dark-editor' : ''}`}
             markdown={normalizedMarkdown}
+            trim={false}
             onChange={handleEditorChange}
             readOnly={previewMode}
             contentEditableClassName="prose max-w-none"

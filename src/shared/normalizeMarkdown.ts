@@ -135,8 +135,8 @@ export function normalizeMarkdownBody(body: string): string {
 
     // mdast-util-to-markdown always appends a trailing newline;
     // but the original body might have multiple trailing newlines (e.g. empty paragraphs).
-    // Preserve the original trailing newlines, defaulting to a single newline.
-    const trailingNewlines = body.match(/\n*$/)?.[0] || '\n'
+    // Preserve the exact ending, including the absence of a final newline.
+    const trailingNewlines = body.match(/(?:\r?\n)*$/)?.[0] ?? ''
     result = result.replace(/\n+$/, trailingNewlines)
 
     return result
@@ -145,6 +145,12 @@ export function normalizeMarkdownBody(body: string): string {
     // so the editor can still attempt to render it.
     return body
   }
+}
+
+/** Restore the whitespace MDXEditor's rich-text exporter unconditionally trims. */
+export function preserveMarkdownTrailingWhitespace(markdown: string, reference: string): string {
+  const ending = reference.match(/[ \t\r\n]*$/)?.[0] ?? ''
+  return markdown.replace(/[ \t\r\n]*$/, ending)
 }
 
 /**
