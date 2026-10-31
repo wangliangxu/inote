@@ -3453,6 +3453,11 @@ button {
   overflow-y: auto;
 }
 
+/* Like a command-line diff, matching documents produce an empty result. */
+.mdxeditor-diff-editor:has(.cm-editor[data-inote-diff-empty="true"]) .cm-mergeView {
+  display: none;
+}
+
 /* === MDXEditor Dark Mode Overrides === */
 :root:is([data-theme="dark"], [data-theme="business"], [data-theme="dracula"], [data-theme="dim"]) .mdx-editor-wrapper,
 body.dark-theme .mdxeditor-toolbar {

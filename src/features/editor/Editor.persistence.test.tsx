@@ -196,4 +196,30 @@ describe('viewing notes without editing', () => {
     })
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('shows an empty diff when unchanged, shows edits, and becomes empty again after saving', async () => {
+    localStorage.setItem('mdxeditor-view-mode', 'diff')
+    const save = vi.fn()
+    const editor = render(<Workspace original={{ ...demoNotes[0], body: 'Original content\n\n', isDirty: false }} onSave={save} />)
+    const diffIsEmpty = () => editor.container.querySelectorAll('.mdxeditor-diff-editor [data-inote-diff-empty="true"]').length === 2
+    await waitFor(() => expect(diffIsEmpty()).toBe(true))
+    expect(editor.container.querySelector('.mdxeditor-diff-editor')?.matches(':has([data-inote-diff-empty="true"])')).toBe(true)
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+
+    const sources = editor.container.querySelectorAll('.cm-content')
+    const view = EditorView.findFromDOM(sources[sources.length - 1])!
+    const from = view.state.doc.toString().indexOf('Original content')
+    act(() => view.dispatch({ changes: { from, to: from + 'Original content'.length, insert: 'Edited content' } }))
+    await waitFor(() => expect(diffIsEmpty()).toBe(false))
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Unsaved')
+    expect(editor.container.querySelector('.cm-merge-b')?.textContent).toContain('Edited content')
+
+    fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
+    await waitFor(() => expect(diffIsEmpty()).toBe(true))
+    expect(parseMarkdownWithFrontmatter(save.mock.lastCall![0]).body).toBe('Edited content\n\n')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+    fireEvent.click(editor.getByRole('radio', { name: 'Source mode' }))
+    await waitFor(() => expect(editor.container.querySelector('.mdxeditor-source-editor .cm-content')).toBeTruthy())
+    expect(editor.container.querySelector('.mdxeditor-source-editor .cm-content')?.textContent).toContain('Edited content')
+  })
 })

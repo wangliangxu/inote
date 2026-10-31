@@ -53,6 +53,7 @@ import '@mdxeditor/editor/style.css'
 import { EditorView } from '@codemirror/view'
 import { installTableCellBackspaceGuard } from './tableCellBackspacePlugin'
 import { getCodeMirrorCspExtensions } from './codeMirrorCsp'
+import { diffOnlyExtension } from './diffOnly'
 import { installSearchHighlights } from './searchHighlights'
 import { HighlightedText } from '../search/HighlightedText'
 
@@ -928,6 +929,7 @@ export function Editor({
   }, [saveState, normalizedMarkdown])
 
   useEffect(() => {
+    if (saveState === 'saving') return
     if (isInternalChangeRef.current) {
       isInternalChangeRef.current = false
       return
@@ -940,6 +942,8 @@ export function Editor({
       
       const changed = 
         currentMeta.title !== newMeta.title ||
+        currentMeta.createdAt !== newMeta.createdAt ||
+        currentMeta.updatedAt !== newMeta.updatedAt ||
         currentMeta.category !== newMeta.category ||
         (currentMeta.tags || []).join(',') !== (newMeta.tags || []).join(',') ||
         currentMeta.summary !== newMeta.summary ||
@@ -955,7 +959,7 @@ export function Editor({
         restoreEditorWhitespaceRef.current?.()
       }
     }
-  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.priority, note.project, normalizedMarkdown])
+  }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.priority, note.project, normalizedMarkdown, saveState])
 
   const saveLabel = {
     loading: 'Loading',
@@ -993,6 +997,7 @@ export function Editor({
 
   const codeMirrorExtensions = useMemo(() => [
     ...getCodeMirrorCspExtensions(),
+    diffOnlyExtension,
     EditorView.updateListener.of((update) => {
       if (!update.docChanged || update.state.readOnly) return
       if (!update.view.dom.closest('.mdxeditor-source-editor, .mdxeditor-diff-editor')) return
