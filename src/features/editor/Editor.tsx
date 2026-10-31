@@ -150,11 +150,6 @@ export function Editor({
   const isInternalChangeRef = useRef(false)
   const pendingBlockTypeSelectionRef = useRef<RichTextSelectionSnapshot | null>(null)
 
-  const handleEditorChange = useCallback((body: string) => {
-    isInternalChangeRef.current = true
-    onChange(body)
-  }, [onChange])
-
   const getEditorContainer = useCallback(() => {
     return editorWrapperRef.current?.querySelector('.mdx-editor-main') ?? null
   }, [])
@@ -289,6 +284,24 @@ export function Editor({
     const [, frontmatter, body] = match
     return frontmatter + normalizeMarkdownBody(body)
   }, [note])
+
+  // MDXEditor trims its initial input and can publish the same Markdown again
+  // when CodeMirror only changes selection or focus. Compare with the editor's
+  // baseline, keeping the note's original body (including trailing blank lines).
+  const lastEditorMarkdownRef = useRef({ path: note.path, markdown: normalizedMarkdown.trim() })
+  if (lastEditorMarkdownRef.current.path !== note.path) {
+    lastEditorMarkdownRef.current = { path: note.path, markdown: normalizedMarkdown.trim() }
+    isInternalChangeRef.current = false
+  }
+
+  const handleEditorChange = useCallback((body: string, initialMarkdownNormalize: boolean) => {
+    const previous = lastEditorMarkdownRef.current.markdown
+    lastEditorMarkdownRef.current.markdown = body
+    // Initial serialization is a display update, never a user edit.
+    if (initialMarkdownNormalize || body === previous) return
+    isInternalChangeRef.current = true
+    onChange(body)
+  }, [onChange])
 
   const [savedViewMode] = useState<'rich-text' | 'diff' | 'source'>(() => {
     if (typeof localStorage !== 'undefined') {
@@ -909,6 +922,7 @@ export function Editor({
         normalizeMarkdownBody(currentBody) !== normalizeMarkdownBody(newBody)
 
       if (changed) {
+        lastEditorMarkdownRef.current.markdown = normalizedMarkdown.trim()
         editorRef.current.setMarkdown(normalizedMarkdown)
       }
     }
