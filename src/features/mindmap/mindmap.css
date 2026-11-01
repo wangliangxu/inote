@@ -159,6 +159,10 @@
   background: var(--bg-panel);
   overscroll-behavior: contain;
 }
+/* A quiet canvas keeps the colored branches and white central topic distinct. */
+.mindmap-canvas:has(.mindmap-forest.map) {
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--text-main));
+}
 .mindmap-forest {
   position: relative;
   padding: 48px;
@@ -198,25 +202,26 @@
 .mindmap-topic {
   position: relative;
   text-align: left;
-  min-width: 110px;
-  max-width: 320px;
+  min-width: 32px;
+  max-width: 240px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   cursor: pointer;
   color: inherit;
   background: transparent;
 }
-.map .mindmap-topic {
+.mindmap-forest.map .mindmap-topic {
   border: 0;
   border-radius: 5px 5px 0 0;
-  padding: 3px 10px 6px;
-  font-size: 18px;
+  padding: 2px 8px 5px;
+  font-size: 16px;
   font-weight: 400;
-  line-height: 1.45;
-  letter-spacing: 0.01em;
+  line-height: 1.4;
+  letter-spacing: normal;
+  color: var(--text-secondary);
   transition: background-color 120ms ease;
 }
-.map .mindmap-topic::after {
+.mindmap-forest.map .mindmap-topic::after {
   content: '';
   position: absolute;
   left: 0;
@@ -226,22 +231,26 @@
   border-radius: 4px;
   background: var(--branch-color);
 }
-.map .mindmap-topic.root-topic {
-  border: 3px solid var(--branch-color);
-  border-radius: 12px;
-  min-width: 180px;
-  max-width: 300px;
-  padding: 15px 20px;
-  font-size: 20px;
-  font-weight: 600;
+.mindmap-forest.map .mindmap-topic.root-topic {
+  border: 0;
+  border-radius: 9px;
+  min-width: 120px;
+  max-width: 260px;
+  padding: 12px 16px;
+  font-size: 18px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--text-main) 85%, var(--bg-panel));
   background: var(--bg-panel);
 }
-.map .mindmap-topic.root-topic::after {
+.mindmap-forest.map .mindmap-topic.root-topic::after {
   display: none;
 }
-.map .mindmap-topic.selected,
-.map .mindmap-topic:hover {
+.mindmap-forest.map .mindmap-topic.selected,
+.mindmap-forest.map .mindmap-topic:hover {
   background: color-mix(in srgb, var(--branch-color) 9%, var(--bg-panel));
+}
+.mindmap-forest.map .mindmap-topic.root-topic:is(.selected, :hover) {
+  background: var(--bg-panel);
 }
 .mindmap-topic:focus-visible {
   outline: 2px solid var(--branch-color);
@@ -289,7 +298,7 @@
   cursor: pointer;
   background: var(--bg-panel);
 }
-.map .mindmap-fold {
+.mindmap-forest.map .mindmap-fold {
   position: absolute;
   left: calc(100% + 9px);
   top: calc(100% - 1.5px);
@@ -297,12 +306,12 @@
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.map .root-branch > .mindmap-topic-row > .mindmap-fold {
+.mindmap-forest.map .root-branch > .mindmap-topic-row > .mindmap-fold {
   top: 50%;
 }
-.map .mindmap-topic-row:hover .mindmap-fold,
-.map .mindmap-topic-row:focus-within .mindmap-fold,
-.map .mindmap-fold.is-collapsed {
+.mindmap-forest.map .mindmap-topic-row:hover .mindmap-fold,
+.mindmap-forest.map .mindmap-topic-row:focus-within .mindmap-fold,
+.mindmap-forest.map .mindmap-fold.is-collapsed {
   opacity: 1;
 }
 .mindmap-note-mark {
@@ -312,12 +321,12 @@
 .mindmap-children {
   display: flex;
   flex-direction: column;
-  padding-left: 90px;
-  gap: 12px;
+  padding-left: 44px;
+  gap: 6px;
 }
-.map .root-branch > .mindmap-children {
-  padding-left: 110px;
-  gap: 12px;
+.mindmap-forest.map .root-branch > .mindmap-children {
+  padding-left: 72px;
+  gap: 10px;
 }
 .outline .mindmap-branch {
   display: block;
@@ -395,6 +404,10 @@
 .mindmap-create-form label {
   flex: 1;
   min-width: 0;
+}
+/* Override the global button text inheritance with the theme's primary contrast color. */
+.mindmap-dialog .btn-primary:not(:disabled) {
+  color: var(--color-primary-content);
 }
 .mindmap-dialog .modal-box {
   display: flex;

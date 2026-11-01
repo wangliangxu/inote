@@ -61,7 +61,7 @@ describe('measured mind map connectors', () => {
     }
     const rendered = render(<MindMapCanvas {...props} />)
     const initial = rendered.container.querySelector('path')!.getAttribute('d')
-    expect(initial).toMatch(/^M 238 150 C .*, 350 78.5$/)
+    expect(initial).toMatch(/^M 238 78.5 C .*, 350 78.5$/)
     scale = 0.5
     rendered.rerender(<MindMapCanvas {...props} zoom={0.5} />)
     expect(rendered.container.querySelector('path')!.getAttribute('d')).toBe(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   branchCurves,
+  centerMapTopics,
   BRANCH_COLORS,
   fitMapZoom,
   unscaledRect,
@@ -58,6 +59,25 @@ describe('mind map branch layout', () => {
     expect(curves[0].d).toMatch(/^M 238 195 C .*, 350 83.5$/)
     expect(curves[1].d).toMatch(/^M 590 83.5 C .*, 680 103.5$/)
     expect(curves[0].color).toBe(curves[1].color)
+  })
+  it('centers parent connection points recursively between unequal multiline child labels without drift', () => {
+    const topics = visibleMapTopics(map)
+    const rectangles = new Map<string, TopicRect>([
+      ['root', { left: 0, top: 100, width: 160, height: 48 }],
+      ['a', { left: 230, top: 40, width: 120, height: 60 }],
+      ['a1', { left: 400, top: 10, width: 200, height: 80 }],
+      ['b', { left: 230, top: 150, width: 120, height: 30 }],
+    ])
+    const original = JSON.stringify([...rectangles])
+    const centered = centerMapTopics(topics, rectangles)
+    const underline = (id: string) => centered.get(id)!.top + centered.get(id)!.height - 1.5
+    expect(underline('a')).toBe(underline('a1'))
+    expect(centered.get('root')!.top + 24).toBe((underline('a') + underline('b')) / 2)
+    expect(JSON.stringify([...rectangles])).toBe(original)
+    expect(centerMapTopics(topics, centered)).toEqual(centered)
+    const folded = structuredClone(map)
+    folded.roots[0].collapsed = true
+    expect(centerMapTopics(visibleMapTopics(folded), rectangles)).toEqual(rectangles)
   })
   it('uses the same connector geometry at different zooms and canvas offsets', () => {
     const actual = { left: 340, top: 120, width: 240, height: 80 },

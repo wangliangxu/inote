@@ -70,6 +70,33 @@ export function unscaledRect(
     height: rect.height / scale,
   }
 }
+/** Align each parent's connection point with the midpoint of its outer child connections. */
+export function centerMapTopics(
+  topics: VisualTopic[],
+  rectangles: Map<string, TopicRect>,
+): Map<string, TopicRect> {
+  const centered = new Map(rectangles)
+  const children = new Map<string, string[]>()
+  for (const topic of topics) {
+    if (!topic.parentId) continue
+    const siblings = children.get(topic.parentId) ?? []
+    siblings.push(topic.id)
+    children.set(topic.parentId, siblings)
+  }
+  // Descendants first: ancestors must use the corrected positions of their children.
+  for (const topic of [...topics].reverse()) {
+    const parent = centered.get(topic.id)
+    const ids = children.get(topic.id)
+    if (!parent?.height || !ids?.length) continue
+    const first = centered.get(ids[0]), last = centered.get(ids[ids.length - 1])
+    if (!first?.height || !last?.height) continue
+    const midpoint = (first.top + first.height - 1.5 + last.top + last.height - 1.5) / 2
+    const anchor = topic.depth === 0 ? parent.height / 2 : parent.height - 1.5
+    if (Number.isFinite(midpoint))
+      centered.set(topic.id, { ...parent, top: midpoint - anchor })
+  }
+  return centered
+}
 export function branchCurves(
   topics: VisualTopic[],
   rectangles: Map<string, TopicRect>,

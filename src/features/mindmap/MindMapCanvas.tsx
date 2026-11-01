@@ -13,6 +13,7 @@ import { HighlightedText } from '../search/HighlightedText'
 import { flattenNodes, type MindMap, type MindNode } from './mindmap'
 import {
   branchCurves,
+  centerMapTopics,
   fitMapZoom,
   unscaledRect,
   visibleMapTopics,
@@ -58,6 +59,7 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
     const forestRef = useRef<HTMLDivElement>(null)
     const treesRef = useRef<HTMLDivElement>(null)
     const buttons = useRef(new Map<string, HTMLElement>())
+    const rows = useRef(new Map<string, HTMLDivElement>())
     const inputRef = useRef<HTMLTextAreaElement>(null)
     type TextEdit = { id: string; text: string }
     const [editing, setEditing] = useState<TextEdit | null>(null)
@@ -127,12 +129,15 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       const canvas = canvasRef.current,
         forest = forestRef.current,
         trees = treesRef.current
+      for (const row of rows.current.values()) row.style.transform = ''
       if (!canvas || !forest || !trees || view !== 'map') {
         setCurves([])
         return
       }
       function measure() {
         if (!forest || !canvas) return
+        // Measure without the previous correction so repeated measurements cannot drift.
+        for (const row of rows.current.values()) row.style.transform = ''
         const origin = forest.getBoundingClientRect()
         const scale =
           forest.offsetWidth > 0 ? origin.width / forest.offsetWidth : zoom
@@ -143,7 +148,14 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
             unscaledRect(button.getBoundingClientRect(), origin, scale),
           ]),
         )
-        const next = branchCurves(topics, rectangles)
+        const centered = centerMapTopics(topics, rectangles)
+        for (const [id, rect] of centered) {
+          const row = rows.current.get(id)
+          const original = rectangles.get(id)
+          if (row && original)
+            row.style.transform = `translateY(${rect.top - original.top}px)`
+        }
+        const next = branchCurves(topics, centered)
         setCurves((current) =>
           JSON.stringify(current) === JSON.stringify(next) ? current : next,
         )
@@ -201,7 +213,13 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
           className={`mindmap-branch ${depth === 0 ? 'root-branch' : ''}`}
           style={{ '--branch-color': colors.get(node.id) } as CSSProperties}
         >
-          <div className="mindmap-topic-row">
+          <div
+            className="mindmap-topic-row"
+            ref={(element) => {
+              if (element) rows.current.set(node.id, element)
+              else rows.current.delete(node.id)
+            }}
+          >
             {activeEdit?.id === node.id ? (
               <div
                 ref={(element) => {
