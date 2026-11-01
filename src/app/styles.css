@@ -3434,6 +3434,42 @@ button {
 }
 
 /* === MDXEditor Layout === */
+.editor-workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Share the toolbar row without moving or remounting the editor's controls. */
+.editor-workspace > .mdx-editor-wrapper,
+.editor-workspace > .mdx-editor-wrapper > .mdx-editor-main {
+  display: grid;
+  grid-area: 1 / 1 / -1 / -1;
+  grid-template-rows: subgrid;
+  grid-template-columns: subgrid;
+  min-height: 0;
+  min-width: 0;
+}
+
+.editor-workspace .mdxeditor-toolbar {
+  grid-area: 1 / 1 / 2 / -1;
+}
+
+.editor-workspace .mdxeditor-diff-source-wrapper {
+  grid-area: 2 / 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.editor-workspace > .context-panel {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
 .mdx-editor-main {
   display: flex;
   flex-direction: column;
@@ -3475,13 +3511,11 @@ button {
 
 .diff-empty-message {
   display: none;
+  grid-area: 2 / 1;
+  align-self: start;
   padding: 48px 24px;
   color: var(--text-muted);
   text-align: center;
-}
-
-.mdx-editor-wrapper:has(.mdxeditor-diff-editor [data-inote-diff-empty="true"]) .mdx-editor-main {
-  flex: 0 0 auto;
 }
 
 .mdx-editor-wrapper:has(.mdxeditor-diff-editor [data-inote-diff-empty="true"]) .diff-empty-message {

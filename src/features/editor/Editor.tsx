@@ -1119,8 +1119,10 @@ export function Editor({
           ))}
         </div>
       </header>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, minWidth: 0 }}>
-        <div ref={editorWrapperRef} className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 'min(180px, 100%)' }}>
+      <div className="editor-workspace" style={{
+        gridTemplateColumns: `minmax(min(180px, 100%), 1fr)${tocPanelOpen ? ` 0 minmax(0, ${tocWidth}px)` : ''}${metadataPanelOpen ? ` 0 minmax(0, ${metadataWidth}px)` : ''}`,
+      }}>
+        <div ref={editorWrapperRef} className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`}>
           <MDXEditor
             ref={editorRef}
             key={note.path} // Force re-mount on note change so internal state resets
@@ -1142,6 +1144,7 @@ export function Editor({
               className="metadata-resizer"
               onMouseDown={handleTocMouseDown}
               style={{
+                gridArea: '2 / 2',
                 width: '5px',
                 cursor: 'col-resize',
                 backgroundColor: 'transparent',
@@ -1156,7 +1159,7 @@ export function Editor({
                 if (!tocDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
               }}
             />
-            <aside className="context-panel" style={{ width: `${tocWidth}px`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <aside className="context-panel editor-toc-panel" style={{ gridArea: '2 / 3', borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ opacity: 0.7, display: 'flex', alignItems: 'center' }}>
@@ -1225,6 +1228,7 @@ export function Editor({
               className="metadata-resizer"
               onMouseDown={handleMetadataMouseDown}
               style={{
+                gridArea: `2 / ${tocPanelOpen ? 4 : 2}`,
                 width: '5px',
                 cursor: 'col-resize',
                 backgroundColor: 'transparent',
@@ -1239,7 +1243,7 @@ export function Editor({
                 if (!metadataDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
               }}
             />
-            <aside className="context-panel" style={{ width: `${metadataWidth}px`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <aside className="context-panel editor-metadata-panel" style={{ gridArea: `2 / ${tocPanelOpen ? 5 : 3}`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">
               <label className="metadata-editor">
                 <span>{t('editor.title')}</span>
