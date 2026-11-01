@@ -82,7 +82,20 @@ export function MindMapWorkspace({
   const [view, setView] = useState<'map' | 'outline'>('map')
   const [selectedId, setSelectedId] = useState(map.roots[0].id)
   const [zoom, setZoom] = useState(1)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [inspectorOpen, setInspectorOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem('inote-mindmap-inspector-open') === 'true'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('inote-mindmap-inspector-open', String(inspectorOpen))
+    } catch {
+      // Keep the panel usable even when browser storage is unavailable.
+    }
+  }, [inspectorOpen])
   const canvasRef = useRef<MindMapCanvasHandle>(null)
   const [past, setPast] = useState<MindMap[]>([])
   const [future, setFuture] = useState<MindMap[]>([])

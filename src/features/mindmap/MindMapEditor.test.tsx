@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../../shared/types'
 import { parseMarkdownWithFrontmatter } from '../../shared/noteMarkdown'
 import { createMindMap, getNoteMindMap, withMindMap } from './mindmap'
@@ -32,7 +32,11 @@ const base: Note = {
   updatedAt: '2026-10-29',
   wordCount: 0,
 }
-afterEach(cleanup)
+beforeEach(() => window.localStorage.clear())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 function Harness({
   onSave = vi.fn(),
   previewMode = false,
@@ -66,6 +70,35 @@ function Harness({
   )
 }
 describe('mind map editor integration', () => {
+  it('defaults to a closed inspector and remembers open and closed choices across maps and remounts', () => {
+    const change = vi.fn()
+    const rendered = render(<Editor note={withMindMap(base, createMindMap('First map'))} onChange={change} />)
+    expect(screen.queryByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'mindmap.nodeDetails' }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
+    expect(screen.getByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeTruthy()
+    rendered.unmount()
+
+    const reopened = render(<Editor note={withMindMap(base, createMindMap('Second map'))} onChange={change} />)
+    expect(screen.getByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'mindmap.nodeDetails' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
+    reopened.unmount()
+
+    render(<Harness />)
+    expect(screen.queryByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeNull()
+    expect(change).not.toHaveBeenCalled()
+  })
+  it('still allows toggling the inspector when preference storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    render(<Harness />)
+    expect(screen.queryByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
+    expect(screen.getByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
+    expect(screen.queryByRole('complementary', { name: 'mindmap.nodeDetails' })).toBeNull()
+  })
   it('edits, saves and reopens the same node data', async () => {
     const save = vi.fn()
     const rendered = render(<Harness onSave={save} />)
@@ -75,6 +108,7 @@ describe('mind map editor integration', () => {
       target: { value: 'Imported knowledge' },
     })
     fireEvent.blur(screen.getByLabelText('mindmap.nodeText'))
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.editNotes' }))
     fireEvent.change(screen.getByLabelText('mindmap.nodeNote'), {
       target: { value: 'Keep this note' },
     })
@@ -95,6 +129,7 @@ describe('mind map editor integration', () => {
   it('saves tag edits immediately without requiring the input to lose focus', () => {
     const save = vi.fn()
     render(<Harness onSave={save} />)
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     const tags = screen.getByLabelText('mindmap.tags')
     fireEvent.change(tags, { target: { value: 'work,' } })
     expect((tags as HTMLInputElement).value).toBe('work,')
@@ -104,6 +139,7 @@ describe('mind map editor integration', () => {
   })
   it('keeps changes across view switches, coalesces typing undo and restores deleted branches', () => {
     render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.addChild' }))
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.newNode' }))
     fireEvent.change(screen.getByLabelText('mindmap.nodeText'), {
@@ -134,7 +170,6 @@ describe('mind map editor integration', () => {
   it('edits node text on the canvas with the inspector hidden, saves immediately and undoes as one edit', () => {
     const save = vi.fn()
     render(<Harness onSave={save} />)
-    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     fireEvent.click(screen.getByRole('button', { name: 'Central topic' }))
     const input = screen.getByRole('textbox', { name: 'mindmap.nodeText' }) as HTMLTextAreaElement
     expect(input.closest('.mindmap-canvas')).toBeTruthy()
@@ -224,14 +259,15 @@ describe('mind map editor integration', () => {
   })
   it('opens the notes command directly into the selected node note field', () => {
     render(<Harness />)
-    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.editNotes' }))
     expect(document.activeElement).toBe(
       screen.getByLabelText('mindmap.nodeNote'),
     )
+    expect(window.localStorage.getItem('inote-mindmap-inspector-open')).toBe('true')
   })
   it('allows undo from toolbar focus while preserving text input undo behavior', () => {
     render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     const add = screen.getByRole('button', { name: 'mindmap.addChild' })
     fireEvent.click(add)
     fireEvent.keyDown(screen.getByLabelText('mindmap.nodeNote'), {
@@ -244,6 +280,7 @@ describe('mind map editor integration', () => {
   })
   it('preserves normal keyboard navigation in toolbar and inspector', () => {
     render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     fireEvent.keyDown(
       screen.getByRole('button', { name: 'mindmap.addChild' }),
       { key: 'Enter' },
@@ -253,6 +290,7 @@ describe('mind map editor integration', () => {
   })
   it('disables editing in preview mode', () => {
     render(<Harness previewMode />)
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
     expect(
       (screen.getByLabelText('mindmap.nodeNote') as HTMLTextAreaElement)
         .disabled,
