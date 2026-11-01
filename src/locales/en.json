@@ -127,6 +127,7 @@
     "emptyFolderDesc": "Click the + button to create your first note here."
   },
   "editor": {
+    "noChanges": "No changes...",
     "titlePlaceholder": "Note title...",
     "bodyPlaceholder": "Start writing...",
     "addProperty": "Add property",

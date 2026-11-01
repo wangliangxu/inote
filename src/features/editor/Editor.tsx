@@ -1119,8 +1119,8 @@ export function Editor({
           ))}
         </div>
       </header>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
-        <div ref={editorWrapperRef} className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, minWidth: 0 }}>
+        <div ref={editorWrapperRef} className={`mdx-editor-wrapper ${isDark ? 'dark-theme dark-editor' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 'min(180px, 100%)' }}>
           <MDXEditor
             ref={editorRef}
             key={note.path} // Force re-mount on note change so internal state resets
@@ -1134,6 +1134,7 @@ export function Editor({
             toMarkdownOptions={EDITOR_TO_MARKDOWN_OPTIONS}
             suppressHtmlProcessing={MDXEDITOR_SUPPRESS_HTML_PROCESSING}
           />
+          <div className="diff-empty-message" role="status">{t('editor.noChanges')}</div>
         </div>
         {tocPanelOpen && (
           <>

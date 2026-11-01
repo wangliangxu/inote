@@ -127,6 +127,7 @@
     "emptyFolderDesc": "点击 + 按钮在此处创建您的第一篇笔记。"
   },
   "editor": {
+    "noChanges": "当前无修改...",
     "titlePlaceholder": "笔记标题...",
     "bodyPlaceholder": "开始写作...",
     "addProperty": "添加属性",

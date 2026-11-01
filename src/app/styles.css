@@ -3439,6 +3439,21 @@ button {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mdx-editor-main .mdxeditor-toolbar {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.mdx-editor-main .mdxeditor-toolbar > * {
+  flex-shrink: 0;
 }
 
 .mdx-editor-main .cm-editor,
@@ -3453,9 +3468,24 @@ button {
   overflow-y: auto;
 }
 
-/* Like a command-line diff, matching documents produce an empty result. */
+/* Matching documents show a message below the diff toolbar. */
 .mdxeditor-diff-editor:has(.cm-editor[data-inote-diff-empty="true"]) .cm-mergeView {
   display: none;
+}
+
+.diff-empty-message {
+  display: none;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mdx-editor-wrapper:has(.mdxeditor-diff-editor [data-inote-diff-empty="true"]) .mdx-editor-main {
+  flex: 0 0 auto;
+}
+
+.mdx-editor-wrapper:has(.mdxeditor-diff-editor [data-inote-diff-empty="true"]) .diff-empty-message {
+  display: block;
 }
 
 /* === MDXEditor Dark Mode Overrides === */
