@@ -9,6 +9,8 @@ pub struct MapFile {
     name: String,
     content: Option<String>,
     error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mindnode: Option<crate::mindnode::MindNodeImport>,
 }
 
 fn read_map_file(path: &std::path::Path) -> MapFile {
@@ -17,14 +19,27 @@ fn read_map_file(path: &std::path::Path) -> MapFile {
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("mindnode"))
+    {
+        return match crate::mindnode::read_mindnode(path) {
+            Ok(mindnode) => MapFile {
+                name,
+                content: None,
+                error: None,
+                mindnode: Some(mindnode),
+            },
+            Err(error) => MapFile {
+                name,
+                content: None,
+                error: Some(error.into()),
+                mindnode: None,
+            },
+        };
+    }
     let result = (|| -> Result<String, &str> {
-        if path
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s.eq_ignore_ascii_case("mindnode"))
-        {
-            return Err("mindnode");
-        }
         let file = std::fs::File::open(path).map_err(|_| "read")?;
         if file.metadata().map_err(|_| "read")?.len() > MAX_FILE_BYTES {
             return Err("limit");
@@ -43,26 +58,34 @@ fn read_map_file(path: &std::path::Path) -> MapFile {
             name,
             content: Some(content),
             error: None,
+            mindnode: None,
         },
         Err(error) => MapFile {
             name,
             content: None,
             error: Some(error.into()),
+            mindnode: None,
         },
     }
 }
 
 #[tauri::command(async)]
-pub fn pick_mindmap_files(app: tauri::AppHandle) -> Result<Vec<MapFile>, String> {
-    let paths = app
-        .dialog()
-        .file()
-        .add_filter(
-            "Mind maps",
-            &["mm", "opml", "inote-mindmap", "json", "mindnode"],
-        )
-        .blocking_pick_files()
-        .unwrap_or_default();
+pub fn pick_mindmap_files(
+    app: tauri::AppHandle,
+    packages: Option<bool>,
+) -> Result<Vec<MapFile>, String> {
+    let paths = if packages.unwrap_or(false) {
+        app.dialog().file().blocking_pick_folders()
+    } else {
+        app.dialog()
+            .file()
+            .add_filter(
+                "Mind maps",
+                &["mm", "opml", "inote-mindmap", "json", "mindnode"],
+            )
+            .blocking_pick_files()
+    }
+    .unwrap_or_default();
     if paths.len() > 100 {
         return Err("batch".into());
     }
@@ -74,6 +97,7 @@ pub fn pick_mindmap_files(app: tauri::AppHandle) -> Result<Vec<MapFile>, String>
                 name: String::new(),
                 content: None,
                 error: Some("read".into()),
+                mindnode: None,
             },
         })
         .collect())
@@ -167,6 +191,21 @@ mod tests {
     }
 
     #[test]
+    fn native_documents_reach_the_import_protocol_as_typed_data() {
+        let directory = tempfile::tempdir().unwrap();
+        let package = directory.path().join("sample.mindnode");
+        std::fs::create_dir(&package).unwrap();
+        let value = plist::to_value(&serde_json::json!({"version":6, "canvas":{"mindMaps":[{"mainNode":{"nodeID":"root", "title":{"text":"<p>课程</p>"}, "subnodes":[]}}]}})).unwrap();
+        value.to_file_binary(package.join("contents.xml")).unwrap();
+        let file = read_map_file(&package);
+        assert!(file.error.is_none());
+        assert!(file.content.is_none());
+        let payload = serde_json::to_value(file).unwrap();
+        assert_eq!(payload["mindnode"]["formatVersion"], 6);
+        assert_eq!(payload["mindnode"]["roots"][0]["text"], "<p>课程</p>");
+    }
+
+    #[test]
     fn reads_unicode_and_reports_invalid_or_large_files() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("map.mm");
@@ -184,7 +223,7 @@ mod tests {
             read_map_file(&dir.path().join("old.mindnode"))
                 .error
                 .as_deref(),
-            Some("mindnode")
+            Some("read")
         );
     }
 }

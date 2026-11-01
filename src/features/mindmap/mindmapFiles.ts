@@ -1,14 +1,17 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { MAX_FILE_BYTES } from './mindmap'
+import { MAX_FILE_BYTES, type NativeMindNodeDocument } from './mindmap'
 export interface MapFile {
   name: string
   content?: string
   error?: string
+  mindnode?: NativeMindNodeDocument
 }
-export async function pickMindMapFiles(): Promise<MapFile[]> {
-  return invoke<MapFile[]>('pick_mindmap_files')
+export async function pickMindMapFiles(packages = false): Promise<MapFile[]> {
+  return invoke<MapFile[]>('pick_mindmap_files', { packages })
 }
 export async function readBrowserMapFile(file: File): Promise<MapFile> {
+  if (/\.mindnode$/i.test(file.name))
+    return { name: file.name, error: 'mindnodeDesktop' }
   if (file.size > MAX_FILE_BYTES) return { name: file.name, error: 'limit' }
   const bytes = await file.arrayBuffer()
   return {

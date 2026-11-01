@@ -5,6 +5,7 @@ import {
   createMindMap,
   flattenNodes,
   importMindMap,
+  importNativeMindNode,
   MindMapError,
   type ImportedMap,
   type MindMap,
@@ -43,7 +44,7 @@ export function MindMapDialog({ onClose, onCreate, canCreate }: Props) {
   const working = useRef(false)
   const message = (code: string) =>
     t(
-      `mindmap.errors.${['invalid', 'limit', 'version', 'mindnode', 'format', 'xml', 'read', 'batch'].includes(code) ? code : 'read'}`,
+      `mindmap.errors.${['invalid', 'limit', 'version', 'mindnode', 'format', 'xml', 'read', 'batch', 'mindnodeVersion', 'mindnodeSchema', 'mindnodeDesktop'].includes(code) ? code : 'read'}`,
     )
   async function load(files: MapFile[]) {
     const next = files.map((file) => {
@@ -51,7 +52,9 @@ export function MindMapDialog({ onClose, onCreate, canCreate }: Props) {
       try {
         return {
           name: file.name,
-          imported: importMindMap(file.name, file.content ?? ''),
+          imported: file.mindnode
+            ? importNativeMindNode(file.name, file.mindnode)
+            : importMindMap(file.name, file.content ?? ''),
         }
       } catch (error) {
         return {
@@ -64,13 +67,13 @@ export function MindMapDialog({ onClose, onCreate, canCreate }: Props) {
     })
     setItems(next)
   }
-  async function pick() {
+  async function pick(packages = false) {
     if (working.current) return
     working.current = true
     setBusy(true)
     setError('')
     try {
-      const files = await pickMindMapFiles()
+      const files = await pickMindMapFiles(packages)
       if (files.length) await load(files)
     } catch (error) {
       setError(message(typeof error === 'string' ? error : 'read'))
@@ -179,9 +182,18 @@ export function MindMapDialog({ onClose, onCreate, canCreate }: Props) {
         <p className="mindmap-hint">{t('mindmap.importHint')}</p>
         <p className="mindmap-hint">{t('mindmap.mindnodeHint')}</p>
         {isTauri() ? (
-          <button className="btn" disabled={busy} onClick={() => void pick()}>
-            {t('mindmap.chooseFiles')}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn" disabled={busy} onClick={() => void pick()}>
+              {t('mindmap.chooseFiles')}
+            </button>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => void pick(true)}
+            >
+              {t('mindmap.choosePackage')}
+            </button>
+          </div>
         ) : (
           <label className="mindmap-file-picker">
             {t('mindmap.chooseFiles')}

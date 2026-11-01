@@ -63,7 +63,7 @@ describe('mind map creation and batch import', () => {
       },
     })
     await screen.findByText('mindmap.errors.xml')
-    expect(screen.getByText('mindmap.errors.mindnode')).toBeTruthy()
+    expect(screen.getByText('mindmap.errors.mindnodeDesktop')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.importAll' }))
     await screen.findByText('Error: disk full')
     expect(create).toHaveBeenCalledTimes(2)

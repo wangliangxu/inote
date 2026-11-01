@@ -8,6 +8,7 @@ pub mod markdown;
 pub mod markdown_paths;
 pub mod menu;
 pub mod mindmap_files;
+pub mod mindnode;
 pub mod persistence;
 mod reminder_markdown;
 pub mod reminders;

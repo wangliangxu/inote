@@ -67,7 +67,7 @@ npm run tauri build
 
 ## 思维导图
 
-点击标题栏的思维导图按钮，可新建可编辑导图、切换大纲，并批量导入 FreeMind、OPML 和 iNote 导图 JSON。支持节点备注、链接、层级调整、折叠、撤销及导出。MindNode 文件请先导出为 FreeMind 或 OPML。详情见 [思维导图使用说明](docs/mindmaps.md)。
+点击标题栏的思维导图按钮，可新建可编辑导图、切换大纲，并批量导入 FreeMind、OPML 和 iNote 导图 JSON。支持节点备注、链接、层级调整、折叠、撤销及导出。桌面版支持 MindNode Classic 内部格式 6 和 9 的文件包及单文件原生直导。详情见 [思维导图使用说明](docs/mindmaps.md)。
 
 ## macOS 到期提醒
 

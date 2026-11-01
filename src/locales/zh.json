@@ -242,25 +242,33 @@
     "openVault": "请先在设置中打开本地笔记库。",
     "created": "已创建导图：{{path}}",
     "shortcuts": "选中节点后：Tab 添加子节点，Enter 添加同级；Delete 删除分支。删除可撤销。拖动滚动条浏览画布。",
-    "importHint": "支持 FreeMind (.mm)、OPML 和 iNote 导图 JSON。每个文件导入为一篇新笔记，原文件保持不变；单文件最多 10 MiB、5000 个节点、64 层，每批最多 100 个文件。",
-    "mindnodeHint": "MindNode 原生 .mindnode 文件暂不支持直接导入。请先在 MindNode 中导出为 FreeMind 或 OPML，再导入这里。",
+    "importHint": "支持 FreeMind (.mm)、OPML、iNote 导图 JSON，以及桌面版 MindNode 原生导入。每个文件创建一篇新笔记，原文件保持不变；单文件最多 10 MiB、5000 个节点、64 层，每批最多 100 个文件。",
+    "mindnodeHint": "MindNode 原生导入支持 Classic 内部格式 6 和 9 的文件包及压缩单文件，保留文字、层级、顺序、备注、链接与折叠。若文件包显示为文件夹，可用「选择 MindNode 文件包目录」。其他版本请先导出 FreeMind 或 OPML。",
     "errors": {
       "invalid": "导图结构无效，请检查文件或打开源码修复。",
       "limit": "超过导图限制：10 MiB、5000 个节点或 64 层。",
       "version": "不支持此 iNote 导图版本。",
-      "mindnode": "暂不支持 MindNode 原生文件，请在 MindNode 中导出为 FreeMind (.mm) 或 OPML。",
+      "mindnode": "无法导入此 MindNode 文件，请检查文件是否完整及版本是否受支持。",
       "format": "不支持此格式，请选择 .mm、.opml 或 iNote 导图 JSON。",
       "xml": "XML 无效，或包含不支持的 DTD／实体声明。",
       "read": "无法读取文件，请检查文件权限及 UTF-8 编码。",
       "export": "导出失败，请重试或选择其他保存位置。",
       "link": "无法打开该链接。",
-      "batch": "每批最多选择 100 个文件。"
+      "batch": "每批最多选择 100 个文件。",
+      "mindnodeDesktop": "请在 iNote 桌面版选择 MindNode 原生文件；浏览器预览请使用 FreeMind 或 OPML。",
+      "mindnodeVersion": "暂不支持此 MindNode 内部格式版本，当前支持 6 和 9。请先从 MindNode 导出为 FreeMind 或 OPML。",
+      "mindnodeSchema": "无法识别 MindNode 文档结构或文件封装；文件包应含 contents.xml，单文件应为 plist 或含该文档的 ZIP。"
     },
     "warnings": {
       "appearance": "部分样式、图标、位置或关联线不受支持；导入后请核对。",
       "richText": "富文本已转成纯文本，文字保留，排版不保留。",
       "images": "图片未导入，请保留原文件。",
-      "duplicateIds": "源文件包含重复节点 ID，已生成新的唯一 ID。"
+      "duplicateIds": "源文件包含重复节点 ID，已生成新的唯一 ID。",
+      "mindnodeIds": "缺失或重复的节点 ID 已替换为唯一 ID。",
+      "mindnodeAttachments": "图片、贴纸或其他附件未导入，请保留原文件。",
+      "mindnodeFeatures": "节点任务、标签或贴纸属性暂不迁移，请与原文件核对。",
+      "mindnodeConnections": "跨节点关联线或边界未导入，父子层级已保留。",
+      "mindnodeLinks": "节点包含多个链接，额外链接已保存到节点备注中。"
     },
     "state": {
       "loading": "加载中",
@@ -276,6 +284,7 @@
       "mm": "导出层级、文字、备注、链接、颜色与折叠状态；多个顶层主题将放入一个中心主题下。",
       "opml": "导出层级、文字、备注和链接；颜色与折叠状态不保留。",
       "md": "导出可阅读的文字大纲；完整备份请使用 iNote JSON。"
-    }
+    },
+    "choosePackage": "选择 MindNode 文件包目录"
   }
 }

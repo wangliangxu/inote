@@ -28,6 +28,9 @@ export type MapErrorCode =
   | 'limit'
   | 'version'
   | 'mindnode'
+  | 'mindnodeVersion'
+  | 'mindnodeSchema'
+  | 'mindnodeDesktop'
   | 'format'
   | 'xml'
 export class MindMapError extends Error {
@@ -217,11 +220,94 @@ function richText(element: Element): string {
   copy.querySelectorAll('p,div,li').forEach((n) => n.append('\n'))
   return copy.textContent?.trim() ?? ''
 }
+export interface NativeMindNodeDocument {
+  formatVersion: number
+  roots: MindNode[]
+  warnings: string[]
+}
+
+/** Decode HTML inside an inert template: resources/scripts are never attached or loaded. */
+function mindNodeText(
+  html: string,
+  warnings: Set<string>,
+): { text: string; links: string[] } {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  if (template.content.querySelector('img')) warnings.add('mindnodeAttachments')
+  template.content
+    .querySelectorAll(
+      'script,style,img,iframe,object,embed,link,base,meta,audio,video,source',
+    )
+    .forEach((element) => element.remove())
+  const links = Array.from(template.content.querySelectorAll('a[href]'))
+    .map((element) => element.getAttribute('href')!)
+    .filter(Boolean)
+  template.content
+    .querySelectorAll('br')
+    .forEach((element) => element.replaceWith('\n'))
+  template.content
+    .querySelectorAll('p,div,li')
+    .forEach((element) => element.append('\n'))
+  if (/<\/?[a-z][^>]*>/i.test(html)) warnings.add('richText')
+  return {
+    text: (template.content.textContent ?? '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+    links,
+  }
+}
+
+export function importNativeMindNode(
+  filename: string,
+  source: NativeMindNodeDocument,
+): ImportedMap {
+  if (![6, 9].includes(source.formatVersion))
+    throw new MindMapError('mindnodeVersion')
+  if (
+    !Array.isArray(source.warnings) ||
+    source.warnings.some((value) => typeof value !== 'string')
+  )
+    throw new MindMapError('mindnodeSchema')
+  const raw = validateMindMap({ version: 1, roots: source.roots })
+  const warnings = new Set(source.warnings)
+  function convert(node: MindNode): MindNode {
+    const title = mindNodeText(node.text, warnings)
+    const note =
+      node.note !== undefined
+        ? mindNodeText(node.note, warnings)
+        : { text: '', links: [] }
+    const links = Array.from(
+      new Set([
+        ...(node.link ? [node.link] : []),
+        ...title.links,
+        ...note.links,
+      ]),
+    )
+    if (links.length > 1) warnings.add('mindnodeLinks')
+    return {
+      ...node,
+      text: title.text,
+      note:
+        [note.text, ...links.slice(1)].filter(Boolean).join('\n') || undefined,
+      link: links[0],
+      children: node.children.map(convert),
+    }
+  }
+  const map: MindMap = { version: 1, roots: raw.roots.map(convert) }
+  return {
+    filename,
+    title: map.roots[0].text || filename.replace(/\.mindnode$/i, ''),
+    map,
+    warnings: Array.from(warnings),
+  }
+}
+
 export function importMindMap(filename: string, content: string): ImportedMap {
   if (new TextEncoder().encode(content).length > MAX_FILE_BYTES)
     throw new MindMapError('limit')
   const ext = filename.split('.').pop()?.toLowerCase()
-  if (ext === 'mindnode') throw new MindMapError('mindnode')
+  if (ext === 'mindnode') throw new MindMapError('mindnodeDesktop')
   if (ext === 'json' || ext === 'inote-mindmap') {
     let value: unknown
     try {

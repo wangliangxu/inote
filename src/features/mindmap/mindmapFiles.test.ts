@@ -21,6 +21,14 @@ describe('browser mind map file reading', () => {
       readBrowserMapFile(file(new Uint8Array([0xff, 0xfe, 0x80]))),
     ).rejects.toThrow()
   })
+  it('directs native binary files to the desktop importer before reading bytes', async () => {
+    const native = {
+      ...file(new Uint8Array([0x62, 0x70])),
+      name: 'course.mindnode',
+    } as File
+    expect((await readBrowserMapFile(native)).error).toBe('mindnodeDesktop')
+    expect(native.arrayBuffer).not.toHaveBeenCalled()
+  })
   it('checks file size before loading contents', async () => {
     const large = file(new Uint8Array(), MAX_FILE_BYTES + 1)
     expect((await readBrowserMapFile(large)).error).toBe('limit')

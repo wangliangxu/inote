@@ -67,7 +67,7 @@ The compiled binaries will be available in the `src-tauri/target/release` direct
 
 ## Mind maps
 
-Use the mind map button in the title bar to create editable maps, switch to an outline, and batch import FreeMind, OPML or iNote mind map JSON. Edit node notes, links and hierarchy; fold branches, undo changes and export backups. For MindNode files, export as FreeMind or OPML first. See the [mind map guide (Chinese)](docs/mindmaps.md).
+Use the mind map button in the title bar to create editable maps, switch to an outline, and batch import FreeMind, OPML or iNote mind map JSON. Edit node notes, links and hierarchy; fold branches, undo changes and export backups. The desktop app also directly imports MindNode Classic packages and single files in internal formats 6 and 9. See the [mind map guide (Chinese)](docs/mindmaps.md).
 
 ## macOS due-date reminders
 

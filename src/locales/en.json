@@ -242,25 +242,33 @@
     "openVault": "Open a local vault in Settings first.",
     "created": "Created mind map: {{path}}",
     "shortcuts": "With a node selected: Tab adds a child, Enter adds a sibling, Delete removes the branch. Deletions can be undone. Scroll to navigate the canvas.",
-    "importHint": "Supports FreeMind (.mm), OPML and iNote mind map JSON. Each file becomes a new note; originals remain unchanged. Limits: 10 MiB, 5000 nodes, 64 levels per file; 100 files per batch.",
-    "mindnodeHint": "Direct import of native .mindnode files is not supported yet. Export from MindNode as FreeMind or OPML first.",
+    "importHint": "Supports FreeMind (.mm), OPML, iNote mind map JSON, and native MindNode import in the desktop app. Each file creates a new note; originals remain unchanged. Limits: 10 MiB, 5000 nodes, 64 levels per file; 100 files per batch.",
+    "mindnodeHint": "Native import supports MindNode Classic internal formats 6 and 9 in packages or ZIP single files. Text, hierarchy, order, notes, links and folding are preserved. Use “Choose MindNode package folder” if the package appears as a directory. For other versions, export as FreeMind or OPML first.",
     "errors": {
       "invalid": "Invalid mind map structure. Check the file or open its source to repair.",
       "limit": "Map exceeds a limit: 10 MiB, 5000 nodes or 64 levels.",
       "version": "Unsupported iNote mind map version.",
-      "mindnode": "Native MindNode files are not supported yet. Export as FreeMind (.mm) or OPML in MindNode first.",
+      "mindnode": "Could not import this MindNode document. Check its completeness and supported version.",
       "format": "Unsupported format. Choose .mm, .opml or iNote mind map JSON.",
       "xml": "Invalid XML, or unsupported DTD/entity declaration.",
       "read": "Could not read this file. Check permissions and UTF-8 encoding.",
       "export": "Export failed. Try again or choose another location.",
       "link": "Could not open this link.",
-      "batch": "Choose at most 100 files per batch."
+      "batch": "Choose at most 100 files per batch.",
+      "mindnodeDesktop": "Select native MindNode files in the iNote desktop app. For browser previews, use FreeMind or OPML.",
+      "mindnodeVersion": "Unsupported MindNode internal format version. Formats 6 and 9 are supported. Export as FreeMind or OPML in MindNode first.",
+      "mindnodeSchema": "Unrecognized MindNode document or container. Packages must contain contents.xml; single files must be a plist or a ZIP containing that document."
     },
     "warnings": {
       "appearance": "Some styles, icons, positions or cross-links are not supported; review the imported map.",
       "richText": "Rich text was converted to plain text; formatting was removed.",
       "images": "Images were not imported. Keep the original file.",
-      "duplicateIds": "Duplicate node IDs were replaced with unique IDs."
+      "duplicateIds": "Duplicate node IDs were replaced with unique IDs.",
+      "mindnodeIds": "Missing or duplicate node IDs were replaced with unique IDs.",
+      "mindnodeAttachments": "Images, stickers or other attachments were not imported. Keep the original document.",
+      "mindnodeFeatures": "Node tasks, tags or sticker properties were not migrated. Compare with the original.",
+      "mindnodeConnections": "Cross-links or boundaries were not imported. Parent/child hierarchy is preserved.",
+      "mindnodeLinks": "This node has multiple links. Extra links were retained in its notes."
     },
     "state": {
       "loading": "Loading",
@@ -276,6 +284,7 @@
       "mm": "Exports structure, text, notes, links, colors and folding. Multiple roots are grouped under one central topic.",
       "opml": "Exports structure, text, notes and links. Colors and folding are omitted.",
       "md": "Exports a readable outline. Use iNote JSON for a full backup."
-    }
+    },
+    "choosePackage": "Choose MindNode package folder"
   }
 }
