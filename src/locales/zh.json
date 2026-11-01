@@ -241,7 +241,7 @@
     "working": "正在处理…",
     "openVault": "请先在设置中打开本地笔记库。",
     "created": "已创建导图：{{path}}",
-    "shortcuts": "选中节点后：Tab 添加子节点，Enter 添加同级；Delete 删除分支。删除可撤销。拖动滚动条浏览画布。",
+    "shortcuts": "点击节点直接编辑文字：Enter 确认，Shift+Enter 换行，Esc 取消。画布聚焦时 Tab 添加子节点、Enter 添加同级、Delete 删除分支；Ctrl / Cmd + Z 撤销。",
     "importHint": "支持 FreeMind (.mm)、OPML、iNote 导图 JSON，以及桌面版 MindNode 原生导入。每个文件创建一篇新笔记，原文件保持不变；单文件最多 10 MiB、5000 个节点、64 层，每批最多 100 个文件。",
     "mindnodeHint": "MindNode 原生导入支持 Classic 内部格式 6 和 9 的文件包及压缩单文件，保留文字、层级、顺序、备注、链接与折叠。若文件包显示为文件夹，可用「选择 MindNode 文件包目录」。其他版本请先导出 FreeMind 或 OPML。",
     "errors": {
@@ -285,6 +285,20 @@
       "opml": "导出层级、文字、备注和链接；颜色与折叠状态不保留。",
       "md": "导出可阅读的文字大纲；完整备份请使用 iNote JSON。"
     },
-    "choosePackage": "选择 MindNode 文件包目录"
+    "choosePackage": "选择 MindNode 文件包目录",
+    "fit": "适应画布",
+    "editHint": "点击节点直接编辑；Enter 确认，Shift+Enter 换行，Esc 取消",
+    "emptyNode": "空白节点",
+    "viewTools": "视图",
+    "historyTools": "编辑历史",
+    "nodeTools": "节点操作",
+    "zoomTools": "画布缩放",
+    "fileTools": "文件操作",
+    "resetZoom": "还原为 100%",
+    "editNotes": "编辑节点备注",
+    "foldSelected": "折叠选中分支",
+    "expandSelected": "展开选中分支",
+    "more": "更多操作",
+    "backup": "完整备份"
   }
 }

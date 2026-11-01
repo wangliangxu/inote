@@ -23,9 +23,10 @@ import {
   updateNode,
   withMindMap,
   type MindMap,
-  type MindNode,
 } from './mindmap'
 import { saveMindMapFile } from './mindmapFiles'
+import { MindMapToolbar, type MindMapExportFormat } from './MindMapToolbar'
+import { MindMapCanvas, type MindMapCanvasHandle } from './MindMapCanvas'
 import './mindmap.css'
 
 type Props = ComponentProps<typeof MarkdownEditor>
@@ -81,10 +82,19 @@ export function MindMapWorkspace({
   const [view, setView] = useState<'map' | 'outline'>('map')
   const [selectedId, setSelectedId] = useState(map.roots[0].id)
   const [zoom, setZoom] = useState(1)
+  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const canvasRef = useRef<MindMapCanvasHandle>(null)
   const [past, setPast] = useState<MindMap[]>([])
   const [future, setFuture] = useState<MindMap[]>([])
   const [error, setError] = useState('')
-  const [exportFormat, setExportFormat] = useState('json')
+  const noteInputRef = useRef<HTMLTextAreaElement>(null)
+  const [focusNotes, setFocusNotes] = useState(false)
+  useEffect(() => {
+    if (focusNotes && inspectorOpen) {
+      noteInputRef.current?.focus()
+      setFocusNotes(false)
+    }
+  }, [focusNotes, inspectorOpen])
   const [tagText, setTagText] = useState(note.tags.join(', '))
   useEffect(() => {
     const normalized = tagText
@@ -97,6 +107,11 @@ export function MindMapWorkspace({
   }, [note.tags, tagText])
   const lastEmitted = useRef(JSON.stringify(map))
   const editGroup = useRef('')
+  const inlineHistory = useRef<{
+    map: MindMap
+    past: MindMap[]
+    future: MindMap[]
+  } | null>(null)
   const entries = useMemo(() => flattenNodes(map), [map])
   const selected =
     entries.find((item) => item.node.id === selectedId) ?? entries[0]
@@ -110,6 +125,7 @@ export function MindMapWorkspace({
       setPast([])
       setFuture([])
       editGroup.current = ''
+      inlineHistory.current = null
       lastEmitted.current = JSON.stringify(map)
     }
   }, [map])
@@ -171,12 +187,19 @@ export function MindMapWorkspace({
     })
   }
   function keyDown(event: KeyboardEvent) {
-    if (!(event.target as HTMLElement).closest('.mindmap-canvas')) return
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+    const target = event.target as HTMLElement
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      event.key.toLowerCase() === 'z' &&
+      !target.closest('input,textarea,select,[contenteditable="true"]')
+    ) {
       event.preventDefault()
       event.shiftKey ? redo() : undo()
       return
     }
+    if (target.closest('input,textarea,select,[contenteditable="true"]')) return
+    if (!target.closest('.mindmap-canvas') || target.closest('.mindmap-fold'))
+      return
     if (previewMode) return
     if (event.key === 'Tab' && !event.shiftKey) {
       event.preventDefault()
@@ -191,64 +214,7 @@ export function MindMapWorkspace({
       remove()
     }
   }
-  function renderNode(node: MindNode, depth: number) {
-    const selectedNode = node.id === selected.node.id
-    return (
-      <div
-        className={`mindmap-branch ${view === 'outline' ? 'outline-branch' : ''}`}
-        key={node.id}
-      >
-        <div className="mindmap-topic-row">
-          <button
-            type="button"
-            className={`mindmap-topic ${selectedNode ? 'selected' : ''} ${depth === 0 ? 'root-topic' : ''}`}
-            style={
-              node.color && /^#[0-9a-f]{6}$/i.test(node.color)
-                ? { borderColor: node.color }
-                : undefined
-            }
-            aria-pressed={selectedNode}
-            onClick={() => {
-              setSelectedId(node.id)
-              editGroup.current = ''
-            }}
-          >
-            <HighlightedText
-              text={node.text || t('mindmap.newNode')}
-              query={searchQuery}
-            />
-            {node.note ? (
-              <span className="mindmap-note-mark" title={node.note}>
-                ⋯
-              </span>
-            ) : null}
-          </button>
-          {node.children.length > 0 && (
-            <button
-              type="button"
-              className="mindmap-fold"
-              disabled={previewMode}
-              aria-label={t(
-                node.collapsed ? 'mindmap.expand' : 'mindmap.collapse',
-              )}
-              onClick={() => {
-                change(updateNode(map, node.id, { collapsed: !node.collapsed }))
-                setSelectedId(node.id)
-              }}
-            >
-              {node.collapsed ? `+${node.children.length}` : '−'}
-            </button>
-          )}
-        </div>
-        {!node.collapsed && node.children.length > 0 && (
-          <div className="mindmap-children">
-            {node.children.map((child) => renderNode(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    )
-  }
-  async function exportMap() {
+  async function exportMap(exportFormat: MindMapExportFormat) {
     const formats: Record<string, [string, string]> = {
       json: ['inote-mindmap', JSON.stringify(map, null, 2)],
       mm: ['mm', exportFreeMind(map)],
@@ -273,36 +239,6 @@ export function MindMapWorkspace({
           <h2>
             <HighlightedText text={note.title} query={searchQuery} />
           </h2>
-          <div className="editor-actions">
-            {onCheckExternal && (
-              <button
-                className="btn btn-sm btn-ghost"
-                onClick={onCheckExternal}
-              >
-                {t('editor.checkFile')}
-              </button>
-            )}
-            {onRename && (
-              <button className="btn btn-sm btn-ghost" onClick={onRename}>
-                {t('editor.renameNote')}
-              </button>
-            )}
-            {onMove && (
-              <button className="btn btn-sm btn-ghost" onClick={onMove}>
-                {t('editor.moveNote')}
-              </button>
-            )}
-            {onSave && (
-              <button className="btn btn-sm btn-primary" onClick={onSave}>
-                {t('editor.save')}
-              </button>
-            )}
-            {onDelete && (
-              <button className="btn btn-sm btn-ghost" onClick={onDelete}>
-                {t('editor.delete')}
-              </button>
-            )}
-          </div>
         </div>
         <div className="metadata">
           <span className={`save-state ${saveState}`}>
@@ -318,245 +254,211 @@ export function MindMapWorkspace({
         </div>
       </header>
       <div className="mindmap-content">
-        <div
-          className="mindmap-toolbar"
-          role="toolbar"
-          aria-label={t('mindmap.title')}
-        >
-          <div className="join">
-            <button
-              className={`btn btn-sm join-item ${view === 'map' ? 'btn-active' : ''}`}
-              aria-pressed={view === 'map'}
-              onClick={() => setView('map')}
-            >
-              {t('mindmap.map')}
-            </button>
-            <button
-              className={`btn btn-sm join-item ${view === 'outline' ? 'btn-active' : ''}`}
-              aria-pressed={view === 'outline'}
-              onClick={() => setView('outline')}
-            >
-              {t('mindmap.outline')}
-            </button>
-          </div>
-          <button
-            className="btn btn-sm btn-ghost"
-            disabled={previewMode || !past.length}
-            onClick={undo}
-          >
-            {t('mindmap.undo')}
-          </button>
-          <button
-            className="btn btn-sm btn-ghost"
-            disabled={previewMode || !future.length}
-            onClick={redo}
-          >
-            {t('mindmap.redo')}
-          </button>
-          <div className="mindmap-zoom">
-            <button
-              className="btn btn-sm btn-ghost"
-              aria-label={t('mindmap.zoomOut')}
-              onClick={() => setZoom(Math.max(0.4, zoom - 0.1))}
-            >
-              −
-            </button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setZoom(1)}>
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              className="btn btn-sm btn-ghost"
-              aria-label={t('mindmap.zoomIn')}
-              onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-            >
-              +
-            </button>
-          </div>
-          <select
-            className="select select-sm"
-            aria-label={t('mindmap.exportFormat')}
-            value={exportFormat}
-            onChange={(event) => setExportFormat(event.target.value)}
-          >
-            <option value="json">iNote JSON</option>
-            <option value="mm">FreeMind</option>
-            <option value="opml">OPML</option>
-            <option value="md">Markdown</option>
-          </select>
-          <button className="btn btn-sm" onClick={() => void exportMap()}>
-            {t('mindmap.export')}
-          </button>
-        </div>
-        <p className="mindmap-hint">
-          {t(`mindmap.exportHints.${exportFormat}`)}
-        </p>
+        <MindMapToolbar
+          view={view}
+          zoom={zoom}
+          readOnly={previewMode}
+          canUndo={past.length > 0}
+          canRedo={future.length > 0}
+          canFold={selected.node.children.length > 0}
+          collapsed={!!selected.node.collapsed}
+          inspectorOpen={inspectorOpen}
+          onView={setView}
+          onUndo={undo}
+          onRedo={redo}
+          onAddChild={() => add(false)}
+          onAddSibling={() => add(true)}
+          onFold={() =>
+            change(
+              updateNode(map, selected.node.id, {
+                collapsed: !selected.node.collapsed,
+              }),
+            )
+          }
+          onNotes={() => {
+            setInspectorOpen(true)
+            setFocusNotes(true)
+          }}
+          onInspector={() => setInspectorOpen((open) => !open)}
+          onFit={() => canvasRef.current?.fit()}
+          onZoom={setZoom}
+          onExport={(format) => void exportMap(format)}
+          onSave={onSave}
+          onRename={onRename}
+          onMove={onMove}
+          onCheckExternal={onCheckExternal}
+          onDelete={onDelete}
+        />
         {error && (
           <p className="mindmap-error" role="alert">
             {error}
           </p>
         )}
         <div className="mindmap-workspace">
-          <div
-            className="mindmap-canvas"
-            tabIndex={0}
-            aria-label={t('mindmap.canvas')}
-          >
-            <div className={`mindmap-forest ${view}`} style={{ zoom }}>
-              {map.roots.map((node) => renderNode(node, 0))}
-            </div>
-          </div>
-          <aside
-            className="mindmap-inspector"
-            aria-label={t('mindmap.nodeDetails')}
-          >
-            <label>
-              {t('mindmap.noteTitle')}
-              <input
-                className="input input-sm"
-                value={note.title}
-                disabled={previewMode || !onUpdateTitle}
-                onChange={(e) => onUpdateTitle?.(e.target.value)}
-              />
-            </label>
-            <label>
-              {t('mindmap.tags')}
-              <input
-                className="input input-sm"
-                value={tagText}
-                disabled={previewMode || !onUpdateTags}
-                onChange={(e) => {
-                  setTagText(e.target.value)
-                  onUpdateTags?.(e.target.value)
-                }}
-              />
-            </label>
-            <hr />
-            <label>
-              {t('mindmap.nodeText')}
-              <textarea
-                className="textarea"
-                value={selected.node.text}
-                disabled={previewMode}
-                onBlur={() => {
-                  editGroup.current = ''
-                }}
-                onChange={(e) =>
-                  change(
-                    updateNode(map, selected.node.id, { text: e.target.value }),
-                    `${selected.node.id}:text`,
-                  )
-                }
-              />
-            </label>
-            <label>
-              {t('mindmap.nodeNote')}
-              <textarea
-                className="textarea"
-                value={selected.node.note ?? ''}
-                disabled={previewMode}
-                onBlur={() => {
-                  editGroup.current = ''
-                }}
-                onChange={(e) =>
-                  change(
-                    updateNode(map, selected.node.id, { note: e.target.value }),
-                    `${selected.node.id}:note`,
-                  )
-                }
-              />
-            </label>
-            <label>
-              {t('mindmap.nodeLink')}
-              <input
-                className="input input-sm"
-                value={selected.node.link ?? ''}
-                disabled={previewMode}
-                onChange={(e) =>
-                  change(
-                    updateNode(map, selected.node.id, { link: e.target.value }),
-                    `${selected.node.id}:link`,
-                  )
-                }
-              />
-            </label>
-            {selected.node.link && safeNodeLink(selected.node.link) && (
-              <button
-                className="btn btn-sm btn-ghost"
-                onClick={() => {
-                  void openUrl(selected.node.link!).catch(() =>
-                    setError(t('mindmap.errors.link')),
-                  )
-                }}
-              >
-                {t('mindmap.openLink')}
-              </button>
-            )}
-            <label>
-              {t('mindmap.parent')}
-              <select
-                className="select select-sm"
-                value={selected.parent?.id ?? ''}
-                disabled={previewMode}
-                onChange={(e) =>
-                  attempt(() =>
+          <MindMapCanvas
+            ref={canvasRef}
+            map={map}
+            view={view}
+            zoom={zoom}
+            selectedId={selected.node.id}
+            searchQuery={searchQuery}
+            readOnly={previewMode}
+            onZoomChange={setZoom}
+            onSelect={(id) => {
+              setSelectedId(id)
+              editGroup.current = ''
+            }}
+            onTextEditStart={() => {
+              inlineHistory.current = { map, past, future }
+              editGroup.current = ''
+            }}
+            onTextChange={(id, text) =>
+              change(updateNode(map, id, { text }), `${id}:inline-text`)
+            }
+            onTextEditEnd={(cancel) => {
+              const history = inlineHistory.current
+              inlineHistory.current = null
+              editGroup.current = ''
+              if (history && (cancel || JSON.stringify(history.map) === JSON.stringify(map))) {
+                setPast(history.past)
+                setFuture(history.future)
+                if (cancel && JSON.stringify(history.map) !== JSON.stringify(map))
+                  emit(history.map)
+              }
+            }}
+            onToggle={(node) => {
+              change(updateNode(map, node.id, { collapsed: !node.collapsed }))
+              setSelectedId(node.id)
+            }}
+          />
+          {inspectorOpen && (
+            <aside
+              className="mindmap-inspector"
+              aria-label={t('mindmap.nodeDetails')}
+            >
+              <label>
+                {t('mindmap.noteTitle')}
+                <input
+                  className="input input-sm"
+                  value={note.title}
+                  disabled={previewMode || !onUpdateTitle}
+                  onChange={(e) => onUpdateTitle?.(e.target.value)}
+                />
+              </label>
+              <label>
+                {t('mindmap.tags')}
+                <input
+                  className="input input-sm"
+                  value={tagText}
+                  disabled={previewMode || !onUpdateTags}
+                  onChange={(e) => {
+                    setTagText(e.target.value)
+                    onUpdateTags?.(e.target.value)
+                  }}
+                />
+              </label>
+              <hr />
+              <label>
+                {t('mindmap.nodeNote')}
+                <textarea
+                  ref={noteInputRef}
+                  className="textarea"
+                  value={selected.node.note ?? ''}
+                  disabled={previewMode}
+                  onBlur={() => {
+                    editGroup.current = ''
+                  }}
+                  onChange={(e) =>
                     change(
-                      moveNode(map, selected.node.id, e.target.value || null),
-                    ),
-                  )
-                }
-              >
-                <option value="">{t('mindmap.root')}</option>
-                {entries
-                  .filter((item) => !descendants.has(item.node.id))
-                  .map((item) => (
-                    <option value={item.node.id} key={item.node.id}>
-                      {'· '.repeat(item.depth)}
-                      {item.node.text.slice(0, 50)}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="mindmap-node-actions">
-              <button
-                className="btn btn-sm"
-                disabled={previewMode}
-                onClick={() => add(false)}
-              >
-                {t('mindmap.addChild')}
-              </button>
-              <button
-                className="btn btn-sm"
-                disabled={previewMode}
-                onClick={() => add(true)}
-              >
-                {t('mindmap.addSibling')}
-              </button>
-              <button
-                className="btn btn-sm"
-                disabled={previewMode}
-                onClick={() => change(reorderNode(map, selected.node.id, -1))}
-              >
-                {t('mindmap.up')}
-              </button>
-              <button
-                className="btn btn-sm"
-                disabled={previewMode}
-                onClick={() => change(reorderNode(map, selected.node.id, 1))}
-              >
-                {t('mindmap.down')}
-              </button>
-              <button
-                className="btn btn-sm btn-ghost text-error"
-                disabled={
-                  previewMode || (map.roots.length === 1 && !selected.parent)
-                }
-                onClick={remove}
-              >
-                {t('mindmap.remove')}
-              </button>
-            </div>
-            <p className="mindmap-hint">{t('mindmap.shortcuts')}</p>
-          </aside>
+                      updateNode(map, selected.node.id, {
+                        note: e.target.value,
+                      }),
+                      `${selected.node.id}:note`,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                {t('mindmap.nodeLink')}
+                <input
+                  className="input input-sm"
+                  value={selected.node.link ?? ''}
+                  disabled={previewMode}
+                  onChange={(e) =>
+                    change(
+                      updateNode(map, selected.node.id, {
+                        link: e.target.value,
+                      }),
+                      `${selected.node.id}:link`,
+                    )
+                  }
+                />
+              </label>
+              {selected.node.link && safeNodeLink(selected.node.link) && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => {
+                    void openUrl(selected.node.link!).catch(() =>
+                      setError(t('mindmap.errors.link')),
+                    )
+                  }}
+                >
+                  {t('mindmap.openLink')}
+                </button>
+              )}
+              <label>
+                {t('mindmap.parent')}
+                <select
+                  className="select select-sm"
+                  value={selected.parent?.id ?? ''}
+                  disabled={previewMode}
+                  onChange={(e) =>
+                    attempt(() =>
+                      change(
+                        moveNode(map, selected.node.id, e.target.value || null),
+                      ),
+                    )
+                  }
+                >
+                  <option value="">{t('mindmap.root')}</option>
+                  {entries
+                    .filter((item) => !descendants.has(item.node.id))
+                    .map((item) => (
+                      <option value={item.node.id} key={item.node.id}>
+                        {'· '.repeat(item.depth)}
+                        {item.node.text.slice(0, 50)}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <div className="mindmap-node-actions">
+                <button
+                  className="btn btn-sm"
+                  disabled={previewMode}
+                  onClick={() => change(reorderNode(map, selected.node.id, -1))}
+                >
+                  {t('mindmap.up')}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={previewMode}
+                  onClick={() => change(reorderNode(map, selected.node.id, 1))}
+                >
+                  {t('mindmap.down')}
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost text-error"
+                  disabled={
+                    previewMode || (map.roots.length === 1 && !selected.parent)
+                  }
+                  onClick={remove}
+                >
+                  {t('mindmap.remove')}
+                </button>
+              </div>
+              <p className="mindmap-hint">{t('mindmap.shortcuts')}</p>
+            </aside>
+          )}
         </div>
       </div>
     </article>

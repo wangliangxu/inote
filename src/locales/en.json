@@ -241,7 +241,7 @@
     "working": "Working…",
     "openVault": "Open a local vault in Settings first.",
     "created": "Created mind map: {{path}}",
-    "shortcuts": "With a node selected: Tab adds a child, Enter adds a sibling, Delete removes the branch. Deletions can be undone. Scroll to navigate the canvas.",
+    "shortcuts": "Click a node to edit its text: Enter confirms, Shift+Enter inserts a new line, Esc cancels. With the canvas focused, Tab adds a child, Enter adds a sibling, Delete removes a branch; Ctrl / Cmd + Z undoes changes.",
     "importHint": "Supports FreeMind (.mm), OPML, iNote mind map JSON, and native MindNode import in the desktop app. Each file creates a new note; originals remain unchanged. Limits: 10 MiB, 5000 nodes, 64 levels per file; 100 files per batch.",
     "mindnodeHint": "Native import supports MindNode Classic internal formats 6 and 9 in packages or ZIP single files. Text, hierarchy, order, notes, links and folding are preserved. Use “Choose MindNode package folder” if the package appears as a directory. For other versions, export as FreeMind or OPML first.",
     "errors": {
@@ -285,6 +285,20 @@
       "opml": "Exports structure, text, notes and links. Colors and folding are omitted.",
       "md": "Exports a readable outline. Use iNote JSON for a full backup."
     },
-    "choosePackage": "Choose MindNode package folder"
+    "choosePackage": "Choose MindNode package folder",
+    "fit": "Fit to view",
+    "editHint": "Click to edit; Enter to confirm, Shift+Enter for a new line, Esc to cancel",
+    "emptyNode": "Empty node",
+    "viewTools": "View",
+    "historyTools": "History",
+    "nodeTools": "Node actions",
+    "zoomTools": "Canvas zoom",
+    "fileTools": "File actions",
+    "resetZoom": "Reset to 100%",
+    "editNotes": "Edit node notes",
+    "foldSelected": "Fold selected branch",
+    "expandSelected": "Expand selected branch",
+    "more": "More actions",
+    "backup": "Full backup"
   }
 }

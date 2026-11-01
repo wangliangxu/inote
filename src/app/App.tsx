@@ -462,6 +462,8 @@ export function App() {
   const activeNote = activePath
     ? notes.find((note) => note.path === activePath)
     : undefined;
+  const mindMapActive = activeNote?.frontmatter?.[MINDMAP_KEY] !== undefined;
+  const rightPanelVisible = rightSidebarVisible && !mindMapActive;
 
   useEffect(() => {
     setEditorPaintReady(false);
@@ -1997,7 +1999,7 @@ export function App() {
   }
 
   function startRightSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!rightSidebarVisible || event.button !== 0) return;
+    if (!rightPanelVisible || event.button !== 0) return;
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = rightSidebarWidth;
@@ -2233,26 +2235,28 @@ export function App() {
           >
             <Settings size={18} />
           </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${rightSidebarVisible ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => setRightSidebarVisible((current) => !current)}
-            title={
-              rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
-            }
-            aria-label={
-              rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
-            }
-          >
-            <PanelRight size={18} />
-          </button>
+          {!mindMapActive && (
+            <button
+              className={`btn btn-ghost btn-sm btn-square ${rightSidebarVisible ? "bg-base-content/10 text-primary" : ""}`}
+              type="button"
+              onClick={() => setRightSidebarVisible((current) => !current)}
+              title={
+                rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
+              }
+              aria-label={
+                rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
+              }
+            >
+              <PanelRight size={18} />
+            </button>
+          )}
         </div>
       </header>
 
       <div
         className="flex-1 grid min-h-0 overflow-hidden bg-base-100"
         style={{
-          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${rightSidebarVisible ? `5px ${rightSidebarWidth}px` : "0 0"
+          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${rightPanelVisible ? `5px ${rightSidebarWidth}px` : "0 0"
             }`,
         }}
       >
@@ -2514,7 +2518,7 @@ export function App() {
         </section>
 
         <div
-          className={`w-full h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/50 transition-colors z-10 ${rightSidebarVisible ? "" : "invisible opacity-0"}`}
+          className={`w-full h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/50 transition-colors z-10 ${rightPanelVisible ? "" : "invisible opacity-0"}`}
           onPointerDown={startRightSidebarResize}
           role="separator"
           aria-orientation="vertical"
@@ -2522,9 +2526,9 @@ export function App() {
         />
 
         <aside
-          className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightSidebarVisible ? "border-l" : "invisible opacity-0 border-none"}`}
+          className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightPanelVisible ? "border-l" : "invisible opacity-0 border-none"}`}
         >
-          {rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false && activeNote.frontmatter?.[MINDMAP_KEY] !== undefined ? <div className="p-5 text-sm text-base-content/60">{t("mindmap.agentHint")}</div> : rightSidebarVisible && activeNote && activeNote.bodyLoaded !== false ? (
+          {rightPanelVisible && activeNote && activeNote.bodyLoaded !== false ? (
             <FeatureBoundary resetKey={activeNote.path}>
               <Suspense
                 fallback={<div className="empty">Loading note agent...</div>}
