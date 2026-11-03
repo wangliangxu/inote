@@ -112,12 +112,33 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       event.dataTransfer.effectAllowed = 'move'
       event.dataTransfer.setData('application/x-inote-mindmap-node', node.id)
     }
+    function positionAt(clientY: number, rect: { top: number; height: number }): NodeDropPosition {
+      if (!rect.height) return 'child'
+      const fraction = (clientY - rect.top) / rect.height
+      return fraction < 0.3 ? 'before' : fraction > 0.7 ? 'after' : 'child'
+    }
     function dropPosition(event: DragEvent): NodeDropPosition {
       const label = event.currentTarget.querySelector('[data-mindmap-node]')
       const rect = label?.getBoundingClientRect()
-      if (!rect?.height) return 'child'
-      const fraction = (event.clientY - rect.top) / rect.height
-      return fraction < 0.25 ? 'before' : fraction > 0.75 ? 'after' : 'child'
+      return rect ? positionAt(event.clientY, rect) : 'child'
+    }
+    function nearbyTarget(event: DragEvent) {
+      if (readOnly || !dragSource.current) return null
+      let nearest: { id: string; position: NodeDropPosition } | null = null
+      let distance = Infinity
+      for (const [id, element] of buttons.current) {
+        const rect = element.getBoundingClientRect()
+        if (!rect.width || !rect.height) continue
+        const dx = Math.max(rect.left - event.clientX, 0, event.clientX - rect.right)
+        const dy = Math.max(rect.top - event.clientY, 0, event.clientY - rect.bottom)
+        if (dx > 24 || dy > 18) continue
+        const nextDistance = dx * dx + dy * dy
+        if (nextDistance < distance) {
+          distance = nextDistance
+          nearest = { id, position: positionAt(event.clientY, rect) }
+        }
+      }
+      return nearest && !invalidDropIds.has(nearest.id) ? nearest : null
     }
     function startEditing(node: MindNode) {
       onSelect(node.id)
@@ -267,10 +288,6 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
               const position = dropPosition(event)
               setDropTarget((current) => current?.id === node.id && current.position === position ? current : { id: node.id, position })
             }}
-            onDragLeave={(event) => {
-              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
-                setDropTarget((current) => current?.id === node.id ? null : current)
-            }}
             onDrop={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -284,6 +301,11 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
               else rows.current.delete(node.id)
             }}
           >
+            {dropTarget?.id === node.id && (
+              <span className={`mindmap-drop-label drop-label-${dropTarget.position}`} role="status">
+                {t(`mindmap.drop.${dropTarget.position}`)}
+              </span>
+            )}
             {!readOnly && (
               <button
                 type="button"
@@ -407,6 +429,26 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       <div
         ref={canvasRef}
         className="mindmap-canvas"
+        onDragOver={(event) => {
+          if (readOnly || !dragSource.current) return
+          const target = nearbyTarget(event)
+          event.preventDefault()
+          event.dataTransfer.dropEffect = target ? 'move' : 'none'
+          setDropTarget((current) => current?.id === target?.id && current?.position === target?.position ? current : target)
+        }}
+        onDragLeave={(event) => {
+          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+          const rect = event.currentTarget.getBoundingClientRect()
+          if (event.clientX <= rect.left || event.clientX >= rect.right || event.clientY <= rect.top || event.clientY >= rect.bottom)
+            setDropTarget(null)
+        }}
+        onDrop={(event) => {
+          if (!dragSource.current) return
+          event.preventDefault()
+          const target = nearbyTarget(event)
+          if (target) onDropNode(dragSource.current, target.id, target.position)
+          endDrag()
+        }}
         tabIndex={0}
         aria-label={t('mindmap.canvas')}
       >

@@ -230,6 +230,7 @@ describe('mind map editor integration', () => {
     const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
     fireEvent.dragStart(screen.getByRole('button', { name: 'A' }), { dataTransfer })
     fireEvent.dragOver(screen.getByRole('button', { name: 'B' }), { dataTransfer })
+    expect(screen.getByRole('status').textContent).toBe('mindmap.drop.child')
     fireEvent.drop(screen.getByRole('button', { name: 'B' }), { dataTransfer })
     fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
     expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children).toMatchObject([
@@ -240,12 +241,28 @@ describe('mind map editor integration', () => {
     expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children.map((n) => n.text)).toEqual(['A', 'B'])
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.redo' }))
     const target = screen.getByRole('button', { name: 'B' })
-    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 0, height: 40 } as DOMRect)
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 140, left: 200, right: 320, width: 120, height: 40 } as DOMRect)
     fireEvent.dragStart(screen.getByRole('button', { name: 'A' }), { dataTransfer })
-    // jsdom DragEvent does not expose mouse coordinates, so define clientY explicitly.
-    const drop = new Event('drop', { bubbles: true, cancelable: true })
-    Object.defineProperties(drop, { clientY: { value: 1 }, dataTransfer: { value: dataTransfer } })
-    fireEvent(target, drop)
+    // The gaps around labels must be recognized, without requiring a hit on the text itself.
+    function pointerDrag(type: string, clientY: number) {
+      const event = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperties(event, {
+        clientX: { value: 220 }, clientY: { value: clientY }, dataTransfer: { value: dataTransfer },
+      })
+      fireEvent(screen.getByLabelText('mindmap.canvas'), event)
+    }
+    pointerDrag('dragover', 94)
+    expect(screen.getByRole('status').textContent).toBe('mindmap.drop.before')
+    expect(target.closest('.mindmap-topic-row')?.classList.contains('drop-before')).toBe(true)
+    pointerDrag('dragover', 146)
+    expect(screen.getByRole('status').textContent).toBe('mindmap.drop.after')
+    pointerDrag('dragover', 120)
+    expect(screen.getByRole('status').textContent).toBe('mindmap.drop.child')
+    pointerDrag('dragover', 300)
+    expect(screen.queryByRole('status')).toBeNull()
+    pointerDrag('dragover', 94)
+    pointerDrag('drop', 94)
+    expect(screen.queryByRole('status')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
     expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children.map((n) => n.text)).toEqual(['A', 'B'])
     const calls = save.mock.calls.length

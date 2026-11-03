@@ -218,6 +218,7 @@
     "canvas": "Mind map canvas",
     "nodes": "nodes",
     "nodeDetails": "Node details",
+    "drop": {"before": "Insert above", "after": "Insert below", "child": "Make a child"},
     "dragNode": "Drag node",
     "dragHint": "Drop in the center to make a child, or at the top or bottom to reorder; layout updates automatically",
     "nodeText": "Node text",
