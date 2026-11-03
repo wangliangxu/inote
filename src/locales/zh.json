@@ -218,6 +218,8 @@
     "canvas": "思维导图画布",
     "nodes": "个节点",
     "nodeDetails": "节点属性",
+    "dragNode": "拖动节点",
+    "dragHint": "拖到节点中央成为子节点，拖到上缘或下缘调整顺序；松开后自动布局",
     "nodeText": "节点文字",
     "nodeNote": "备注",
     "nodeLink": "链接",

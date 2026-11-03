@@ -8,6 +8,7 @@ import type { MindMap } from './mindmap'
 import type { Note } from '../../shared/types'
 import {
   createMindMap,
+  dropNode,
   exportFreeMind,
   exportOpml,
   flattenNodes,
@@ -226,5 +227,34 @@ describe('tree editing invariants', () => {
     expect(next.roots[0].children[0].children[0].children[0].text).toBe('Child')
     expect(root.children).toHaveLength(2)
     expect(moveNode(next, a.id, null).roots).toHaveLength(2)
+  })
+})
+
+describe('mind map drag and drop placement', () => {
+  const map: MindMap = { version: 1, roots: [{ id: 'r', text: 'Root', children: [
+    { id: 'a', text: 'A', note: 'Note', color: '#ff8800', children: [{ id: 'c', text: 'Child', children: [] }] },
+    { id: 'b', text: 'B', collapsed: true, children: [] },
+    { id: 'd', text: 'D', children: [] },
+  ] }] }
+  it('moves a full branch into a collapsed target, expanding it and preserving all data', () => {
+    const before = JSON.stringify(map)
+    const moved = dropNode(map, 'a', 'b', 'child')
+    expect(moved.roots[0].children.map((n) => n.id)).toEqual(['b', 'd'])
+    expect(moved.roots[0].children[0].collapsed).toBe(false)
+    expect(moved.roots[0].children[0].children[0]).toEqual(map.roots[0].children[0])
+    expect(JSON.stringify(map)).toBe(before)
+  })
+  it('inserts before and after siblings in both directions and promotes nested nodes', () => {
+    expect(dropNode(map, 'a', 'd', 'after').roots[0].children.map((n) => n.id)).toEqual(['b', 'd', 'a'])
+    expect(dropNode(map, 'd', 'a', 'before').roots[0].children.map((n) => n.id)).toEqual(['d', 'a', 'b'])
+    expect(dropNode(map, 'a', 'b', 'before')).toEqual(map)
+    expect(dropNode(map, 'c', 'a', 'before').roots[0].children.map((n) => n.id)).toEqual(['c', 'a', 'b', 'd'])
+    expect(dropNode(map, 'c', 'r', 'after').roots.map((n) => n.id)).toEqual(['r', 'c'])
+  })
+  it('rejects cycles and invalid targets and ignores a self drop', () => {
+    for (const position of ['child', 'before', 'after'] as const)
+      expect(() => dropNode(map, 'a', 'c', position)).toThrow()
+    expect(() => dropNode(map, 'a', 'missing', 'child')).toThrow()
+    expect(dropNode(map, 'a', 'a', 'child')).toBe(map)
   })
 })

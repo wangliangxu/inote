@@ -7,10 +7,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, DragEvent } from 'react'
+import { GripVertical } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { HighlightedText } from '../search/HighlightedText'
-import { flattenNodes, type MindMap, type MindNode } from './mindmap'
+import { flattenNodes, type MindMap, type MindNode, type NodeDropPosition } from './mindmap'
 import {
   branchCurves,
   centerMapTopics,
@@ -32,6 +33,7 @@ interface Props {
   readOnly: boolean
   onZoomChange: (zoom: number) => void
   onSelect: (id: string) => void
+  onDropNode: (id: string, targetId: string, position: NodeDropPosition) => void
   onAddChild: () => void
   onTextChange: (id: string, text: string) => void
   onTextEditStart: () => void
@@ -49,6 +51,7 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       readOnly,
       onZoomChange,
       onSelect,
+      onDropNode,
       onAddChild,
       onTextChange,
       onTextEditStart,
@@ -63,6 +66,10 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
     const treesRef = useRef<HTMLDivElement>(null)
     const buttons = useRef(new Map<string, HTMLElement>())
     const rows = useRef(new Map<string, HTMLDivElement>())
+    const dragSource = useRef<string | null>(null)
+    const suppressClickUntil = useRef(0)
+    const [draggedId, setDraggedId] = useState<string | null>(null)
+    const [dropTarget, setDropTarget] = useState<{ id: string; position: NodeDropPosition } | null>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
     type TextEdit = { id: string; text: string }
     const [editing, setEditing] = useState<TextEdit | null>(null)
@@ -86,6 +93,32 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       nodes.get(editing.id)?.text === editing.text
         ? editing
         : null
+    const invalidDropIds = useMemo(() => {
+      const source = draggedId ? nodes.get(draggedId) : undefined
+      return new Set(source ? flattenNodes({ version: 1, roots: [source] }).map(({ node }) => node.id) : [])
+    }, [draggedId, nodes])
+    function endDrag() {
+      dragSource.current = null
+      setDraggedId(null)
+      setDropTarget(null)
+      suppressClickUntil.current = Date.now() + 200
+    }
+    function beginDrag(event: DragEvent, node: MindNode) {
+      if (readOnly) { event.preventDefault(); return }
+      finishEditing()
+      onSelect(node.id)
+      dragSource.current = node.id
+      setDraggedId(node.id)
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('application/x-inote-mindmap-node', node.id)
+    }
+    function dropPosition(event: DragEvent): NodeDropPosition {
+      const label = event.currentTarget.querySelector('[data-mindmap-node]')
+      const rect = label?.getBoundingClientRect()
+      if (!rect?.height) return 'child'
+      const fraction = (event.clientY - rect.top) / rect.height
+      return fraction < 0.25 ? 'before' : fraction > 0.75 ? 'after' : 'child'
+    }
     function startEditing(node: MindNode) {
       onSelect(node.id)
       if (readOnly) return
@@ -225,12 +258,47 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
           style={{ '--branch-color': colors.get(node.id) } as CSSProperties}
         >
           <div
-            className="mindmap-topic-row"
+            className={`mindmap-topic-row ${draggedId === node.id ? 'is-dragging' : ''} ${dropTarget?.id === node.id ? `drop-${dropTarget.position}` : ''}`}
+            onDragOver={(event) => {
+              if (readOnly || !dragSource.current || invalidDropIds.has(node.id)) return
+              event.preventDefault()
+              event.stopPropagation()
+              event.dataTransfer.dropEffect = 'move'
+              const position = dropPosition(event)
+              setDropTarget((current) => current?.id === node.id && current.position === position ? current : { id: node.id, position })
+            }}
+            onDragLeave={(event) => {
+              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
+                setDropTarget((current) => current?.id === node.id ? null : current)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              const source = dragSource.current
+              if (!readOnly && source && !invalidDropIds.has(node.id))
+                onDropNode(source, node.id, dropPosition(event))
+              endDrag()
+            }}
             ref={(element) => {
               if (element) rows.current.set(node.id, element)
               else rows.current.delete(node.id)
             }}
           >
+            {!readOnly && (
+              <button
+                type="button"
+                className="mindmap-drag-handle"
+                aria-label={t('mindmap.dragNode')}
+                title={t('mindmap.dragHint')}
+                draggable
+                onDragStart={(event) => beginDrag(event, node)}
+                onDragEnd={endDrag}
+                onClick={() => onSelect(node.id)}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <GripVertical size={14} aria-hidden="true" />
+              </button>
+            )}
             {activeEdit?.id === node.id ? (
               <div
                 ref={(element) => {
@@ -289,7 +357,12 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
                 aria-pressed={node.id === selectedId}
                 aria-label={!node.text ? t('mindmap.emptyNode') : undefined}
                 title={t('mindmap.editHint')}
-                onClick={() => startEditing(node)}
+                draggable={!readOnly}
+                onDragStart={(event) => beginDrag(event, node)}
+                onDragEnd={endDrag}
+                onClick={() => {
+                  if (Date.now() >= suppressClickUntil.current) startEditing(node)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'F2') {
                     event.preventDefault()

@@ -171,6 +171,40 @@ export function moveNode(
   else next = insertNode(next, parentId, source.node)
   return validateMindMap(next)
 }
+export type NodeDropPosition = 'child' | 'before' | 'after'
+/** Move an entire branch, with cycle checks and sibling order preserved. */
+export function dropNode(
+  map: MindMap,
+  id: string,
+  targetId: string,
+  position: NodeDropPosition,
+): MindMap {
+  if (id === targetId) return map
+  const entries = flattenNodes(map)
+  const source = entries.find((entry) => entry.node.id === id)
+  const target = entries.find((entry) => entry.node.id === targetId)
+  if (!source || !target) throw new MindMapError('invalid')
+  if (flattenNodes({ version: 1, roots: [source.node] }).some(({ node }) => node.id === targetId))
+    throw new MindMapError('invalid')
+  if (position !== 'child' && source.parent?.id === target.parent?.id) {
+    const siblings = source.parent?.children ?? map.roots
+    const index = siblings.findIndex((node) => node.id === id)
+    const targetIndex = siblings.findIndex((node) => node.id === targetId)
+    if (index === targetIndex + (position === 'before' ? -1 : 1)) return map
+  }
+  const next = moveNode(map, id, position === 'child' ? targetId : target.parent?.id ?? null)
+  if (position === 'child') return next
+  function place(nodes: MindNode[]): MindNode[] {
+    const result = nodes.map((node) => ({ ...node, children: place(node.children) }))
+    const index = result.findIndex((node) => node.id === id)
+    if (index < 0 || !result.some((node) => node.id === targetId)) return result
+    const [node] = result.splice(index, 1)
+    const targetIndex = result.findIndex((item) => item.id === targetId)
+    result.splice(targetIndex + (position === 'after' ? 1 : 0), 0, node)
+    return result
+  }
+  return { ...next, roots: place(next.roots) }
+}
 export function reorderNode(map: MindMap, id: string, offset: number): MindMap {
   function visit(nodes: MindNode[]): MindNode[] {
     const result = nodes.map((n) => ({ ...n, children: visit(n.children) }))

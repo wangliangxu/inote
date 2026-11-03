@@ -7,6 +7,7 @@ import { noteToMarkdown } from '../../shared/noteMarkdown'
 import { getFilenameForTitle } from '../../shared/notePaths'
 import { HighlightedText } from '../search/HighlightedText'
 import {
+  dropNode,
   exportFreeMind,
   exportOpml,
   flattenNodes,
@@ -323,6 +324,10 @@ export function MindMapWorkspace({
               setSelectedId(id)
               editGroup.current = ''
             }}
+            onDropNode={(id, targetId, position) => attempt(() => {
+              change(dropNode(map, id, targetId, position))
+              setSelectedId(id)
+            })}
             onAddChild={() => add(false, true)}
             onTextEditStart={() => {
               inlineHistory.current = { map, past, future }

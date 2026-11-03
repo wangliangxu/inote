@@ -54,6 +54,7 @@ describe('measured mind map connectors', () => {
       readOnly: false,
       onZoomChange: vi.fn(),
       onSelect: vi.fn(),
+      onDropNode: vi.fn(),
       onAddChild: vi.fn(),
       onTextChange: vi.fn(),
       onTextEditStart: vi.fn(),
@@ -69,6 +70,6 @@ describe('measured mind map connectors', () => {
       initial,
     )
     rendered.rerender(<MindMapCanvas {...props} zoom={0.5} view="outline" />)
-    expect(rendered.container.querySelector('svg')).toBeNull()
+    expect(rendered.container.querySelector('.mindmap-curves')).toBeNull()
   })
 })

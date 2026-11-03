@@ -218,6 +218,42 @@ describe('mind map editor integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.redo' }))
     expect(screen.getByRole('button', { name: 'mindmap.newNode' })).toBeTruthy()
   })
+  it('moves branches by dragging, reorders them at an edge and preserves undo and redo', () => {
+    const save = vi.fn()
+    render(<Harness onSave={save} />)
+    for (const [command, name] of [['mindmap.addChild', 'A'], ['mindmap.addSibling', 'B']]) {
+      fireEvent.click(screen.getByRole('button', { name: command }))
+      fireEvent.click(screen.getByRole('button', { name: 'mindmap.newNode' }))
+      fireEvent.change(screen.getByLabelText('mindmap.nodeText'), { target: { value: name } })
+      fireEvent.blur(screen.getByLabelText('mindmap.nodeText'))
+    }
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
+    fireEvent.dragStart(screen.getByRole('button', { name: 'A' }), { dataTransfer })
+    fireEvent.dragOver(screen.getByRole('button', { name: 'B' }), { dataTransfer })
+    fireEvent.drop(screen.getByRole('button', { name: 'B' }), { dataTransfer })
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children).toMatchObject([
+      { text: 'B', children: [{ text: 'A', children: [] }] },
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.undo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children.map((n) => n.text)).toEqual(['A', 'B'])
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.redo' }))
+    const target = screen.getByRole('button', { name: 'B' })
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 0, height: 40 } as DOMRect)
+    fireEvent.dragStart(screen.getByRole('button', { name: 'A' }), { dataTransfer })
+    // jsdom DragEvent does not expose mouse coordinates, so define clientY explicitly.
+    const drop = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperties(drop, { clientY: { value: 1 }, dataTransfer: { value: dataTransfer } })
+    fireEvent(target, drop)
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls.at(-1)![0])?.roots[0].children.map((n) => n.text)).toEqual(['A', 'B'])
+    const calls = save.mock.calls.length
+    fireEvent.dragStart(screen.getByRole('button', { name: 'Central topic' }), { dataTransfer })
+    fireEvent.drop(screen.getByRole('button', { name: 'A' }), { dataTransfer })
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls[calls][0])?.roots[0].children.map((n) => n.text)).toEqual(['A', 'B'])
+  })
   it('cancels inline editing without leaving undo entries or discarding prior redo history', () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Central topic' }))
@@ -317,6 +353,8 @@ describe('mind map editor integration', () => {
   it('disables editing in preview mode', () => {
     render(<Harness previewMode />)
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.nodeDetails' }))
+    expect(screen.queryByRole('button', { name: 'mindmap.dragNode' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Central topic' }).draggable).toBe(false)
     expect(
       (screen.getByLabelText('mindmap.nodeNote') as HTMLTextAreaElement)
         .disabled,
