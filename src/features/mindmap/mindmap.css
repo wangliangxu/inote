@@ -224,7 +224,14 @@
 .mindmap-drag-handle:focus-visible {
   outline: 2px solid var(--accent-main);
 }
+.mindmap-drag-handle,
+.mindmap-topic:not(.editing) {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 .mindmap-topic-row.is-dragging { opacity: 0.45; }
+.mindmap-topic-row.is-dragging :is(.mindmap-topic, .mindmap-drag-handle) { cursor: grabbing; }
 .mindmap-topic-row:has(.mindmap-drop-label) {
   z-index: 5;
 }

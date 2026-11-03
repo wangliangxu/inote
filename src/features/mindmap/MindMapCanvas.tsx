@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { CSSProperties, DragEvent } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import { GripVertical } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { HighlightedText } from '../search/HighlightedText'
@@ -67,6 +67,9 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
     const buttons = useRef(new Map<string, HTMLElement>())
     const rows = useRef(new Map<string, HTMLDivElement>())
     const dragSource = useRef<string | null>(null)
+    const pointerDrag = useRef<{
+      pointerId: number; x: number; y: number; id: string; active: boolean; element: HTMLElement
+    } | null>(null)
     const suppressClickUntil = useRef(0)
     const [draggedId, setDraggedId] = useState<string | null>(null)
     const [dropTarget, setDropTarget] = useState<{ id: string; position: NodeDropPosition } | null>(null)
@@ -93,37 +96,70 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       nodes.get(editing.id)?.text === editing.text
         ? editing
         : null
-    const invalidDropIds = useMemo(() => {
-      const source = draggedId ? nodes.get(draggedId) : undefined
-      return new Set(source ? flattenNodes({ version: 1, roots: [source] }).map(({ node }) => node.id) : [])
-    }, [draggedId, nodes])
     function endDrag() {
+      const session = pointerDrag.current
+      pointerDrag.current = null
       dragSource.current = null
       setDraggedId(null)
       setDropTarget(null)
-      suppressClickUntil.current = Date.now() + 200
+      if (session?.active) suppressClickUntil.current = Date.now() + 200
+      if (session?.element.hasPointerCapture?.(session.pointerId))
+        session.element.releasePointerCapture(session.pointerId)
     }
-    function beginDrag(event: DragEvent, node: MindNode) {
-      if (readOnly) { event.preventDefault(); return }
-      finishEditing()
-      onSelect(node.id)
-      dragSource.current = node.id
-      setDraggedId(node.id)
-      event.dataTransfer.effectAllowed = 'move'
-      event.dataTransfer.setData('application/x-inote-mindmap-node', node.id)
+    function beginPointer(event: PointerEvent<HTMLElement>, node: MindNode) {
+      if (readOnly || pointerDrag.current || event.button !== 0 || !event.isPrimary) return
+      pointerDrag.current = {
+        pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+        id: node.id, active: false, element: event.currentTarget,
+      }
+      event.currentTarget.setPointerCapture?.(event.pointerId)
     }
+    function movePointer(event: PointerEvent) {
+      const session = pointerDrag.current
+      if (!session || session.pointerId !== event.pointerId) return
+      if (readOnly) { endDrag(); return }
+      if (!session.active) {
+        if (Math.hypot(event.clientX - session.x, event.clientY - session.y) < 6) return
+        session.active = true
+        finishEditing()
+        onSelect(session.id)
+        dragSource.current = session.id
+        setDraggedId(session.id)
+      }
+      event.preventDefault()
+      const target = nearbyTarget(event)
+      setDropTarget((current) => current?.id === target?.id && current?.position === target?.position ? current : target)
+    }
+    function finishPointer(event: PointerEvent) {
+      const session = pointerDrag.current
+      if (!session || session.pointerId !== event.pointerId) return
+      if (!session.active) { endDrag(); return }
+      event.preventDefault()
+      event.stopPropagation()
+      const target = nearbyTarget(event)
+      endDrag()
+      if (target) onDropNode(session.id, target.id, target.position)
+      canvasRef.current?.focus({ preventScroll: true })
+    }
+    useEffect(() => {
+      window.addEventListener('blur', endDrag)
+      return () => {
+        window.removeEventListener('blur', endDrag)
+        const session = pointerDrag.current
+        pointerDrag.current = null
+        if (session?.element.hasPointerCapture?.(session.pointerId))
+          session.element.releasePointerCapture(session.pointerId)
+      }
+    }, [])
     function positionAt(clientY: number, rect: { top: number; height: number }): NodeDropPosition {
       if (!rect.height) return 'child'
       const fraction = (clientY - rect.top) / rect.height
       return fraction < 0.3 ? 'before' : fraction > 0.7 ? 'after' : 'child'
     }
-    function dropPosition(event: DragEvent): NodeDropPosition {
-      const label = event.currentTarget.querySelector('[data-mindmap-node]')
-      const rect = label?.getBoundingClientRect()
-      return rect ? positionAt(event.clientY, rect) : 'child'
-    }
-    function nearbyTarget(event: DragEvent) {
-      if (readOnly || !dragSource.current) return null
+    function nearbyTarget(event: { clientX: number; clientY: number }) {
+      const source = dragSource.current ? nodes.get(dragSource.current) : undefined
+      if (readOnly || !source) return null
+      const invalidDropIds = new Set(flattenNodes({ version: 1, roots: [source] }).map(({ node }) => node.id))
       let nearest: { id: string; position: NodeDropPosition } | null = null
       let distance = Infinity
       for (const [id, element] of buttons.current) {
@@ -280,22 +316,6 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
         >
           <div
             className={`mindmap-topic-row ${draggedId === node.id ? 'is-dragging' : ''} ${dropTarget?.id === node.id ? `drop-${dropTarget.position}` : ''}`}
-            onDragOver={(event) => {
-              if (readOnly || !dragSource.current || invalidDropIds.has(node.id)) return
-              event.preventDefault()
-              event.stopPropagation()
-              event.dataTransfer.dropEffect = 'move'
-              const position = dropPosition(event)
-              setDropTarget((current) => current?.id === node.id && current.position === position ? current : { id: node.id, position })
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              const source = dragSource.current
-              if (!readOnly && source && !invalidDropIds.has(node.id))
-                onDropNode(source, node.id, dropPosition(event))
-              endDrag()
-            }}
             ref={(element) => {
               if (element) rows.current.set(node.id, element)
               else rows.current.delete(node.id)
@@ -312,9 +332,9 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
                 className="mindmap-drag-handle"
                 aria-label={t('mindmap.dragNode')}
                 title={t('mindmap.dragHint')}
-                draggable
-                onDragStart={(event) => beginDrag(event, node)}
-                onDragEnd={endDrag}
+                draggable={false}
+                onDragStart={(event) => event.preventDefault()}
+                onPointerDown={(event) => beginPointer(event, node)}
                 onClick={() => onSelect(node.id)}
                 onKeyDown={(event) => event.stopPropagation()}
               >
@@ -379,9 +399,9 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
                 aria-pressed={node.id === selectedId}
                 aria-label={!node.text ? t('mindmap.emptyNode') : undefined}
                 title={t('mindmap.editHint')}
-                draggable={!readOnly}
-                onDragStart={(event) => beginDrag(event, node)}
-                onDragEnd={endDrag}
+                draggable={false}
+                onDragStart={(event) => event.preventDefault()}
+                onPointerDown={(event) => beginPointer(event, node)}
                 onClick={() => {
                   if (Date.now() >= suppressClickUntil.current) startEditing(node)
                 }}
@@ -429,25 +449,16 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       <div
         ref={canvasRef}
         className="mindmap-canvas"
-        onDragOver={(event) => {
-          if (readOnly || !dragSource.current) return
-          const target = nearbyTarget(event)
-          event.preventDefault()
-          event.dataTransfer.dropEffect = target ? 'move' : 'none'
-          setDropTarget((current) => current?.id === target?.id && current?.position === target?.position ? current : target)
-        }}
-        onDragLeave={(event) => {
-          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
-          const rect = event.currentTarget.getBoundingClientRect()
-          if (event.clientX <= rect.left || event.clientX >= rect.right || event.clientY <= rect.top || event.clientY >= rect.bottom)
-            setDropTarget(null)
-        }}
-        onDrop={(event) => {
-          if (!dragSource.current) return
-          event.preventDefault()
-          const target = nearbyTarget(event)
-          if (target) onDropNode(dragSource.current, target.id, target.position)
-          endDrag()
+        onPointerMove={movePointer}
+        onPointerUp={finishPointer}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+        onKeyDownCapture={(event) => {
+          if (event.key === 'Escape' && pointerDrag.current?.active) {
+            event.preventDefault()
+            event.stopPropagation()
+            endDrag()
+          }
         }}
         tabIndex={0}
         aria-label={t('mindmap.canvas')}
