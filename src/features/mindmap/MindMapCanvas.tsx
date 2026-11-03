@@ -21,6 +21,7 @@ import {
 } from './mindmapLayout'
 export interface MindMapCanvasHandle {
   fit: () => void
+  editNode: (id: string) => void
 }
 interface Props {
   map: MindMap
@@ -31,6 +32,7 @@ interface Props {
   readOnly: boolean
   onZoomChange: (zoom: number) => void
   onSelect: (id: string) => void
+  onAddChild: () => void
   onTextChange: (id: string, text: string) => void
   onTextEditStart: () => void
   onTextEditEnd: (cancel: boolean) => void
@@ -47,6 +49,7 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       readOnly,
       onZoomChange,
       onSelect,
+      onAddChild,
       onTextChange,
       onTextEditStart,
       onTextEditEnd,
@@ -63,6 +66,7 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
     const inputRef = useRef<HTMLTextAreaElement>(null)
     type TextEdit = { id: string; text: string }
     const [editing, setEditing] = useState<TextEdit | null>(null)
+    const [pendingEditId, setPendingEditId] = useState<string | null>(null)
     const editRef = useRef<TextEdit | null>(null)
     const initialFit = useRef(false)
     const centerRoot = useRef(false)
@@ -89,6 +93,13 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       editRef.current = { id: node.id, text: node.text }
       setEditing(editRef.current)
     }
+    useLayoutEffect(() => {
+      const node = pendingEditId ? nodes.get(pendingEditId) : undefined
+      if (node) {
+        startEditing(node)
+        setPendingEditId(null)
+      }
+    }, [pendingEditId, nodes])
     function finishEditing(cancel = false, restoreFocus = false) {
       const edit = editRef.current
       editRef.current = null
@@ -124,7 +135,7 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       )
       canvas.scrollTo?.({ top: 0, left: 0 })
     }
-    useImperativeHandle(ref, () => ({ fit: () => fit() }))
+    useImperativeHandle(ref, () => ({ fit: () => fit(), editNode: setPendingEditId }))
     useLayoutEffect(() => {
       const canvas = canvasRef.current,
         forest = forestRef.current,
@@ -249,7 +260,12 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
                   onKeyDown={(event) => {
                     if (event.nativeEvent.isComposing || event.keyCode === 229)
                       return
-                    if (event.key === 'Escape') {
+                    if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      finishEditing()
+                      onAddChild()
+                    } else if (event.key === 'Escape') {
                       event.preventDefault()
                       event.stopPropagation()
                       finishEditing(true, true)

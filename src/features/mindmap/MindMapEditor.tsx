@@ -181,12 +181,13 @@ export function MindMapWorkspace({
     editGroup.current = ''
     emit(future[0])
   }
-  function add(sibling: boolean) {
+  function add(sibling: boolean, edit = false) {
     attempt(() => {
       const child = newNode(t('mindmap.newNode'))
       const next = insertNode(map, selected.node.id, child, sibling)
       change(next)
       setSelectedId(child.id)
+      if (edit) canvasRef.current?.editNode(child.id)
     })
   }
   function remove() {
@@ -214,9 +215,10 @@ export function MindMapWorkspace({
     if (!target.closest('.mindmap-canvas') || target.closest('.mindmap-fold'))
       return
     if (previewMode) return
-    if (event.key === 'Tab' && !event.shiftKey) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault()
-      add(false)
+      add(false, true)
     }
     if (event.key === 'Enter') {
       event.preventDefault()
@@ -321,6 +323,7 @@ export function MindMapWorkspace({
               setSelectedId(id)
               editGroup.current = ''
             }}
+            onAddChild={() => add(false, true)}
             onTextEditStart={() => {
               inlineHistory.current = { map, past, future }
               editGroup.current = ''

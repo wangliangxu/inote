@@ -54,6 +54,7 @@ describe('measured mind map connectors', () => {
       readOnly: false,
       onZoomChange: vi.fn(),
       onSelect: vi.fn(),
+      onAddChild: vi.fn(),
       onTextChange: vi.fn(),
       onTextEditStart: vi.fn(),
       onTextEditEnd: vi.fn(),

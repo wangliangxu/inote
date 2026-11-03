@@ -192,6 +192,32 @@ describe('mind map editor integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.redo' }))
     expect(screen.getByRole('button', { name: '直接编辑节点' })).toBeTruthy()
   })
+  it('creates and edits nested children with Tab from inline editing without moving focus to other controls', () => {
+    const save = vi.fn()
+    render(<Harness onSave={save} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Central topic' }))
+    fireEvent.change(screen.getByLabelText('mindmap.nodeText'), { target: { value: 'Parent' } })
+    expect(fireEvent.keyDown(screen.getByLabelText('mindmap.nodeText'), { key: 'Tab' })).toBe(false)
+    const child = screen.getByLabelText('mindmap.nodeText') as HTMLTextAreaElement
+    expect(document.activeElement).toBe(child)
+    expect(child.value).toBe('mindmap.newNode')
+    fireEvent.change(child, { target: { value: 'Child' } })
+    expect(fireEvent.keyDown(child, { key: 'Tab', shiftKey: true })).toBe(true)
+    expect(fireEvent.keyDown(child, { key: 'Tab', isComposing: true })).toBe(true)
+    expect(fireEvent.keyDown(child, { key: 'Tab' })).toBe(false)
+    const grandchild = screen.getByLabelText('mindmap.nodeText')
+    expect(document.activeElement).toBe(grandchild)
+    fireEvent.change(grandchild, { target: { value: 'Grandchild' } })
+    fireEvent.keyDown(grandchild, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls[0][0])?.roots[0]).toMatchObject({
+      text: 'Parent', children: [{ text: 'Child', children: [{ text: 'Grandchild', children: [] }] }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.undo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.undo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'mindmap.redo' }))
+    expect(screen.getByRole('button', { name: 'mindmap.newNode' })).toBeTruthy()
+  })
   it('cancels inline editing without leaving undo entries or discarding prior redo history', () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Central topic' }))
@@ -217,7 +243,7 @@ describe('mind map editor integration', () => {
       expect(screen.getByLabelText('mindmap.nodeText')).toBe(input)
     }
     expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(true)
-    for (const key of ['Backspace', 'Delete', 'Tab'])
+    for (const key of ['Backspace', 'Delete'])
       expect(fireEvent.keyDown(input, { key })).toBe(true)
     expect(screen.queryByRole('button', { name: 'mindmap.newNode' })).toBeNull()
     fireEvent.blur(input)
