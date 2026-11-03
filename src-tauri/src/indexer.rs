@@ -39,6 +39,59 @@ pub struct VaultDelta {
     pub removed_paths: Vec<String>,
 }
 
+// Summary IPC carries a bounded visual preview, never the full editable map or notes/links.
+fn card_frontmatter(
+    raw: &str,
+    include_body: bool,
+) -> Result<std::collections::BTreeMap<String, serde_json::Value>, serde_json::Error> {
+    if include_body {
+        return serde_json::from_str(raw);
+    }
+    use serde_json::{json, Value};
+    fn take(nodes: &[Value], depth: usize, remaining: &mut usize) -> Vec<Value> {
+        let mut result = Vec::new();
+        for node in nodes {
+            if *remaining == 0 {
+                break;
+            }
+            let (Some(_id), Some(text), Some(children)) = (
+                node["id"].as_str(),
+                node["text"].as_str(),
+                node["children"].as_array(),
+            ) else {
+                continue;
+            };
+            *remaining -= 1;
+            let id = format!("preview-{}", 32 - *remaining);
+            let descendants = if depth < 3 && node["collapsed"] != true {
+                take(children, depth + 1, remaining)
+            } else {
+                Vec::new()
+            };
+            let mut item = json!({"id": id, "text": text.chars().take(48).collect::<String>(), "children": descendants});
+            if let Some(color) = node["color"].as_str() {
+                item["color"] = json!(color.chars().take(32).collect::<String>());
+            }
+            result.push(item);
+        }
+        result
+    }
+    let map: Value = serde_json::from_str(raw)?;
+    let mut result = std::collections::BTreeMap::new();
+    if map["version"] == 1 {
+        if let Some(roots) = map["roots"].as_array() {
+            let roots = take(roots, 0, &mut 32);
+            if !roots.is_empty() {
+                result.insert(
+                    "inote_mindmap_preview".into(),
+                    json!({"version": 1, "roots": roots}),
+                );
+            }
+        }
+    }
+    Ok(result)
+}
+
 impl NoteIndex {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
@@ -342,7 +395,7 @@ impl NoteIndex {
         let frontmatter_column = if include_body {
             "n.frontmatter_json, n.frontmatter_source"
         } else {
-            "'{}', NULL"
+            "COALESCE(json_extract(n.frontmatter_json, '$.inote_mindmap'), '{}'), NULL"
         };
         let mut stmt = self.conn.prepare(&format!(
             "
@@ -378,15 +431,14 @@ impl NoteIndex {
                     // sentinel in SQLite for refresh detection, but expose a valid u64.
                     source_size: row.get::<_, Option<i64>>(16)?.unwrap_or_default().max(0) as u64,
                     body_loaded: include_body,
-                    frontmatter: serde_json::from_str(&row.get::<_, String>(13)?).map_err(
-                        |error| {
+                    frontmatter: card_frontmatter(&row.get::<_, String>(13)?, include_body)
+                        .map_err(|error| {
                             rusqlite::Error::FromSqlConversionFailure(
                                 13,
                                 rusqlite::types::Type::Text,
                                 Box::new(error),
                             )
-                        },
-                    )?,
+                        })?,
                     frontmatter_source: row.get(14)?,
                     excerpt: row.get(15)?,
                     raw_markdown: None,
@@ -1132,6 +1184,43 @@ mod tests {
     use crate::vault::Vault;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn mindmap_summaries_have_bounded_visual_previews_without_editable_data() {
+        use serde_json::json;
+        let directory = tempdir().unwrap();
+        let vault = Vault::new(directory.path()).unwrap();
+        vault.write_note("map.md", "# Map").unwrap();
+        let mut note = vault.read_note("map.md").unwrap();
+        let children: Vec<_> = (0..100).map(|i| json!({"id": format!("n-{i}"), "text": "学".repeat(200), "note": "private note", "link": "https://example.com", "children": []})).collect();
+        let map = json!({"version": 1, "roots": [{"id": "root", "text": "Map", "color": "#123456", "children": children}]});
+        note.frontmatter.insert("inote_mindmap".into(), map.clone());
+        let index = NoteIndex::open(&vault.root().join(".inote/index.sqlite3")).unwrap();
+        index.full_rebuild(vault.root(), &[note]).unwrap();
+        let summaries = index.get_note_summaries().unwrap();
+        assert!(!summaries[0].body_loaded);
+        assert!(summaries[0].body.is_empty());
+        assert!(!summaries[0].frontmatter.contains_key("inote_mindmap"));
+        let preview = &summaries[0].frontmatter["inote_mindmap_preview"];
+        let roots = preview["roots"].as_array().unwrap();
+        assert_eq!(roots[0]["color"], "#123456");
+        assert_eq!(roots[0]["children"].as_array().unwrap().len(), 31);
+        assert_eq!(
+            roots[0]["children"][0]["text"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count(),
+            48
+        );
+        assert!(roots[0]["children"][0].get("note").is_none());
+        assert!(roots[0]["children"][0].get("link").is_none());
+        assert_eq!(
+            index.get_all_notes().unwrap()[0].frontmatter["inote_mindmap"],
+            map
+        );
+        assert!(super::card_frontmatter("{}", false).unwrap().is_empty());
+    }
 
     #[test]
     fn legacy_unknown_file_sizes_load_before_incremental_refresh() {

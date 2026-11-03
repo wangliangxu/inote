@@ -42,6 +42,7 @@ const CalendarView = lazy(() =>
   })),
 );
 const Editor = lazy(() => import("../features/mindmap/MindMapEditor").then((module) => ({ default: module.Editor })));
+import { MindMapThumbnail, thumbnailMap } from "../features/mindmap/MindMapThumbnail";
 import { MINDMAP_KEY, withMindMap } from "../features/mindmap/mindmap";
 import type { MapCreation } from "../features/mindmap/MindMapDialog";
 const MindMapDialog = lazy(() => import("../features/mindmap/MindMapDialog").then(m => ({ default: m.MindMapDialog })));
@@ -184,6 +185,7 @@ function noteExcerpt(note: Note | SearchResult, query = ""): string {
 const NOTES_PAGE_SIZE = 60;
 
 interface NoteItemProps {
+  previewNote?: Note;
   note: Note | SearchResult;
   isActive: boolean;
   onSelect: (path: string) => void;
@@ -192,11 +194,13 @@ interface NoteItemProps {
 
 const NoteCardItem = memo(function NoteCardItem({
   note,
+  previewNote,
   isActive,
   onSelect,
   searchQuery,
 }: NoteItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const map = useMemo(() => thumbnailMap(previewNote ?? note), [note, previewNote]);
 
   useEffect(() => {
     if (isActive && ref.current) {
@@ -225,9 +229,10 @@ const NoteCardItem = memo(function NoteCardItem({
                 />
               )}
           </div>
-          <small className="text-xs text-base-content/60 leading-relaxed">
+          {map && <MindMapThumbnail map={map} />}
+          {(!map || searchQuery.trim()) && <small className="text-xs text-base-content/60 leading-relaxed">
             <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
-          </small>
+          </small>}
           <SearchMatchMetadata note={note} query={searchQuery} />
           <div className="note-card-footer flex items-center justify-between text-[10px] text-base-content/40 mt-auto font-mono">
             <time>{note.updatedAt || note.createdAt}</time>
@@ -2405,6 +2410,7 @@ export function App() {
                   {group.notes.map((note) =>
                     noteListMode === "cards" ? (
                       <NoteCardItem
+                        previewNote={activeView === "search" ? notes.find((item) => item.path === note.path) : undefined}
                         key={note.path}
                         note={note}
                         isActive={note.path === activePath}

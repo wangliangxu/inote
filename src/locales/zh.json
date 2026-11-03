@@ -202,6 +202,7 @@
     "dateOnly": "仅设置日期"
   },
   "mindmap": {
+    "thumbnail": "思维导图缩略图",
     "title": "思维导图",
     "create": "新建导图",
     "import": "导入旧导图",

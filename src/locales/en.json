@@ -202,6 +202,7 @@
     "dateOnly": "Date only"
   },
   "mindmap": {
+    "thumbnail": "Mind map thumbnail",
     "title": "Mind maps",
     "create": "New mind map",
     "import": "Import mind maps",
