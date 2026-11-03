@@ -127,6 +127,13 @@
     "emptyFolderDesc": "Click the + button to create your first note here."
   },
   "editor": {
+    "cover": "Card cover",
+    "coverAuto": "Use first image",
+    "coverCustom": "Choose an image",
+    "coverHidden": "Hide cover",
+    "coverPath": "Relative image path or HTTPS URL",
+    "coverPreview": "Note image cover",
+
     "noChanges": "No changes...",
     "titlePlaceholder": "Note title...",
     "bodyPlaceholder": "Start writing...",

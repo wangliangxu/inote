@@ -131,6 +131,7 @@ impl NoteIndex {
             ("source_revision", "TEXT DEFAULT ''"),
             ("frontmatter_json", "TEXT DEFAULT '{}'"),
             ("frontmatter_source", "TEXT"),
+            ("cover_preview", "TEXT"),
         ] {
             if !columns.contains(name) {
                 self.conn
@@ -140,6 +141,19 @@ impl NoteIndex {
                     )
                     .map_err(|error| format!("failed to migrate index: {error}"))?;
             }
+        }
+        if !columns.contains("cover_preview") {
+            self.atomic(|| {
+                let mut statement = self.conn.prepare("SELECT n.path, n.frontmatter_json, s.body FROM notes n JOIN search_index s ON n.path = s.path").map_err(|e| e.to_string())?;
+                let rows = statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))).map_err(|e| e.to_string())?;
+                for row in rows {
+                    let (path, raw, body) = row.map_err(|e| e.to_string())?;
+                    let metadata = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+                    let cover = crate::note_cover::cover_source(&metadata, &body);
+                    self.conn.execute("UPDATE notes SET cover_preview=?1 WHERE path=?2", params![cover, path]).map_err(|e| e.to_string())?;
+                }
+                Ok(())
+            })?;
         }
         Ok(())
     }
@@ -237,8 +251,8 @@ impl NoteIndex {
         self.conn
             .execute(
                 "
-                INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary, due, status, priority, project, file_modified, file_size, source_revision, frontmatter_json, frontmatter_source)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                INSERT INTO notes (path, title, category, created_at, updated_at, word_count, summary, due, status, priority, project, file_modified, file_size, source_revision, frontmatter_json, frontmatter_source, cover_preview)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                 ",
                 params![
                     note.path,
@@ -256,7 +270,8 @@ impl NoteIndex {
                     note.source_size as i64,
                     note.source_revision,
                     serde_json::to_string(&note.frontmatter).map_err(|error| error.to_string())?,
-                    note.frontmatter_source
+                    note.frontmatter_source,
+                    crate::note_cover::cover_source(&note.frontmatter, &note.body)
                 ],
             )
             .map_err(|error| format!("failed to index note metadata: {error}"))?;
@@ -400,7 +415,7 @@ impl NoteIndex {
         let mut stmt = self.conn.prepare(&format!(
             "
             SELECT n.path, n.title, n.category, n.created_at, n.updated_at, n.word_count, n.summary,
-                   n.due, n.status, n.priority, n.project, {body_column}, n.source_revision, {frontmatter_column}, substr(s.body, 1, 180), n.file_size
+                   n.due, n.status, n.priority, n.project, {body_column}, n.source_revision, {frontmatter_column}, substr(s.body, 1, 180), n.file_size, n.cover_preview
             FROM notes n
             JOIN search_index s ON n.path = s.path
             {note_filter}
@@ -431,14 +446,27 @@ impl NoteIndex {
                     // sentinel in SQLite for refresh detection, but expose a valid u64.
                     source_size: row.get::<_, Option<i64>>(16)?.unwrap_or_default().max(0) as u64,
                     body_loaded: include_body,
-                    frontmatter: card_frontmatter(&row.get::<_, String>(13)?, include_body)
-                        .map_err(|error| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                13,
-                                rusqlite::types::Type::Text,
-                                Box::new(error),
-                            )
-                        })?,
+                    frontmatter: {
+                        let mut metadata =
+                            card_frontmatter(&row.get::<_, String>(13)?, include_body).map_err(
+                                |error| {
+                                    rusqlite::Error::FromSqlConversionFailure(
+                                        13,
+                                        rusqlite::types::Type::Text,
+                                        Box::new(error),
+                                    )
+                                },
+                            )?;
+                        if !include_body {
+                            if let Some(cover) = row.get::<_, Option<String>>(17)? {
+                                metadata.insert(
+                                    "inote_card_cover".into(),
+                                    serde_json::Value::String(cover),
+                                );
+                            }
+                        }
+                        metadata
+                    },
                     frontmatter_source: row.get(14)?,
                     excerpt: row.get(15)?,
                     raw_markdown: None,
@@ -1186,6 +1214,50 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    fn image_cover_summaries_backfill_and_follow_note_updates() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::new(dir.path()).unwrap();
+        vault
+            .write_note("cover.md", "---\ncover: custom.png\n---\n![a](first.png)")
+            .unwrap();
+        let db = vault.root().join(".inote/index.sqlite3");
+        let index = NoteIndex::open(&db).unwrap();
+        index
+            .full_rebuild(vault.root(), &vault.scan().unwrap())
+            .unwrap();
+        assert_eq!(
+            index.get_note_summaries().unwrap()[0].frontmatter["inote_card_cover"],
+            "custom.png"
+        );
+        index
+            .conn
+            .execute("ALTER TABLE notes DROP COLUMN cover_preview", [])
+            .unwrap();
+        drop(index);
+        let index = NoteIndex::open(&db).unwrap();
+        let summaries = index.get_note_summaries().unwrap();
+        assert_eq!(summaries[0].frontmatter["inote_card_cover"], "custom.png");
+        assert!(!summaries[0].body_loaded);
+        assert!(summaries[0].body.is_empty());
+        assert!(!index.get_all_notes().unwrap()[0]
+            .frontmatter
+            .contains_key("inote_card_cover"));
+        vault
+            .write_note("cover.md", "---\ncover: false\n---\n![a](first.png)")
+            .unwrap();
+        index
+            .update_note(
+                vault.root(),
+                &vault.read_note("cover.md").unwrap(),
+                &vault.scan().unwrap(),
+            )
+            .unwrap();
+        assert!(!index.get_note_summaries().unwrap()[0]
+            .frontmatter
+            .contains_key("inote_card_cover"));
+    }
+
+    #[test]
     fn mindmap_summaries_have_bounded_visual_previews_without_editable_data() {
         use serde_json::json;
         let directory = tempdir().unwrap();
@@ -1195,7 +1267,7 @@ mod tests {
         let children: Vec<_> = (0..100).map(|i| json!({"id": format!("n-{i}"), "text": "学".repeat(200), "note": "private note", "link": "https://example.com", "children": []})).collect();
         let map = json!({"version": 1, "roots": [{"id": "root", "text": "Map", "color": "#123456", "children": children}]});
         note.frontmatter.insert("inote_mindmap".into(), map.clone());
-        let index = NoteIndex::open(&vault.root().join(".inote/index.sqlite3")).unwrap();
+        let index = NoteIndex::open(vault.root().join(".inote/index.sqlite3")).unwrap();
         index.full_rebuild(vault.root(), &[note]).unwrap();
         let summaries = index.get_note_summaries().unwrap();
         assert!(!summaries[0].body_loaded);

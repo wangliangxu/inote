@@ -1,5 +1,7 @@
 #![recursion_limit = "512"]
 
+mod note_cover;
+
 pub mod agent_session;
 pub mod commands;
 pub mod indexer;

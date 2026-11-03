@@ -223,3 +223,23 @@ describe('viewing notes without editing', () => {
     expect(editor.container.querySelector('.mdxeditor-source-editor .cm-content')?.textContent).toContain('Edited content')
   })
 })
+
+describe('note cover metadata', () => {
+  it('persists custom, hidden and automatic cover choices with the ordinary note', async () => {
+    localStorage.setItem('mdxeditor-view-mode', 'source')
+    localStorage.setItem('mdxeditor-metadata-open', 'true')
+    const save = vi.fn()
+    const original = { ...demoNotes[0], body: '# Note\n\n![图](images/a.png)', frontmatter: { custom: 'keep' } }
+    const editor = render(<Workspace original={original} onSave={save} />)
+    fireEvent.change(editor.getByLabelText('editor.cover'), { target: { value: 'custom' } })
+    fireEvent.change(editor.getByPlaceholderText('editor.coverPath'), { target: { value: '../assets/cover.png' } })
+    fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
+    expect(parseMarkdownWithFrontmatter(save.mock.calls.at(-1)![0]).metadata.frontmatter).toMatchObject({ cover: '../assets/cover.png', custom: 'keep' })
+    fireEvent.change(editor.getByLabelText('editor.cover'), { target: { value: 'hidden' } })
+    fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
+    expect(parseMarkdownWithFrontmatter(save.mock.calls.at(-1)![0]).metadata.frontmatter?.cover).toBe(false)
+    fireEvent.change(editor.getByLabelText('editor.cover'), { target: { value: 'auto' } })
+    fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
+    expect(parseMarkdownWithFrontmatter(save.mock.calls.at(-1)![0]).metadata.frontmatter?.cover).toBeNull()
+  })
+})

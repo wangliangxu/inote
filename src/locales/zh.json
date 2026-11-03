@@ -127,6 +127,13 @@
     "emptyFolderDesc": "点击 + 按钮在此处创建您的第一篇笔记。"
   },
   "editor": {
+    "cover": "卡片封面",
+    "coverAuto": "自动使用首张图片",
+    "coverCustom": "指定图片",
+    "coverHidden": "隐藏封面",
+    "coverPath": "相对图片路径或 HTTPS 地址",
+    "coverPreview": "笔记图片封面",
+
     "noChanges": "当前无修改...",
     "titlePlaceholder": "笔记标题...",
     "bodyPlaceholder": "开始写作...",

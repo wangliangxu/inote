@@ -42,6 +42,7 @@ const CalendarView = lazy(() =>
   })),
 );
 const Editor = lazy(() => import("../features/mindmap/MindMapEditor").then((module) => ({ default: module.Editor })));
+import { NoteCoverPreview } from "../features/editor/NoteCoverPreview";
 import { MindMapThumbnail, thumbnailMap } from "../features/mindmap/MindMapThumbnail";
 import { MINDMAP_KEY, withMindMap } from "../features/mindmap/mindmap";
 import type { MapCreation } from "../features/mindmap/MindMapDialog";
@@ -186,6 +187,7 @@ const NOTES_PAGE_SIZE = 60;
 
 interface NoteItemProps {
   previewNote?: Note;
+  vaultRoot?: string;
   note: Note | SearchResult;
   isActive: boolean;
   onSelect: (path: string) => void;
@@ -195,6 +197,7 @@ interface NoteItemProps {
 const NoteCardItem = memo(function NoteCardItem({
   note,
   previewNote,
+  vaultRoot = "",
   isActive,
   onSelect,
   searchQuery,
@@ -208,6 +211,10 @@ const NoteCardItem = memo(function NoteCardItem({
     }
   }, [isActive]);
 
+  const excerpt = <small className="text-xs text-base-content/60 leading-relaxed">
+    <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
+  </small>;
+  const coverNote = previewNote ?? ("body" in note ? note : undefined);
   return (
     <div ref={ref} className={isActive ? "note-card active" : "note-card"}>
       <button
@@ -230,9 +237,9 @@ const NoteCardItem = memo(function NoteCardItem({
               )}
           </div>
           {map && <MindMapThumbnail map={map} />}
-          {(!map || searchQuery.trim()) && <small className="text-xs text-base-content/60 leading-relaxed">
-            <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
-          </small>}
+          {map ? (searchQuery.trim() ? excerpt : null) : coverNote ? (
+            <NoteCoverPreview note={coverNote} vaultRoot={vaultRoot} fallback={excerpt} showExcerpt={!!searchQuery.trim()} />
+          ) : excerpt}
           <SearchMatchMetadata note={note} query={searchQuery} />
           <div className="note-card-footer flex items-center justify-between text-[10px] text-base-content/40 mt-auto font-mono">
             <time>{note.updatedAt || note.createdAt}</time>
@@ -2410,6 +2417,7 @@ export function App() {
                   {group.notes.map((note) =>
                     noteListMode === "cards" ? (
                       <NoteCardItem
+                        vaultRoot={vaultRoot}
                         previewNote={activeView === "search" ? notes.find((item) => item.path === note.path) : undefined}
                         key={note.path}
                         note={note}

@@ -1246,6 +1246,19 @@ export function Editor({
             <aside className="context-panel editor-metadata-panel" style={{ gridArea: `2 / ${tocPanelOpen ? 5 : 3}`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">
               <label className="metadata-editor">
+                <span>{t('editor.cover')}</span>
+                <select disabled={previewMode || note.rawMarkdown !== undefined} value={note.frontmatter?.cover === false ? 'hidden' : typeof note.frontmatter?.cover === 'string' && note.frontmatter.cover ? 'custom' : 'auto'} onChange={(event) => {
+                  onChange(noteToMarkdown({ ...note, frontmatter: { ...note.frontmatter, cover: event.target.value === 'hidden' ? false : event.target.value === 'custom' ? ' ' : null } }))
+                }}>
+                  <option value="auto">{t('editor.coverAuto')}</option>
+                  <option value="custom">{t('editor.coverCustom')}</option>
+                  <option value="hidden">{t('editor.coverHidden')}</option>
+                </select>
+                {typeof note.frontmatter?.cover === 'string' && (
+                  <input disabled={previewMode || note.rawMarkdown !== undefined} value={note.frontmatter.cover.trimStart()} placeholder={t('editor.coverPath')} onChange={(event) => onChange(noteToMarkdown({ ...note, frontmatter: { ...note.frontmatter, cover: event.target.value || ' ' } }))} />
+                )}
+              </label>
+              <label className="metadata-editor">
                 <span>{t('editor.title')}</span>
                 <input value={note.title} onChange={(event) => onUpdateTitle?.(event.target.value)} />
               </label>
