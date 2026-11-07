@@ -10,7 +10,10 @@ import { normalizeMarkdownBody, preserveMarkdownTrailingWhitespace, EDITOR_TO_MA
 import { orderedListStartPlugin } from './orderedListStartPlugin'
 import { captureRichTextSelection, restoreRichTextSelection, type RichTextSelectionSnapshot } from './richTextSelection'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
-import { TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, Archive, Link2, ListTree, ListOrdered } from 'lucide-react'
+import { TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, Archive, Link2, ListTree, ListOrdered, MoreHorizontal, Focus, ChevronRight, Folder } from 'lucide-react'
+import { ResizeHandle } from '../../app/components/ResizeHandle'
+import { InlineTitle } from './InlineTitle'
+import { formatShortcut, withShortcut } from '../../app/shortcuts'
 import { $getNearestNodeFromDOMNode, $isElementNode } from 'lexical'
 import { computeScrollTopForChild, extractMarkdownHeadings, findActiveHeadingFromLine as findActiveHeadingIndexFromLine, findRichTextHeadingElementIndex, isScrollableOverflowY, type EditorHeading } from './editorToc'
 import {
@@ -67,6 +70,11 @@ interface EditorProps {
   previewMode?: boolean
   onTogglePreview?: () => void
   onRename?: () => void
+  /** Rename the note by editing its title inline; the file name follows the title. */
+  onRenameTitle?: (title: string) => void
+  onNavigateFolder?: (folder: string) => void
+  focusMode?: boolean
+  onToggleFocusMode?: () => void
   onMove?: () => void
   onDelete?: () => void
   saveState?: SaveState
@@ -86,6 +94,23 @@ interface EditorProps {
 }
 
 export const MDXEDITOR_SUPPRESS_HTML_PROCESSING = true
+
+const TOC_DEFAULT_WIDTH = 250
+const METADATA_DEFAULT_WIDTH = 300
+
+function readPanelWidth(key: string, fallback: number): number {
+  try {
+    const value = Number(localStorage.getItem(key))
+    return Number.isFinite(value) && value >= 120 && value <= 800 ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function persistPanelWidth(key: string, width: number) {
+  try { localStorage.setItem(key, String(width)) } catch { /* storage unavailable */ }
+  setSetting(key, String(width)).catch(console.error)
+}
 
 const TagsInput = memo(function TagsInput({ tags, onChange }: { tags: string[], onChange: (value: string) => void }) {
   const [value, setValue] = useState(tags.join(', '))
@@ -125,6 +150,10 @@ export function Editor({
   onCheckExternal,
   previewMode = false,
   onRename,
+  onRenameTitle,
+  onNavigateFolder,
+  focusMode = false,
+  onToggleFocusMode,
   onMove,
   onDelete,
   saveState = 'demo',
@@ -626,10 +655,10 @@ export function Editor({
     }
   }, [focusRichTextHeading, getCmEditorView, getEditorContainer, getRichTextArea, headings, findActiveHeadingFromLine])
 
-  const [metadataWidth, setMetadataWidth] = useState(300)
-  const [tocWidth, setTocWidth] = useState(250)
-  const metadataDragState = useRef({ isDragging: false, startX: 0, startWidth: 0 })
-  const tocDragState = useRef({ isDragging: false, startX: 0, startWidth: 0 })
+  const [metadataWidth, setMetadataWidth] = useState(() => readPanelWidth('mdxeditor-metadata-width', METADATA_DEFAULT_WIDTH))
+  const [tocWidth, setTocWidth] = useState(() => readPanelWidth('mdxeditor-toc-width', TOC_DEFAULT_WIDTH))
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   const realmRef = useRef<any>(null)
   const previousModeRef = useRef<string>(savedViewMode)
   const currentViewModeRef = useRef<string>(savedViewMode)
@@ -882,45 +911,21 @@ export function Editor({
     }
   }, [metadataPanelOpen])
 
-  const handleTocMouseDown = useCallback((e: React.MouseEvent) => {
-    tocDragState.current = { isDragging: true, startX: e.clientX, startWidth: tocWidth }
-    document.body.style.cursor = 'col-resize'
-    e.preventDefault()
-  }, [tocWidth])
-
-  const handleMetadataMouseDown = useCallback((e: React.MouseEvent) => {
-    metadataDragState.current = { isDragging: true, startX: e.clientX, startWidth: metadataWidth }
-    document.body.style.cursor = 'col-resize'
-    e.preventDefault()
-  }, [metadataWidth])
-
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (tocDragState.current.isDragging) {
-        const delta = tocDragState.current.startX - e.clientX
-        setTocWidth(Math.max(150, Math.min(tocDragState.current.startWidth + delta, 600)))
-      }
-      if (metadataDragState.current.isDragging) {
-        const delta = metadataDragState.current.startX - e.clientX
-        setMetadataWidth(Math.max(200, Math.min(metadataDragState.current.startWidth + delta, 600)))
-      }
+    if (!moreMenuOpen) return
+    const close = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setMoreMenuOpen(false)
     }
-    
-    const handleMouseUp = () => {
-      if (tocDragState.current.isDragging || metadataDragState.current.isDragging) {
-        tocDragState.current.isDragging = false
-        metadataDragState.current.isDragging = false
-        document.body.style.cursor = ''
-      }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreMenuOpen(false)
     }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', closeOnEscape)
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [])
+  }, [moreMenuOpen])
 
   useEffect(() => {
     if (saveState === 'saved' || saveState === 'demo') {
@@ -962,13 +967,18 @@ export function Editor({
   }, [note.title, note.category, note.tags, note.summary, note.due, note.status, note.priority, note.project, normalizedMarkdown, saveState])
 
   const saveLabel = {
-    loading: 'Loading',
-    demo: 'Demo only',
-    dirty: 'Unsaved',
-    saving: 'Saving',
-    saved: 'Saved',
-    error: 'Save failed',
+    loading: t('app.loading'),
+    demo: t('app.demoOnly'),
+    dirty: t('app.unsavedChanges'),
+    saving: t('app.saving'),
+    saved: t('app.saved'),
+    error: t('app.saveFailed'),
   }[saveState]
+  const folders = note.path.split('/').slice(0, -1)
+  const runMenuAction = (action?: () => void) => () => {
+    setMoreMenuOpen(false)
+    action?.()
+  }
 
   // Detect current theme from HTML dataset to pass to MDXEditor
   const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && isDarkThemeDatasetValue(document.documentElement.dataset.theme))
@@ -1067,45 +1077,100 @@ export function Editor({
   return (
     <article className="editor">
       <header className="editor-header">
+        {folders.length ? (
+          <nav className="editor-breadcrumb" aria-label={t('editor.breadcrumb')}>
+            <Folder size={12} aria-hidden="true" />
+            {folders.map((segment, index) => {
+              const folder = folders.slice(0, index + 1).join('/')
+              return (
+                <span key={folder} className="editor-breadcrumb-item">
+                  {index > 0 ? <ChevronRight size={11} aria-hidden="true" /> : null}
+                  {onNavigateFolder && !folder.startsWith('.') ? (
+                    <button type="button" onClick={() => onNavigateFolder(folder)} title={t('editor.openFolder', { folder })}>
+                      <HighlightedText text={segment} query={searchQuery} />
+                    </button>
+                  ) : (
+                    <span><HighlightedText text={segment} query={searchQuery} /></span>
+                  )}
+                </span>
+              )
+            })}
+            <ChevronRight size={11} aria-hidden="true" />
+            <span className="editor-breadcrumb-file">{note.path.split('/').pop()}</span>
+          </nav>
+        ) : null}
         <div className="editor-title-row">
-          <div>
-            <h2><HighlightedText text={note.title} query={searchQuery} /></h2>
+          <div className="editor-title-main">
+            <InlineTitle
+              title={note.title}
+              searchQuery={searchQuery}
+              disabled={previewMode || !onRenameTitle || note.rawMarkdown !== undefined}
+              onCommit={(title) => onRenameTitle?.(title)}
+            />
           </div>
           <div className="editor-actions">
-            <button className={`secondary-action icon-action ${tocPanelOpen ? 'active' : ''}`} type="button" onClick={() => setTocPanelOpen(!tocPanelOpen)} title={t('editor.toc') || 'Table of Contents'}>
+            <button className={`secondary-action icon-action ${tocPanelOpen ? 'active' : ''}`} type="button" aria-pressed={tocPanelOpen} onClick={() => setTocPanelOpen(!tocPanelOpen)} title={t('editor.toc')} aria-label={t('editor.toc')}>
               <ListTree size={16} />
             </button>
-            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title={t('editor.metadata')}>
+            <button className={`secondary-action icon-action ${metadataPanelOpen ? 'active' : ''}`} type="button" aria-pressed={metadataPanelOpen} onClick={() => setMetadataPanelOpen(!metadataPanelOpen)} title={t('editor.metadata')} aria-label={t('editor.metadata')}>
               <Info size={16} />
             </button>
-            {onRename ? (
-              <button className="secondary-action icon-action" type="button" onClick={onRename} title={t('editor.renameNote')}>
-                <TextCursorInput size={16} />
-              </button>
-            ) : null}
-            {onMove ? (
-              <button className="secondary-action icon-action" type="button" onClick={onMove} title={t('editor.moveNote')}>
-                <MoveRight size={16} />
-              </button>
-            ) : null}
-            {onCheckExternal ? (
-              <button className="secondary-action icon-action" type="button" onClick={onCheckExternal} title={t('editor.checkFile')}>
-                <RefreshCw size={16} />
+            {onToggleFocusMode ? (
+              <button className={`secondary-action icon-action ${focusMode ? 'active' : ''}`} type="button" aria-pressed={focusMode} onClick={onToggleFocusMode} title={withShortcut(t(focusMode ? 'focus.exit' : 'focus.enter'), 'focusMode')} aria-label={t(focusMode ? 'focus.exit' : 'focus.enter')}>
+                <Focus size={16} />
               </button>
             ) : null}
             {onSave ? (
-              <button className="secondary-action icon-action" type="button" onClick={onSave} title={t('editor.save')}>
+              <button className="secondary-action icon-action" type="button" onClick={onSave} title={`${t('editor.save')} (⌘S)`} aria-label={t('editor.save')}>
                 <Save size={16} />
               </button>
             ) : null}
-            {onDelete ? (
-              <button className="secondary-action delete-action icon-action" type="button" onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onDelete()
-              }} title={t('editor.delete')}>
-                <Trash2 size={16} />
-              </button>
+            {onRename || onMove || onCheckExternal || onDelete ? (
+              <div ref={moreMenuRef} className="editor-more-menu">
+                <button
+                  className={`secondary-action icon-action ${moreMenuOpen ? 'active' : ''}`}
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={moreMenuOpen}
+                  onClick={() => setMoreMenuOpen((open) => !open)}
+                  title={t('editor.moreActions')}
+                  aria-label={t('editor.moreActions')}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {moreMenuOpen ? (
+                  <div className="context-menu editor-more-popover" role="menu" aria-label={t('editor.moreActions')}>
+                    {onRename ? (
+                      <button type="button" role="menuitem" className="app-menu-item context-menu-item" onClick={runMenuAction(onRename)} autoFocus>
+                        <span className="context-menu-icon"><TextCursorInput size={14} /></span>
+                        <span className="flex-1">{t('editor.renameNote')}</span>
+                      </button>
+                    ) : null}
+                    {onMove ? (
+                      <button type="button" role="menuitem" className="app-menu-item context-menu-item" onClick={runMenuAction(onMove)}>
+                        <span className="context-menu-icon"><MoveRight size={14} /></span>
+                        <span className="flex-1">{t('editor.moveNote')}</span>
+                      </button>
+                    ) : null}
+                    {onCheckExternal ? (
+                      <button type="button" role="menuitem" className="app-menu-item context-menu-item" onClick={runMenuAction(onCheckExternal)}>
+                        <span className="context-menu-icon"><RefreshCw size={14} /></span>
+                        <span className="flex-1">{t('editor.checkFile')}</span>
+                      </button>
+                    ) : null}
+                    {onDelete ? (
+                      <>
+                        <div className="context-menu-separator" role="separator" />
+                        <button type="button" role="menuitem" className="app-menu-item context-menu-item danger" onClick={runMenuAction(onDelete)}>
+                          <span className="context-menu-icon"><Trash2 size={14} /></span>
+                          <span className="flex-1">{t('editor.delete')}</span>
+                          <kbd>{formatShortcut('deleteNote')}</kbd>
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>
@@ -1113,7 +1178,6 @@ export function Editor({
           <span className={`save-state ${saveState}`}>{saveLabel}</span>
           <span><HighlightedText text={note.category} query={searchQuery} /></span>
           <span>{note.createdAt}</span>
-          <span>{note.wordCount} {t('editor.words')}</span>
           {note.tags.map((tag) => (
             <span key={tag}>#<HighlightedText text={tag} query={searchQuery} /></span>
           ))}
@@ -1140,24 +1204,17 @@ export function Editor({
         </div>
         {tocPanelOpen && (
           <>
-            <div
-              className="metadata-resizer"
-              onMouseDown={handleTocMouseDown}
-              style={{
-                gridArea: '2 / 2',
-                width: '5px',
-                cursor: 'col-resize',
-                backgroundColor: 'transparent',
-                zIndex: 10,
-                marginLeft: '-2px',
-                marginRight: '-3px'
-              }}
-              onMouseEnter={(e) => {
-                if (!tocDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'
-              }}
-              onMouseLeave={(e) => {
-                if (!tocDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
-              }}
+            <ResizeHandle
+              side="right"
+              width={tocWidth}
+              min={150}
+              max={600}
+              defaultWidth={TOC_DEFAULT_WIDTH}
+              onResize={setTocWidth}
+              onResizeEnd={(width) => persistPanelWidth('mdxeditor-toc-width', width)}
+              label={t('editor.resizeToc')}
+              className="editor-resize-handle"
+              style={{ gridArea: '2 / 2' }}
             />
             <aside className="context-panel editor-toc-panel" style={{ gridArea: '2 / 3', borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">
@@ -1169,7 +1226,9 @@ export function Editor({
                     className={`secondary-action icon-action ${tocNumbering ? 'active' : ''}`} 
                     type="button" 
                     onClick={() => setTocNumbering(!tocNumbering)} 
-                    title={t('editor.toggleNumbering') || 'Toggle Numbering'}
+                    title={t('editor.toggleNumbering')}
+                    aria-label={t('editor.toggleNumbering')}
+                    aria-pressed={tocNumbering}
                     style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-color)', opacity: tocNumbering ? 1 : 0.5 }}
                     onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                     onMouseLeave={e => e.currentTarget.style.opacity = tocNumbering ? '1' : '0.5'}
@@ -1179,7 +1238,7 @@ export function Editor({
                 </div>
                 <div className="toc-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.9em' }}>
                   {headings.length === 0 ? (
-                    <div style={{ opacity: 0.5 }}>No headings found</div>
+                    <div style={{ opacity: 0.5 }}>{t('editor.noHeadings')}</div>
                   ) : (
                     headings.map((h, i) => {
                       const isActive = i === activeHeadingIndex;
@@ -1224,24 +1283,17 @@ export function Editor({
         )}
         {metadataPanelOpen && (
           <>
-            <div
-              className="metadata-resizer"
-              onMouseDown={handleMetadataMouseDown}
-              style={{
-                gridArea: `2 / ${tocPanelOpen ? 4 : 2}`,
-                width: '5px',
-                cursor: 'col-resize',
-                backgroundColor: 'transparent',
-                zIndex: 10,
-                marginLeft: '-2px',
-                marginRight: '-3px'
-              }}
-              onMouseEnter={(e) => {
-                if (!metadataDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'
-              }}
-              onMouseLeave={(e) => {
-                if (!metadataDragState.current.isDragging) e.currentTarget.style.backgroundColor = 'transparent'
-              }}
+            <ResizeHandle
+              side="right"
+              width={metadataWidth}
+              min={200}
+              max={600}
+              defaultWidth={METADATA_DEFAULT_WIDTH}
+              onResize={setMetadataWidth}
+              onResizeEnd={(width) => persistPanelWidth('mdxeditor-metadata-width', width)}
+              label={t('editor.resizeMetadata')}
+              className="editor-resize-handle"
+              style={{ gridArea: `2 / ${tocPanelOpen ? 4 : 2}` }}
             />
             <aside className="context-panel editor-metadata-panel" style={{ gridArea: `2 / ${tocPanelOpen ? 5 : 3}`, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <section className="context-section">

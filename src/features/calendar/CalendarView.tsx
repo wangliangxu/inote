@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Note } from '../../shared/types'
 
@@ -7,6 +7,18 @@ interface CalendarViewProps {
   notes: Note[]
   onSelectNote: (path: string) => void
   onClose: () => void
+  /** Called when a note is dropped on a day, to set its due date. */
+  onSetDue?: (path: string, date: string) => void
+}
+
+const NOTE_DRAG_TYPE = 'application/x-inote-note'
+
+function draggedNotePath(event: React.DragEvent): string {
+  return event.dataTransfer.getData(NOTE_DRAG_TYPE) || event.dataTransfer.getData('text/plain')
+}
+
+function isNoteDrag(event: React.DragEvent): boolean {
+  return Array.from(event.dataTransfer.types).includes(NOTE_DRAG_TYPE)
 }
 
 function toLocalDateString(d: Date): string {
@@ -75,7 +87,7 @@ function heatLevel(count: number): number {
   return 4
 }
 
-export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps) {
+export function CalendarView({ notes, onSelectNote, onClose, onSetDue }: CalendarViewProps) {
   const { t, i18n } = useTranslation()
   const WEEKDAYS = t('calendar.weekdays', { returnObjects: true }) as string[]
   
@@ -91,6 +103,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
   const [viewYear, setViewYear] = useState(todayYear)
   const [viewMonth, setViewMonth] = useState(todayMonth)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
 
   // Build lookup: dateStr -> Note[]
   const notesByDate = useMemo(() => {
@@ -108,7 +121,20 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
     return map
   }, [notes])
 
+  // Open tasks by due date: dateStr -> Note[]
+  const dueByDate = useMemo(() => {
+    const map = new Map<string, Note[]>()
+    for (const note of notes) {
+      if (!note.due || note.status === 'done' || note.status === 'cancelled' || note.path.startsWith('.trash/')) continue
+      const key = note.due.slice(0, 10)
+      map.set(key, [...(map.get(key) ?? []), note])
+    }
+    return map
+  }, [notes])
+
   const cells = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth])
+
+  const selectedDue = useMemo(() => (selectedDate ? dueByDate.get(selectedDate) ?? [] : []), [selectedDate, dueByDate])
 
   const selectedNotes = useMemo(() => {
     if (!selectedDate) return []
@@ -183,7 +209,10 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             <ChevronRight size={18} />
           </button>
         </div>
-        <span className="cal-stats">{t('calendar.notesCount', { count: monthNoteCount })}</span>
+        <span className="cal-stats">
+          {t('calendar.notesCount', { count: monthNoteCount })}
+          {onSetDue ? <span className="cal-drop-hint">{t('calendar.dropHint')}</span> : null}
+        </span>
       </div>
 
       {/* Weekday header */}
@@ -197,6 +226,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
       <div className="cal-grid">
         {cells.map((cell) => {
           const dayNotes = notesByDate.get(cell.dateStr) ?? []
+          const dueCount = dueByDate.get(cell.dateStr)?.length ?? 0
           const count = dayNotes.length
           const level = heatLevel(count)
           const isToday = cell.dateStr === today
@@ -206,6 +236,7 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             cell.isCurrentMonth ? '' : 'other-month',
             isToday ? 'today' : '',
             isSelected ? 'selected' : '',
+            dropTarget === cell.dateStr ? 'drop-target' : '',
             level > 0 ? `heat-${level}` : '',
           ].filter(Boolean).join(' ')
 
@@ -215,9 +246,26 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
               className={classes}
               type="button"
               onClick={() => setSelectedDate(cell.dateStr === selectedDate ? null : cell.dateStr)}
-              aria-label={`${cell.dateStr}，${t('calendar.notesCount', { count })}`}
+              aria-label={`${cell.dateStr}，${t('calendar.notesCount', { count })}${dueCount ? `，${t('calendar.dueCount', { count: dueCount })}` : ''}`}
+              onDragOver={onSetDue ? (event) => {
+                if (!isNoteDrag(event)) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                if (dropTarget !== cell.dateStr) setDropTarget(cell.dateStr)
+              } : undefined}
+              onDragLeave={onSetDue ? () => setDropTarget((current) => (current === cell.dateStr ? null : current)) : undefined}
+              onDrop={onSetDue ? (event) => {
+                event.preventDefault()
+                setDropTarget(null)
+                const path = draggedNotePath(event)
+                if (path) {
+                  onSetDue(path, cell.dateStr)
+                  setSelectedDate(cell.dateStr)
+                }
+              } : undefined}
             >
               <span className="cal-day-num">{cell.day}</span>
+              {dueCount > 0 ? <span className="cal-due-badge" title={t('calendar.dueCount', { count: dueCount })}><CalendarClock size={10} />{dueCount}</span> : null}
               {count > 0 && (
                 <span className="cal-dot-row">
                   {count <= 3
@@ -243,6 +291,33 @@ export function CalendarView({ notes, onSelectNote, onClose }: CalendarViewProps
             <h3>{selectedDate}</h3>
             <span>{t('calendar.notesCount', { count: selectedNotes.length })}</span>
           </div>
+          {selectedDue.length > 0 ? (
+            <div className="cal-note-list cal-due-list">
+              <h4 className="cal-subheading">{t('calendar.dueThisDay')}</h4>
+              {selectedDue.map((note) => (
+                <button
+                  className="cal-note-item"
+                  key={`due-${note.path}`}
+                  type="button"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path)
+                    event.dataTransfer.setData('text/plain', note.path)
+                  }}
+                  onClick={() => { onClose(); onSelectNote(note.path) }}
+                >
+                  <div className="cal-note-main">
+                    <strong>{note.title}</strong>
+                    {note.summary && <small>{note.summary}</small>}
+                  </div>
+                  <div className="cal-note-meta">
+                    <span>{note.category}</span>
+                    <time>{note.due}</time>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
           {selectedNotes.length === 0 ? (
             <p className="cal-empty">{t('calendar.noNotesThisDay')}</p>
           ) : (

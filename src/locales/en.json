@@ -27,7 +27,27 @@
     "allNotes": "All notes",
     "noteNavigation": "Note navigation",
     "previousNote": "Previous note",
-    "nextNote": "Next note"
+    "nextNote": "Next note",
+    "assistant": "AI assistant",
+    "cardView": "Card view",
+    "summaryView": "List view",
+    "categoriesCount_one": "{{count}} category",
+    "categoriesCount_other": "{{count}} categories",
+    "createMenu": "More create options",
+    "demoWorkspace": "Demo workspace",
+    "filterCategories": "Switch view or filter categories",
+    "listMode": "List display",
+    "noteCount_one": "{{count}} note",
+    "noteCount_other": "{{count}} notes",
+    "noteList": "Note list",
+    "noteListHint": "Note list: arrow keys move between notes; right-click or Shift+F10 opens the menu",
+    "resizeLeftSidebar": "Resize left sidebar (double-click to reset)",
+    "resizeRightSidebar": "Resize right sidebar (double-click to reset)",
+    "views": "Views",
+    "hideLeftSidebar": "Hide left sidebar",
+    "showLeftSidebar": "Show left sidebar",
+    "hideRightSidebar": "Hide right sidebar",
+    "showRightSidebar": "Show right sidebar"
   },
   "settings": {
     "title": "Settings",
@@ -83,7 +103,17 @@
     "noTasks": "No tasks in this category.",
     "todoStatus": "Todo",
     "inProgressStatus": "In Progress",
-    "doneStatus": "Done"
+    "doneStatus": "Done",
+    "all": "All",
+    "dropHere": "Drag cards here",
+    "dueTooltip": "Due: {{due}}",
+    "priorityLabel": "Priority: {{priority}}",
+    "quickAdd": "Add a task, press Enter",
+    "quickAddIn": "Add a task to {{column}}",
+    "due_overdue": "Overdue",
+    "due_today": "Due today",
+    "due_soon": "Due within three days",
+    "due_later": "Due later"
   },
   "tags": {
     "title": "Tags",
@@ -112,19 +142,22 @@
       "Fri",
       "Sat",
       "Sun"
-    ]
+    ],
+    "dropHint": "Drag a note onto a day to set its due date",
+    "dueCount_one": "{{count}} due",
+    "dueCount_other": "{{count}} due",
+    "dueThisDay": "Due this day"
   },
   "search": {
     "title": "Search",
     "noResults": "No results found for",
     "inCategories": "in {{categories}}",
     "matches": "{{count}} matches · {{type}}",
-    "placeholder": "Search title, body, tags, category, or summary"
-  },
-  "explorer": {
-    "emptyCategory": "No notes in this category",
-    "emptyFolderTitle": "Empty Folder",
-    "emptyFolderDesc": "Click the + button to create your first note here."
+    "placeholder": "Search title, body, tags, category, or summary",
+    "clearRecent": "Clear",
+    "recent": "Recent searches",
+    "removeFilter": "Remove filter {{filter}}",
+    "syntaxHint": "Supports #tag, in:folder and status:todo. Press space after one to turn it into a filter."
   },
   "editor": {
     "cover": "Card cover",
@@ -133,7 +166,6 @@
     "coverHidden": "Hide cover",
     "coverPath": "Relative image path or HTTPS URL",
     "coverPreview": "Note image cover",
-
     "noChanges": "No changes...",
     "titlePlaceholder": "Note title...",
     "bodyPlaceholder": "Start writing...",
@@ -172,7 +204,14 @@
     "noOutgoingLinks": "No outgoing links.",
     "words": "words",
     "toc": "Table of Contents",
-    "toggleNumbering": "Toggle Numbering"
+    "toggleNumbering": "Toggle Numbering",
+    "breadcrumb": "Note location",
+    "moreActions": "More actions",
+    "noHeadings": "No headings",
+    "openFolder": "Open folder {{folder}}",
+    "renameByTitle": "Click to edit the title; the file name follows",
+    "resizeMetadata": "Resize metadata panel",
+    "resizeToc": "Resize table of contents"
   },
   "reminders": {
     "title": "macOS Reminders",
@@ -226,7 +265,11 @@
     "canvas": "Mind map canvas",
     "nodes": "nodes",
     "nodeDetails": "Node details",
-    "drop": {"before": "Insert above", "after": "Insert below", "child": "Make a child"},
+    "drop": {
+      "before": "Insert above",
+      "after": "Insert below",
+      "child": "Make a child"
+    },
     "dragNode": "Drag node",
     "dragHint": "Drop in the center to make a child, or at the top or bottom to reorder; layout updates automatically",
     "nodeText": "Node text",
@@ -311,5 +354,173 @@
     "expandSelected": "Expand selected branch",
     "more": "More actions",
     "backup": "Full backup"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "ok": "OK",
+    "retry": "Retry",
+    "undo": "Undo"
+  },
+  "confirm": {
+    "deleteDirty": "\"{{title}}\" has unsaved changes that will be lost when it moves to the trash. Continue?",
+    "permanentDelete": "Permanently delete \"{{title}}\"? This cannot be undone.",
+    "reloadFromDisk": "{{path}} changed on disk. Reload the disk version?",
+    "quitWithDrafts": "Some notes are unsaved. Drafts are kept. Quit anyway?"
+  },
+  "empty": {
+    "archiveTitle": "No archived notes",
+    "archiveHint": "Right-click a note and choose Archive to tuck it away.",
+    "listTitle": "No notes here yet",
+    "listHint": "Create a note to get started.",
+    "noNoteTitle": "No note open",
+    "noNoteHint": "Pick a note on the left, press {{newNote}} to create one, or {{quickOpen}} to open one quickly.",
+    "searchTitle": "Nothing found for \"{{query}}\"",
+    "searchHint": "Try other words, or narrow down with #tag, in:folder or status:todo.",
+    "todoTitle": "No tasks",
+    "todoHint": "Set a status or due date in a note's metadata and it shows up here.",
+    "trashTitle": "Trash is empty",
+    "trashHint": "Deleted notes land here first, so you can restore them."
+  },
+  "errors": {
+    "noAgentUndo": "There is no Agent change to undo.",
+    "saveBeforeAgentUndo": "Save the current draft before undoing Agent changes.",
+    "vaultChanged": "The vault changed before saving, so the save was cancelled."
+  },
+  "focus": {
+    "enter": "Focus mode",
+    "exit": "Exit focus mode"
+  },
+  "folderPicker": {
+    "create": "Create folder \"{{folder}}\" and move here",
+    "current": "Current location: {{folder}}",
+    "empty": "No matching folders",
+    "placeholder": "Search or type a new folder path",
+    "moveTitle": "Move \"{{title}}\" to…",
+    "restoreTitle": "Restore \"{{title}}\" to…"
+  },
+  "loading": {
+    "agent": "Loading AI assistant",
+    "calendar": "Loading calendar",
+    "migratingImages": "Optimizing embedded note images…",
+    "note": "Loading note",
+    "settings": "Loading settings",
+    "tags": "Loading tags",
+    "todo": "Loading tasks"
+  },
+  "menu": {
+    "archive": "Archive",
+    "copyLink": "Copy note link",
+    "deletePermanently": "Delete permanently",
+    "label": "Actions for \"{{title}}\"",
+    "moveTo": "Move to…",
+    "moveToTrash": "Move to trash",
+    "open": "Open",
+    "renameFile": "Rename file…",
+    "restoreTo": "Restore to…",
+    "reveal": "Show in Finder",
+    "unarchive": "Unarchive"
+  },
+  "palette": {
+    "empty": "No matching commands or notes",
+    "focusSearch": "Search notes",
+    "groupApp": "App",
+    "groupCreate": "Create",
+    "groupNavigate": "Go to",
+    "groupNote": "Current note",
+    "groupView": "View",
+    "notes": "Notes",
+    "notesPlaceholder": "Type a note title to open it…",
+    "placeholder": "Type a command or note title…",
+    "quickOpen": "Quick open note",
+    "title": "Command palette",
+    "preview": "Read-only preview",
+    "exitPreview": "Exit read-only preview"
+  },
+  "prompt": {
+    "archiveCategory": "Archive category",
+    "archiveTitle": "Archive title",
+    "folderPath": "Folder path",
+    "newFilename": "New file name"
+  },
+  "status": {
+    "agentCreated": "Agent created {{path}}.",
+    "agentUndone": "Undid the last Agent change.",
+    "agentUpdated": "Agent updated {{fields}}.",
+    "noteFallback": "note",
+    "archivedTo": "Archived to {{path}}.",
+    "created": "Created {{path}}.",
+    "deletedPermanently": "Permanently deleted \"{{title}}\".",
+    "diskMatches": "The disk version matches the editor.",
+    "dueUpdated": "Set the due date of \"{{title}}\" to {{date}}.",
+    "enterVaultPath": "Enter a vault path first.",
+    "folderCreated": "Created folder {{path}}.",
+    "inboxOnly": "Only inbox notes can use the archive flow.",
+    "indexRebuilt": "Search index rebuilt.",
+    "keptEditorVersion": "Kept the editor version. Saving will overwrite the file on disk.",
+    "label": "Status bar",
+    "movedTo": "Moved to {{path}}.",
+    "movedToTrash": "Moved \"{{title}}\" to the trash.",
+    "notes_one": "{{count}} note",
+    "notes_other": "{{count}} notes",
+    "openVaultFirst": "Open a local vault in Settings first.",
+    "opened": "Opened {{path}}.",
+    "readingTime_one": "{{count}} min read",
+    "readingTime_other": "{{count}} min read",
+    "reloaded": "Reloaded {{path}} from disk.",
+    "renamedTitle": "Renamed to \"{{title}}\".",
+    "restored": "Restored to {{path}}.",
+    "saved": "Saved {{path}}.",
+    "statusUpdated": "Updated the status of \"{{title}}\".",
+    "totalWords_one": "{{count}} word in total",
+    "totalWords_other": "{{count}} words in total",
+    "unsavedFieldChange": "Changed the current note. Save to apply.",
+    "vaultInitialized": "Starter vault folders are ready.",
+    "vaultOpened": "Vault opened. Markdown notes indexed.",
+    "words_one": "{{count}} word",
+    "words_other": "{{count}} words",
+    "demoLoaded": "Demo vault loaded. Enter a local path in Settings to open real notes.",
+    "vaultRefreshed": "Vault refreshed from disk.",
+    "vaultRestored": "Last vault restored.",
+    "vaultMigrated": "Last vault migrated from browser storage.",
+    "llmSettingsReset": "AI settings could not be loaded. Defaults restored.",
+    "settingsSaveFailed": "Could not save settings: {{error}}"
+  },
+  "toast": {
+    "copyFailed": "Could not copy to the clipboard.",
+    "dueSet": "Due date of \"{{title}}\" set to {{date}}",
+    "linkCopied": "Copied {{link}}",
+    "moveUndone": "Move undone",
+    "moved": "Moved \"{{title}}\" to {{folder}}",
+    "movedToTrash": "Moved \"{{title}}\" to the trash",
+    "renamed": "Renamed to {{name}}",
+    "restored": "Restored \"{{title}}\"",
+    "taskCreated": "Created task \"{{title}}\"",
+    "titleRenamed": "Renamed to \"{{title}}\" and saved"
+  },
+  "agent": {
+    "commandLabel": "Instruction for the AI assistant",
+    "placeholder": "Type an instruction, or use a quick action on this note…",
+    "quickActions": "Quick actions",
+    "send": "Send",
+    "starterTitle": "Let AI work on this note",
+    "starterHint": "Pick a common action or type an instruction below. You review every change before it is written.",
+    "starterNoKey": "Add an API key in Settings → AI assistant, then pick a common action.",
+    "actions": {
+      "summarize": "Summary",
+      "suggest_tags": "Tags",
+      "clean_metadata": "Tidy metadata",
+      "extract_tasks": "Extract tasks",
+      "continue_writing": "Continue",
+      "create_related": "Related note"
+    },
+    "commands": {
+      "summarize": "Update the summary of the current note.",
+      "suggest_tags": "Suggest and apply concise tags for the current note.",
+      "clean_metadata": "Clean up the metadata of the current note.",
+      "extract_tasks": "Extract action items and append them to the current note.",
+      "continue_writing": "Continue writing the current note.",
+      "create_related": "Create a related note that links back to the current note."
+    }
   }
 }

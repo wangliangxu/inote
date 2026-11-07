@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowUp, FilePlus2, ListChecks, RefreshCw, Sparkles, Tags, Wand2, X, Zap } from 'lucide-react'
 import type { QuickAgentAction } from './agentTypes'
 
@@ -13,13 +14,13 @@ interface AgentComposerProps {
   onCancel?: () => void
 }
 
-const quickActions: Array<{ action: QuickAgentAction, label: string, icon: typeof Sparkles, command: string }> = [
-  { action: 'summarize', label: '摘要', icon: Sparkles, command: '更新当前笔记的摘要。' },
-  { action: 'suggest_tags', label: '标签', icon: Tags, command: '为当前笔记建议并应用简洁的标签。' },
-  { action: 'clean_metadata', label: 'YAML', icon: Wand2, command: '清理当前笔记的元数据。' },
-  { action: 'extract_tasks', label: '任务', icon: ListChecks, command: '提取待办事项并追加到当前笔记。' },
-  { action: 'continue_writing', label: '续写', icon: RefreshCw, command: '续写当前笔记内容。' },
-  { action: 'create_related', label: '关联', icon: FilePlus2, command: '创建一个关联笔记并链接回当前笔记。' },
+export const quickActions: Array<{ action: QuickAgentAction, icon: typeof Sparkles }> = [
+  { action: 'summarize', icon: Sparkles },
+  { action: 'suggest_tags', icon: Tags },
+  { action: 'clean_metadata', icon: Wand2 },
+  { action: 'extract_tasks', icon: ListChecks },
+  { action: 'continue_writing', icon: RefreshCw },
+  { action: 'create_related', icon: FilePlus2 },
 ]
 
 export function AgentComposer({
@@ -32,6 +33,7 @@ export function AgentComposer({
   onSubmit,
   onCancel,
 }: AgentComposerProps) {
+  const { t } = useTranslation()
   const actionDropdownRef = useRef<HTMLDetailsElement>(null)
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -54,11 +56,12 @@ export function AgentComposer({
       <div className="agent-input-shell">
         <textarea
           className="agent-command textarea min-h-24 w-full resize-none text-sm"
-          aria-label="Note agent command"
+          id="agent-command"
+          aria-label={t('agent.commandLabel')}
           value={command}
           onChange={(event) => onCommandChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="输入指令，或使用快捷操作分析和优化当前笔记…"
+          placeholder={t('agent.placeholder')}
           disabled={isRunning}
         />
         <div className="agent-input-toolbar flex items-center justify-between">
@@ -68,24 +71,24 @@ export function AgentComposer({
             data-no-drag
             onBlur={handleActionBlur}
           >
-            <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title="Quick Actions">
+            <summary className="agent-quick-action-btn btn btn-ghost btn-sm btn-square" title={t('agent.quickActions')} aria-label={t('agent.quickActions')}>
               <Zap size={16} />
             </summary>
             <div className="agent-quick-action-menu dropdown-content menu z-20 w-44 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
-              {quickActions.map(({ action, label, icon: Icon, command: quickCommand }) => (
+              {quickActions.map(({ action, icon: Icon }) => (
                 <button
                   key={action}
                   className={activeAction === action ? 'active bg-primary/10 text-primary' : ''}
                   type="button"
                   disabled={disabled}
                   onClick={() => {
-                    onActionSelect(action, quickCommand)
+                    onActionSelect(action, t(`agent.commands.${action}`))
                     actionDropdownRef.current?.removeAttribute('open')
                   }}
-                  title={label}
+                  title={t(`agent.actions.${action}`)}
                 >
                   <Icon size={14} />
-                  <span>{label}</span>
+                  <span>{t(`agent.actions.${action}`)}</span>
                 </button>
               ))}
             </div>
@@ -94,14 +97,15 @@ export function AgentComposer({
             {isRunning && onCancel ? (
               <button
                 className="agent-cancel-btn btn btn-ghost btn-sm btn-square"
-                title="取消"
+                title={t('common.cancel')}
+                aria-label={t('common.cancel')}
                 type="button"
                 onClick={onCancel}
               >
                 <X size={15} />
               </button>
             ) : null}
-            <button className="agent-run-btn btn btn-primary btn-sm btn-circle" title="发送" type="button" onClick={onSubmit} disabled={disabled}>
+            <button className="agent-run-btn btn btn-primary btn-sm btn-circle" title={`${t('agent.send')} (⌘↩)`} aria-label={t('agent.send')} type="button" onClick={onSubmit} disabled={disabled}>
               {disabled ? <RefreshCw size={16} /> : <ArrowUp className="agent-send-icon" size={18} strokeWidth={2.6} />}
             </button>
           </div>

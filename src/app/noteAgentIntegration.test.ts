@@ -77,7 +77,7 @@ describe('note agent integration', () => {
     expect(review).toContain('decodeReviewPlanPayload')
     expect(review).toContain('agent-apply-btn')
     expect(composer).toContain('agent-composer')
-    expect(composer).toContain('placeholder="输入指令，或使用快捷操作分析和优化当前笔记…"')
+    expect(composer).toContain("placeholder={t('agent.placeholder')}")
     expect(composer).toContain('<ArrowUp')
     expect(view).not.toContain('当前笔记暂无 Agent 会话记录。')
   })

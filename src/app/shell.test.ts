@@ -60,17 +60,19 @@ describe('startup shell', () => {
 
   it('keeps the note card layout fixed and scrollable in the left sidebar', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const items = readFileSync(resolve(__dirname, './components/NoteListItems.tsx'), 'utf8')
+    const panel = readFileSync(resolve(__dirname, './components/NoteListPanel.tsx'), 'utf8')
     const styles = readFileSync(resolve(__dirname, './styles.css'), 'utf8')
 
-    expect(app).toMatch(/isActive \? ["']note-card active["'] : ["']note-card["']/)
-    expect(app).toMatch(/noteListMode === ["']cards["'] \? ["']note-card-grid["']/)
+    expect(items).toMatch(/isActive \? ["']note-card active["'] : ["']note-card["']/)
+    expect(panel).toMatch(/noteListMode === ["']cards["'] \? ["']note-card-grid["']/)
     expect(app).toContain('minmax(0, 1fr)')
     expect(styles).toContain('grid-template-columns: repeat(auto-fill, 180px)')
     expect(styles).toContain('height: 206px')
   })
 
   it('keeps summary note titles from widening the left sidebar', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const app = readFileSync(resolve(__dirname, './components/NoteListItems.tsx'), 'utf8')
 
     expect(app).toContain('className="w-full min-w-0 max-w-full"')
     expect(app).toContain('className="flex items-center justify-between gap-2 w-full min-w-0 max-w-full"')
@@ -78,16 +80,16 @@ describe('startup shell', () => {
   })
 
   it('reserves native macOS traffic-light space in the title bar', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const app = readFileSync(resolve(__dirname, './components/TitleBar.tsx'), 'utf8')
 
     expect(app).toContain('pl-[82px]')
     expect(app).toContain('max-[900px]:pl-[74px]')
   })
 
   it('gates the title bar Today note button behind the settings toggle', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const app = readFileSync(resolve(__dirname, './components/TitleBar.tsx'), 'utf8')
 
-    expect(app).toContain('{showTodayNoteButton ? (')
+    expect(app).toContain('{props.showTodayNoteButton ? (')
     expect(app).toMatch(/title=\{t\(["']settings\.todayNote["']\)\}/)
     expect(app).toContain(') : null}')
   })
@@ -99,17 +101,18 @@ describe('startup shell', () => {
     expect(app).toContain('...current.slice(0, noteHistoryIndex + 1)')
     expect(app).toContain('navigateNoteHistory(previousHistoryIndex)')
     expect(app).toContain('navigateNoteHistory(nextHistoryIndex)')
-    expect(app.match(/disabled:text-base-content\/20/g)).toHaveLength(2)
-    expect(app.match(/disabled:opacity-40/g)).toHaveLength(2)
+    const titleBar = readFileSync(resolve(__dirname, './components/TitleBar.tsx'), 'utf8')
+    expect(titleBar.match(/disabled:text-base-content\/20/g)).toHaveLength(2)
+    expect(titleBar.match(/disabled:opacity-40/g)).toHaveLength(2)
     expect(app).not.toContain('notePosition')
   })
 
   it('places the iNote brand directly after the macOS traffic-light space', () => {
-    const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const app = readFileSync(resolve(__dirname, './components/TitleBar.tsx'), 'utf8')
 
     const header = app.slice(app.indexOf('<header'), app.indexOf('</header>'))
     expect(header.indexOf('iNote')).toBeLessThan(header.indexOf('<PanelLeft'))
-    expect(header.indexOf('vaultRoot.split')).toBeLessThan(header.indexOf('<PanelLeft'))
+    expect(header.indexOf('props.vaultName')).toBeLessThan(header.indexOf('<PanelLeft'))
     expect(header).toContain('flex-col items-start')
   })
 
@@ -139,10 +142,15 @@ describe('startup shell', () => {
     expect(lib).toContain('commands::quit_app')
   })
 
-  it('uses the primary color for the title bar create note button', () => {
+  it('uses the accent color for the title bar create note button and groups other create actions', () => {
     const app = readFileSync(resolve(__dirname, './App.tsx'), 'utf8')
+    const titleBar = readFileSync(resolve(__dirname, './components/TitleBar.tsx'), 'utf8')
 
-    expect(app).toMatch(/className=["']btn btn-ghost btn-sm btn-square["'][\s\S]*?type=["']button["'][\s\S]*?onClick=\{addCategoryNote\}/)
+    expect(app).toContain('onCreateNote={() => void addCategoryNote()}')
+    expect(titleBar).toMatch(/onClick=\{onCreateNote\}[\s\S]*?<Plus size=\{18\} className="text-accent" \/>/)
+    expect(titleBar).toContain('role="menu"')
+    expect(titleBar).toContain('onClick={run(onCreateMindMap)}')
+    expect(titleBar).toContain('onClick={run(onCreateFolder)}')
   })
 
   it('enables the Tauri asset protocol for local markdown images', () => {
@@ -193,7 +201,7 @@ describe('startup shell', () => {
 
     expect(app).toContain('window.requestAnimationFrame')
     expect(app).toContain('!editorPaintReady')
-    expect(app).toContain('Loading note…')
+    expect(app).toContain('<Skeleton variant="editor" label={t("loading.note")} />')
   })
 
   it('migrates legacy base64 note images before mounting the editor', () => {
@@ -202,7 +210,7 @@ describe('startup shell', () => {
     const commands = readFileSync(resolve(__dirname, '../../src-tauri/src/commands.rs'), 'utf8')
 
     expect(app).toContain('await migrateNoteImages({')
-    expect(app).toContain('Optimizing embedded note images…')
+    expect(app).toContain('t("loading.migratingImages")')
     expect(api).toContain("invoke<Note | null>('migrate_note_images'")
     expect(commands).toContain('pub fn migrate_note_images')
   })

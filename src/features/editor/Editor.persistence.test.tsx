@@ -151,12 +151,12 @@ describe('viewing notes without editing', () => {
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
       const draft = JSON.parse(editor.getByTestId('draft').textContent!)
       expect(draft).toEqual(note)
-      expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+      expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.saved')
     }
     fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
     expect(save).toHaveBeenCalledWith(noteToMarkdown(note))
-    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.saved')
   })
 
   it.each(['source', 'diff'])('keeps deliberate removal of all trailing newlines across %s, rich text, and save', async (mode) => {
@@ -169,7 +169,7 @@ describe('viewing notes without editing', () => {
     const view = EditorView.findFromDOM(sources[sources.length - 1])!
     expect(view.state.doc.toString()).toMatch(/\n\n$/)
     act(() => view.dispatch({ changes: { from: view.state.doc.length - 2, to: view.state.doc.length } }))
-    await waitFor(() => expect(editor.container.querySelector('.save-state')?.textContent).toBe('Unsaved'))
+    await waitFor(() => expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.unsavedChanges'))
     expect(JSON.parse(editor.getByTestId('draft').textContent!).body).toBe('Original content')
     fireEvent.click(editor.getByRole('radio', { name: 'Rich text' }))
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
@@ -179,7 +179,7 @@ describe('viewing notes without editing', () => {
     fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
     expect(parseMarkdownWithFrontmatter(save.mock.lastCall![0]).body).toBe('Original content')
-    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.saved')
   })
 
   it('synchronizes an externally changed final blank line without marking it as a local edit', async () => {
@@ -204,20 +204,20 @@ describe('viewing notes without editing', () => {
     const diffIsEmpty = () => editor.container.querySelectorAll('.mdxeditor-diff-editor [data-inote-diff-empty="true"]').length === 2
     await waitFor(() => expect(diffIsEmpty()).toBe(true))
     expect(editor.container.querySelector('.mdxeditor-diff-editor')?.matches(':has([data-inote-diff-empty="true"])')).toBe(true)
-    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.saved')
 
     const sources = editor.container.querySelectorAll('.cm-content')
     const view = EditorView.findFromDOM(sources[sources.length - 1])!
     const from = view.state.doc.toString().indexOf('Original content')
     act(() => view.dispatch({ changes: { from, to: from + 'Original content'.length, insert: 'Edited content' } }))
     await waitFor(() => expect(diffIsEmpty()).toBe(false))
-    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Unsaved')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.unsavedChanges')
     expect(editor.container.querySelector('.cm-merge-b')?.textContent).toContain('Edited content')
 
     fireEvent.click(editor.getByRole('button', { name: 'editor.save' }))
     await waitFor(() => expect(diffIsEmpty()).toBe(true))
     expect(parseMarkdownWithFrontmatter(save.mock.lastCall![0]).body).toBe('Edited content\n\n')
-    expect(editor.container.querySelector('.save-state')?.textContent).toBe('Saved')
+    expect(editor.container.querySelector('.save-state')?.textContent).toBe('app.saved')
     fireEvent.click(editor.getByRole('radio', { name: 'Source mode' }))
     await waitFor(() => expect(editor.container.querySelector('.mdxeditor-source-editor .cm-content')).toBeTruthy())
     expect(editor.container.querySelector('.mdxeditor-source-editor .cm-content')?.textContent).toContain('Edited content')

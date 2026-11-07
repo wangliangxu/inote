@@ -589,12 +589,13 @@ pub fn archive_note(input: ArchiveNoteInput) -> Result<NoteMetadata, String> {
 }
 
 #[tauri::command(async)]
-pub fn delete_note(vault_root: String, path: String) -> Result<(), String> {
+pub fn delete_note(vault_root: String, path: String) -> Result<Option<String>, String> {
     let _lock = mutation_lock()?;
     let vault = Vault::new(&vault_root)?;
-    vault.delete_note(&path)?;
+    let trashed_path = vault.delete_note(&path)?;
     let index = NoteIndex::open(vault.safe_path(".inote/index.sqlite3")?)?;
-    index.delete_note(&path)
+    index.delete_note(&path)?;
+    Ok(trashed_path)
 }
 
 #[tauri::command(async)]
@@ -1128,10 +1129,11 @@ mod tests {
         .unwrap();
         assert_eq!(moved.path, "knowledge/a.md");
 
-        delete_note(root.clone(), "knowledge/a.md".to_string()).unwrap();
+        let trashed = delete_note(root.clone(), "knowledge/a.md".to_string()).unwrap();
         let notes = scan_vault(root).unwrap();
         assert_eq!(notes.len(), 1);
         assert!(notes[0].path.starts_with(".trash/"));
+        assert_eq!(trashed.as_deref(), Some(notes[0].path.as_str()));
     }
 
     #[test]

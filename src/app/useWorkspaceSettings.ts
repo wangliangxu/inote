@@ -1,3 +1,4 @@
+import i18n from 'i18next'
 import { useEffect, useRef } from 'react'
 import { saveUserSettings } from '../shared/api'
 import type { UserSettings } from '../shared/types'
@@ -19,7 +20,7 @@ export function useWorkspaceSettings(settingsLoaded: boolean, settings: UserSett
         window.localStorage.removeItem('inote.llmSettings')
       }).catch((error) => {
         if (disposed) return
-        onError(`Settings Save Error: ${String(error)}`)
+        onError(i18n.t('status.settingsSaveFailed', { error: String(error), defaultValue: `Settings Save Error: ${String(error)}` }))
         window.localStorage.setItem(LAST_VAULT_KEY, value.vaultRoot)
         window.localStorage.setItem(LAST_ACTIVE_PATH_KEY, value.activePath)
         window.localStorage.setItem('inote.llmSettings', JSON.stringify({ ...value.llmSettings, apiKey: '' }))

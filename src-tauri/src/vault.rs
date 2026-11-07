@@ -376,13 +376,16 @@ impl Vault {
         Ok(archived)
     }
 
-    pub fn delete_note(&self, relative_path: &str) -> Result<(), String> {
+    /// Moves a note to the trash and returns its trash path, or permanently deletes a
+    /// note that is already in the trash and returns `None`.
+    pub fn delete_note(&self, relative_path: &str) -> Result<Option<String>, String> {
         let path = self.note_path(relative_path)?;
         if !path.exists() {
             return Err("note does not exist".to_string());
         }
         if relative_path.starts_with(".trash/") {
             return fs::remove_file(path)
+                .map(|_| None)
                 .map_err(|error| format!("failed to permanently delete note: {error}"));
         }
         let trash_root = self.safe_path(".trash")?;
@@ -406,7 +409,8 @@ impl Vault {
             .map_err(|error| error.to_string())?
             .to_string_lossy()
             .replace('\\', "/");
-        self.move_note(relative_path, &relative).map(|_| ())
+        self.move_note(relative_path, &relative)?;
+        Ok(Some(relative))
     }
 
     pub fn empty_trash(&self) -> Result<(), String> {
@@ -654,12 +658,15 @@ mod tests {
         assert_eq!(moved.path, "knowledge/a.md");
         assert!(!dir.path().join("00-inbox/a.md").exists());
 
-        vault.delete_note("knowledge/a.md").unwrap();
+        let trashed = vault.delete_note("knowledge/a.md").unwrap();
         assert!(!dir.path().join("knowledge/a.md").exists());
         let scanned = vault.scan().unwrap();
         assert_eq!(scanned.len(), 1);
         assert!(scanned[0].path.starts_with(".trash/"));
+        assert_eq!(trashed.as_deref(), Some(scanned[0].path.as_str()));
         assert_eq!(fs::read_dir(dir.path().join(".trash")).unwrap().count(), 1);
+        assert_eq!(vault.delete_note(&scanned[0].path).unwrap(), None);
+        assert!(vault.scan().unwrap().is_empty());
     }
 
     #[test]

@@ -13,7 +13,7 @@ applyInitialTheme({
 
 // Prevent browser's default Backspace navigation which can cause the app to hang/go blank
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Backspace') {
+  if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey) {
     const target = e.target as HTMLElement | null;
     if (!target) return;
     

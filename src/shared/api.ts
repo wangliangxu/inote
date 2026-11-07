@@ -278,9 +278,11 @@ export async function archiveNote(input: ArchiveNoteInput): Promise<Note> {
   return await syncCommittedReminder(input.vaultRoot, input.from, saved.path) ?? saved
 }
 
-export async function deleteNote(vaultRoot: string, path: string): Promise<void> {
-  await invoke<void>('delete_note', { vaultRoot, path })
+/** Moves a note to the trash (returning its trash path) or permanently deletes a trashed note (returning null). */
+export async function deleteNote(vaultRoot: string, path: string): Promise<string | null> {
+  const trashedPath = await invoke<string | null>('delete_note', { vaultRoot, path })
   await syncCommittedReminder(vaultRoot, path, null)
+  return trashedPath ?? null
 }
 
 export async function emptyTrash(vaultRoot: string): Promise<void> {

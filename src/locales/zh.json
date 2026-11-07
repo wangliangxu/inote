@@ -27,7 +27,25 @@
     "allNotes": "所有笔记",
     "noteNavigation": "笔记导航",
     "previousNote": "上一个笔记",
-    "nextNote": "下一个笔记"
+    "nextNote": "下一个笔记",
+    "assistant": "AI 助手",
+    "cardView": "卡片视图",
+    "summaryView": "列表视图",
+    "categoriesCount": "{{count}} 个分类",
+    "createMenu": "更多新建选项",
+    "demoWorkspace": "演示笔记库",
+    "filterCategories": "切换视图或筛选分类",
+    "listMode": "列表显示方式",
+    "noteCount": "{{count}} 篇笔记",
+    "noteList": "笔记列表",
+    "noteListHint": "笔记列表：方向键切换笔记，右键或 Shift+F10 打开菜单",
+    "resizeLeftSidebar": "调整左侧栏宽度（双击恢复默认）",
+    "resizeRightSidebar": "调整右侧栏宽度（双击恢复默认）",
+    "views": "视图",
+    "hideLeftSidebar": "隐藏左侧栏",
+    "showLeftSidebar": "显示左侧栏",
+    "hideRightSidebar": "隐藏右侧栏",
+    "showRightSidebar": "显示右侧栏"
   },
   "settings": {
     "title": "设置",
@@ -83,7 +101,17 @@
     "noTasks": "该分类下暂无任务。",
     "todoStatus": "待办",
     "inProgressStatus": "进行中",
-    "doneStatus": "已完成"
+    "doneStatus": "已完成",
+    "all": "全部",
+    "dropHere": "拖动卡片到这里",
+    "dueTooltip": "截止：{{due}}",
+    "priorityLabel": "优先级：{{priority}}",
+    "quickAdd": "添加待办，回车创建",
+    "quickAddIn": "在“{{column}}”中添加待办",
+    "due_overdue": "已逾期",
+    "due_today": "今天到期",
+    "due_soon": "三天内到期",
+    "due_later": "稍后到期"
   },
   "tags": {
     "title": "标签",
@@ -112,19 +140,21 @@
       "五",
       "六",
       "日"
-    ]
+    ],
+    "dropHint": "把笔记拖到某一天即可设置截止日期",
+    "dueCount": "{{count}} 项到期",
+    "dueThisDay": "当天到期"
   },
   "search": {
     "title": "搜索",
     "noResults": "未找到相关结果：",
     "inCategories": "在 {{categories}} 中",
     "matches": "{{count}} 条匹配 · {{type}}",
-    "placeholder": "搜索标题、正文、标签、分类或摘要"
-  },
-  "explorer": {
-    "emptyCategory": "此分类下暂无笔记",
-    "emptyFolderTitle": "空文件夹",
-    "emptyFolderDesc": "点击 + 按钮在此处创建您的第一篇笔记。"
+    "placeholder": "搜索标题、正文、标签、分类或摘要",
+    "clearRecent": "清除",
+    "recent": "最近搜索",
+    "removeFilter": "移除筛选条件 {{filter}}",
+    "syntaxHint": "支持 #标签、in:文件夹、status:todo，输入后按空格生成筛选条件。"
   },
   "editor": {
     "cover": "卡片封面",
@@ -133,7 +163,6 @@
     "coverHidden": "隐藏封面",
     "coverPath": "相对图片路径或 HTTPS 地址",
     "coverPreview": "笔记图片封面",
-
     "noChanges": "当前无修改...",
     "titlePlaceholder": "笔记标题...",
     "bodyPlaceholder": "开始写作...",
@@ -172,7 +201,14 @@
     "noOutgoingLinks": "无传出链接。",
     "words": "词",
     "toc": "目录",
-    "toggleNumbering": "切换编号"
+    "toggleNumbering": "切换编号",
+    "breadcrumb": "笔记位置",
+    "moreActions": "更多操作",
+    "noHeadings": "没有标题",
+    "openFolder": "打开文件夹 {{folder}}",
+    "renameByTitle": "点击修改标题，文件名会同步更新",
+    "resizeMetadata": "调整元数据面板宽度",
+    "resizeToc": "调整目录宽度"
   },
   "reminders": {
     "title": "macOS 提醒事项",
@@ -226,7 +262,11 @@
     "canvas": "思维导图画布",
     "nodes": "个节点",
     "nodeDetails": "节点属性",
-    "drop": {"before": "放在上方", "after": "放在下方", "child": "作为子节点"},
+    "drop": {
+      "before": "放在上方",
+      "after": "放在下方",
+      "child": "作为子节点"
+    },
     "dragNode": "拖动节点",
     "dragHint": "拖到节点中央成为子节点，拖到上缘或下缘调整顺序；松开后自动布局",
     "nodeText": "节点文字",
@@ -311,5 +351,169 @@
     "expandSelected": "展开选中分支",
     "more": "更多操作",
     "backup": "完整备份"
+  },
+  "common": {
+    "cancel": "取消",
+    "dismiss": "关闭通知",
+    "ok": "确定",
+    "retry": "重试",
+    "undo": "撤销"
+  },
+  "confirm": {
+    "deleteDirty": "“{{title}}”有未保存的修改，移到回收站后这些修改会丢失。是否继续？",
+    "permanentDelete": "永久删除“{{title}}”？此操作无法撤销。",
+    "reloadFromDisk": "{{path}} 在磁盘上已被修改。是否载入磁盘版本？",
+    "quitWithDrafts": "有未保存的笔记。草稿已保留，是否退出？"
+  },
+  "empty": {
+    "archiveTitle": "还没有归档的笔记",
+    "archiveHint": "在笔记上右键选择“归档”，可以把不常用的笔记收起来。",
+    "listTitle": "这里还没有笔记",
+    "listHint": "新建一篇笔记开始记录。",
+    "noNoteTitle": "没有打开的笔记",
+    "noNoteHint": "从左侧选择一篇笔记，按 {{newNote}} 新建，或按 {{quickOpen}} 快速打开。",
+    "searchTitle": "没有找到“{{query}}”",
+    "searchHint": "换个关键词试试，或使用 #标签、in:文件夹、status:todo 缩小范围。",
+    "todoTitle": "暂无待办",
+    "todoHint": "在笔记元数据中设置状态或截止时间，它就会出现在这里。",
+    "trashTitle": "回收站是空的",
+    "trashHint": "删除的笔记会先放在这里，可以随时恢复。"
+  },
+  "errors": {
+    "noAgentUndo": "没有可撤销的 Agent 修改。",
+    "saveBeforeAgentUndo": "请先保存当前草稿，再撤销 Agent 修改。",
+    "vaultChanged": "保存前切换了笔记库，已取消保存。"
+  },
+  "focus": {
+    "enter": "专注模式",
+    "exit": "退出专注模式"
+  },
+  "folderPicker": {
+    "create": "新建文件夹“{{folder}}”并移动到这里",
+    "current": "当前位置：{{folder}}",
+    "empty": "没有匹配的文件夹",
+    "placeholder": "搜索或输入新文件夹路径",
+    "moveTitle": "移动“{{title}}”到…",
+    "restoreTitle": "恢复“{{title}}”到…"
+  },
+  "loading": {
+    "agent": "正在加载 AI 助手",
+    "calendar": "正在加载日历",
+    "migratingImages": "正在优化笔记中的内嵌图片…",
+    "note": "正在加载笔记",
+    "settings": "正在加载设置",
+    "tags": "正在加载标签",
+    "todo": "正在加载待办"
+  },
+  "menu": {
+    "archive": "归档",
+    "copyLink": "复制笔记链接",
+    "deletePermanently": "永久删除",
+    "label": "“{{title}}”的操作",
+    "moveTo": "移动到…",
+    "moveToTrash": "移到回收站",
+    "open": "打开",
+    "renameFile": "重命名文件…",
+    "restoreTo": "恢复到…",
+    "reveal": "在 Finder 中显示",
+    "unarchive": "取消归档"
+  },
+  "palette": {
+    "empty": "没有匹配的命令或笔记",
+    "focusSearch": "搜索笔记",
+    "groupApp": "应用",
+    "groupCreate": "新建",
+    "groupNavigate": "前往",
+    "groupNote": "当前笔记",
+    "groupView": "视图",
+    "notes": "笔记",
+    "notesPlaceholder": "输入笔记标题快速打开…",
+    "placeholder": "输入命令或笔记标题…",
+    "quickOpen": "快速打开笔记",
+    "title": "命令面板",
+    "preview": "只读预览",
+    "exitPreview": "退出只读预览"
+  },
+  "prompt": {
+    "archiveCategory": "归档分类",
+    "archiveTitle": "归档标题",
+    "folderPath": "文件夹路径",
+    "newFilename": "新文件名"
+  },
+  "status": {
+    "agentCreated": "Agent 已创建 {{path}}。",
+    "agentUndone": "已撤销上次 Agent 修改。",
+    "agentUpdated": "Agent 已更新：{{fields}}。",
+    "noteFallback": "笔记",
+    "archivedTo": "已归档到 {{path}}。",
+    "created": "已创建 {{path}}。",
+    "deletedPermanently": "已永久删除“{{title}}”。",
+    "diskMatches": "磁盘版本与编辑器一致。",
+    "dueUpdated": "已将“{{title}}”的截止日期设为 {{date}}。",
+    "enterVaultPath": "请先输入笔记库路径。",
+    "folderCreated": "已创建文件夹 {{path}}。",
+    "inboxOnly": "只有收件箱中的笔记可以使用归档流程。",
+    "indexRebuilt": "搜索索引已重建。",
+    "keptEditorVersion": "已保留编辑器版本，保存后会覆盖磁盘文件。",
+    "label": "状态栏",
+    "movedTo": "已移动到 {{path}}。",
+    "movedToTrash": "已将“{{title}}”移到回收站。",
+    "notes": "{{count}} 篇笔记",
+    "openVaultFirst": "请先在设置中打开本地笔记库。",
+    "opened": "已打开 {{path}}。",
+    "readingTime": "约 {{count}} 分钟读完",
+    "reloaded": "已从磁盘重新载入 {{path}}。",
+    "renamedTitle": "已重命名为“{{title}}”。",
+    "restored": "已恢复到 {{path}}。",
+    "saved": "已保存 {{path}}。",
+    "statusUpdated": "已更新“{{title}}”的状态。",
+    "totalWords": "共 {{count}} 字",
+    "unsavedFieldChange": "已修改当前笔记，保存后生效。",
+    "vaultInitialized": "已创建初始文件夹。",
+    "vaultOpened": "已打开笔记库并建立索引。",
+    "words": "{{count}} 字",
+    "demoLoaded": "已载入演示笔记。在设置中填写本地路径即可打开真实笔记。",
+    "vaultRefreshed": "已从磁盘刷新笔记库。",
+    "vaultRestored": "已恢复上次打开的笔记库。",
+    "vaultMigrated": "已迁移上次打开的笔记库。",
+    "llmSettingsReset": "无法读取 AI 设置，已恢复默认值。",
+    "settingsSaveFailed": "设置保存失败：{{error}}"
+  },
+  "toast": {
+    "copyFailed": "无法复制到剪贴板。",
+    "dueSet": "已将“{{title}}”的截止日期设为 {{date}}",
+    "linkCopied": "已复制 {{link}}",
+    "moveUndone": "已撤销移动",
+    "moved": "已将“{{title}}”移动到 {{folder}}",
+    "movedToTrash": "已将“{{title}}”移到回收站",
+    "renamed": "已重命名为 {{name}}",
+    "restored": "已恢复“{{title}}”",
+    "taskCreated": "已创建待办“{{title}}”",
+    "titleRenamed": "已重命名为“{{title}}”并保存"
+  },
+  "agent": {
+    "commandLabel": "给 AI 助手的指令",
+    "placeholder": "输入指令，或使用快捷操作分析和优化当前笔记…",
+    "quickActions": "快捷操作",
+    "send": "发送",
+    "starterTitle": "让 AI 帮你处理这篇笔记",
+    "starterHint": "选择一个常用操作，或在下方输入指令。修改会先给你审阅，确认后才写入。",
+    "starterNoKey": "请先在设置 → AI 助手中填写 API 密钥，然后选择一个常用操作。",
+    "actions": {
+      "summarize": "摘要",
+      "suggest_tags": "标签",
+      "clean_metadata": "整理元数据",
+      "extract_tasks": "提取待办",
+      "continue_writing": "续写",
+      "create_related": "关联笔记"
+    },
+    "commands": {
+      "summarize": "更新当前笔记的摘要。",
+      "suggest_tags": "为当前笔记建议并应用简洁的标签。",
+      "clean_metadata": "清理当前笔记的元数据。",
+      "extract_tasks": "提取待办事项并追加到当前笔记。",
+      "continue_writing": "续写当前笔记内容。",
+      "create_related": "创建一个关联笔记并链接回当前笔记。"
+    }
   }
 }

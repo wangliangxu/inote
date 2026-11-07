@@ -1,7 +1,6 @@
 import { useReminderSync } from '../features/todo/useReminderSync';
 import {
   lazy,
-  memo,
   Suspense,
   useCallback,
   useEffect,
@@ -10,31 +9,36 @@ import {
   useRef,
   useState,
 } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm as tauriConfirm } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
+  Copy,
+  Eye,
   FilePlus2,
-  Flag,
+  FolderInput,
+  FolderOpen,
+  FolderPlus,
+  Focus,
   LayoutGrid,
-  Network,
   List,
   ListTodo,
+  Network,
   PanelLeft,
   PanelRight,
   Pencil,
+  RefreshCw,
+  Save,
   Search,
   Settings,
   Tags,
+  TextCursorInput,
   Trash,
-  XCircle,
+  Trash2,
 } from "lucide-react";
 const CalendarView = lazy(() =>
   import("../features/calendar/CalendarView").then((m) => ({
@@ -42,8 +46,6 @@ const CalendarView = lazy(() =>
   })),
 );
 const Editor = lazy(() => import("../features/mindmap/MindMapEditor").then((module) => ({ default: module.Editor })));
-import { NoteCoverPreview } from "../features/editor/NoteCoverPreview";
-import { MindMapThumbnail, thumbnailMap } from "../features/mindmap/MindMapThumbnail";
 import { MINDMAP_KEY, withMindMap } from "../features/mindmap/mindmap";
 import type { MapCreation } from "../features/mindmap/MindMapDialog";
 const MindMapDialog = lazy(() => import("../features/mindmap/MindMapDialog").then(m => ({ default: m.MindMapDialog })));
@@ -54,10 +56,22 @@ import { useVaultSync } from "./useVaultSync";
 import { prepareWorkspaceClose } from "./closeWorkspace";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { useIndexedSearch } from "./useIndexedSearch";
-import { HighlightedText, SearchMatchMetadata } from "../features/search/HighlightedText";
-import { excerptAroundMatch } from "../features/search/searchHighlight";
+import { matchesSearchFilters, parseSearchQuery, rankLocalResults, rememberSearch } from "../features/search/searchQuery";
 import { acknowledgeSave, mergeDiskNotes, createSerialQueue } from "../shared/notePersistence";
-import { newNotePath, noteSavePath } from "../shared/notePaths";
+import { getFilenameForTitle, newNotePath, noteSavePath } from "../shared/notePaths";
+import { localDateString, moveDueDate } from "../shared/dueDates";
+import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
+import { ContextMenu, type ContextMenuEntry } from "./components/ContextMenu";
+import { EmptyState, Skeleton } from "./components/EmptyState";
+import { FolderPicker, normalizeFolder, type FolderPickerRequest } from "./components/FolderPicker";
+import { Modal } from "./components/Modal";
+import { NoteListPanel, type NoteGroup } from "./components/NoteListPanel";
+import { PromptDialog, type PromptRequest } from "./components/PromptDialog";
+import { ResizeHandle } from "./components/ResizeHandle";
+import { StatusBar } from "./components/StatusBar";
+import { TitleBar } from "./components/TitleBar";
+import { ToastProvider, useToast } from "./components/Toast";
+import { formatShortcut, useGlobalShortcuts } from "./shortcuts";
 const NoteAgent = lazy(() =>
   import("../features/agent/NoteAgent").then((m) => ({ default: m.NoteAgent })),
 );
@@ -106,6 +120,7 @@ import {
   loadLastAgentUndoSnapshot,
   migrateNoteImages,
   initializeVault,
+  moveNote,
   noteToMarkdown,
   readNote,
   rebuildSearchIndex,
@@ -160,192 +175,41 @@ const defaultLlmSettings: LlmProviderSettings = {
   model: "gpt-4.1-mini",
 };
 
-const excerptCache = new WeakMap<Note | SearchResult, string>();
-
-function noteExcerpt(note: Note | SearchResult, query = ""): string {
-  if (query.trim()) {
-    for (const value of [note.excerpt, note.summary, "body" in note ? note.body : ""]) {
-      if (!value) continue;
-      const text = stripMarkdownForSummary(value.replace(/```[^\n]*\n?/g, ""));
-      const excerpt = excerptAroundMatch(text, query);
-      if (excerpt !== null) return excerpt;
-    }
-  }
-  const cached = excerptCache.get(note);
-  if (cached !== undefined) return cached;
-  const excerpt = note.excerpt ?? note.summary ??
-        ("body" in note ? note.body
-          .replace(/^# .*\n?/, "")
-          .trim()
-          .slice(0, 96) : "");
-  const result = stripMarkdownForSummary(excerpt);
-  excerptCache.set(note, result);
-  return result;
-}
-
 const NOTES_PAGE_SIZE = 60;
+const LEFT_SIDEBAR_DEFAULT = 268;
+const RIGHT_SIDEBAR_DEFAULT = 336;
+const ARCHIVE_ROOT = "archive";
 
-interface NoteItemProps {
-  previewNote?: Note;
-  vaultRoot?: string;
-  note: Note | SearchResult;
-  isActive: boolean;
-  onSelect: (path: string) => void;
-  searchQuery: string;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-const NoteCardItem = memo(function NoteCardItem({
-  note,
-  previewNote,
-  vaultRoot = "",
-  isActive,
-  onSelect,
-  searchQuery,
-}: NoteItemProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const map = useMemo(() => thumbnailMap(previewNote ?? note), [note, previewNote]);
-
-  useEffect(() => {
-    if (isActive && ref.current) {
-      ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
-  }, [isActive]);
-
-  const excerpt = <small className="text-xs text-base-content/60 leading-relaxed">
-    <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
-  </small>;
-  const coverNote = previewNote ?? ("body" in note ? note : undefined);
-  return (
-    <div ref={ref} className={isActive ? "note-card active" : "note-card"}>
-      <button
-        className={`note-card-select card bg-base-100 shadow-sm border border-base-200/50 hover:shadow-md hover:-translate-y-0.5 w-full text-left focus:outline-none ${isActive ? "ring-2 ring-primary bg-primary/5 border-primary/20 transition-none" : "transition-all"}`}
-        type="button"
-        onClick={() => onSelect(note.path)}
-      >
-        <div className="card-body h-full p-0 gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <strong className="text-sm font-bold leading-tight flex-1">
-              <HighlightedText text={note.title} query={searchQuery} />
-            </strong>
-            {"priority" in note &&
-              note.priority &&
-              note.priority !== "none" && (
-                <Flag
-                  size={12}
-                  className={`shrink-0 ${note.priority === "high" ? "text-error" : note.priority === "medium" ? "text-warning" : "text-info"}`}
-                />
-              )}
-          </div>
-          {map && <MindMapThumbnail map={map} />}
-          {map ? (searchQuery.trim() ? excerpt : null) : coverNote ? (
-            <NoteCoverPreview note={coverNote} vaultRoot={vaultRoot} fallback={excerpt} showExcerpt={!!searchQuery.trim()} />
-          ) : excerpt}
-          <SearchMatchMetadata note={note} query={searchQuery} />
-          <div className="note-card-footer flex items-center justify-between text-[10px] text-base-content/40 mt-auto font-mono">
-            <time>{note.updatedAt || note.createdAt}</time>
-            {"due" in note && note.due && (
-              <span
-                className="flex items-center gap-1 bg-warning/10 text-warning px-1.5 py-0.5 rounded-full"
-                title={`Due: ${note.due}`}
-              >
-                <Clock size={10} />
-                {note.due.split("T")[0]}
-              </span>
-            )}
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-});
-
-const NoteRowItem = memo(function NoteRowItem({
-  note,
-  isActive,
-  onSelect,
-  searchQuery,
-}: NoteItemProps) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isActive && ref.current) {
-      ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
-  }, [isActive]);
-
-  return (
-    <div ref={ref} className="w-full min-w-0 max-w-full">
-      <button
-        className={`flex flex-col w-full min-w-0 max-w-full text-left px-3 py-2 rounded-lg focus:outline-none transition-none ${isActive ? "bg-primary/10 text-primary" : ""}`}
-        type="button"
-        onClick={() => onSelect(note.path)}
-      >
-        <div className="flex items-center justify-between gap-2 w-full min-w-0 max-w-full">
-          <strong
-            className={`text-sm font-semibold truncate min-w-0 max-w-full ${isActive ? "text-primary" : "text-base-content"}`}
-          >
-            <HighlightedText text={note.title} query={searchQuery} />
-          </strong>
-          {"priority" in note && note.priority && note.priority !== "none" && (
-            <Flag
-              size={12}
-              className={`shrink-0 ${note.priority === "high" ? "text-error" : note.priority === "medium" ? "text-warning" : "text-info"}`}
-            />
-          )}
-        </div>
-        <div className="flex flex-col items-start w-full mt-0.5 gap-1">
-          <small className="text-xs text-base-content/50 break-words whitespace-normal line-clamp-2 w-full text-left">
-            <HighlightedText text={noteExcerpt(note, searchQuery)} query={searchQuery} />
-          </small>
-          <SearchMatchMetadata note={note} query={searchQuery} />
-          <div className="flex items-center justify-end gap-2 w-full shrink-0">
-            {"due" in note && note.due && (
-              <span
-                className="flex items-center gap-1 text-[10px] bg-warning/10 text-warning px-1 rounded-full"
-                title={`Due: ${note.due}`}
-              >
-                <Clock size={10} />
-                {note.due.split("T")[0]}
-              </span>
-            )}
-            <time className="text-[10px] text-base-content/40 font-mono shrink-0">
-              {note.updatedAt || note.createdAt}
-            </time>
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-});
-
-function stripMarkdownForSummary(value: string): string {
-  return value
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s{0,3}>\s?/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/\|/g, " ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
+function folderOf(path: string): string {
+  return path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
 }
 
-function localDateString(date = new Date()): string {
-  const localDate = new Date(
-    date.getTime() - date.getTimezoneOffset() * 60_000,
-  );
-  return localDate.toISOString().slice(0, 10);
+function uniquePath(target: string, existing: Set<string>): string {
+  if (!existing.has(target)) return target;
+  const base = target.replace(/\.md$/, "");
+  let suffix = 2;
+  while (existing.has(`${base}-${suffix}.md`)) suffix += 1;
+  return `${base}-${suffix}.md`;
 }
 
 export function App() {
+  return (
+    <ToastProvider>
+      <Workspace />
+    </ToastProvider>
+  );
+}
+
+function Workspace() {
   const { t } = useTranslation();
+  const toast = useToast();
+  // Stable translator for long-lived callbacks (startup effects must not re-run on language change).
+  const tRef = useRef(t);
+  tRef.current = t;
   const initialWorkspace = useMemo(
     () =>
       createInitialWorkspaceState(
@@ -374,6 +238,12 @@ export function App() {
   const [lockUpdateTime, setLockUpdateTime] = useState(false);
   const [autoSaveOnExit, setAutoSaveOnExit] = useState(false);
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<"all" | "notes" | null>(null);
+  const [folderRequest, setFolderRequest] = useState<FolderPickerRequest | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const [focusMode, setFocusMode] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [vaultRoot, setVaultRoot] = useState(initialWorkspace.vaultRoot);
   const [vaultPathInput, setVaultPathInput] = useState(initialWorkspace.vaultRoot);
   const { notes, setNotes, notesRef, vaultRef } = useNoteWorkspace(initialWorkspace.notes, vaultRoot);
@@ -387,7 +257,9 @@ export function App() {
     backlinks: [],
   });
   const [linkVersion, setLinkVersion] = useState(0);
-  const [indexedResults, setIndexedResults] = useIndexedSearch(vaultRoot, query, linkVersion, setStatus);
+  const parsedQuery = useMemo(() => parseSearchQuery(query), [query]);
+  const searchHighlightQuery = parsedQuery.indexQuery;
+  const [indexedResults, setIndexedResults] = useIndexedSearch(vaultRoot, parsedQuery.indexQuery, linkVersion, setStatus);
   const [llmSettings, setLlmSettings] =
     useState<LlmProviderSettings>(defaultLlmSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -418,11 +290,7 @@ export function App() {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
-  const [promptConfig, setPromptConfig] = useState<{
-    message: string;
-    defaultValue: string;
-    resolve: (val: string | null) => void;
-  } | null>(null);
+  const [promptConfig, setPromptConfig] = useState<PromptRequest | null>(null);
 
   const safePrompt = useCallback((message: string, defaultValue = "") => {
     return new Promise<string | null>((resolve) => {
@@ -430,7 +298,6 @@ export function App() {
     });
   }, []);
   const categoryFilterRef = useRef<HTMLDetailsElement>(null);
-  const categoryFilterPointerInsideRef = useRef(false);
   const loadSequenceRef = useRef(0);
   const loadedRootRef = useRef(initialWorkspace.vaultRoot);
   const saveQueueRef = useRef(createSerialQueue());
@@ -551,7 +418,7 @@ export function App() {
       ? t("app.allCategories")
       : selectedSearchCategories.length === 1
         ? selectedSearchCategories[0]
-        : `${selectedSearchCategories.length} categories`;
+        : t("app.categoriesCount", { count: selectedSearchCategories.length });
   const totalWords = useMemo(
     () => notes.reduce((sum, note) => sum + note.wordCount, 0),
     [notes],
@@ -606,7 +473,7 @@ export function App() {
   const loadVaultFromDisk = useCallback(
     async (
       root: string,
-      reason = "Vault refreshed from disk.",
+      reason = tRef.current("status.vaultRefreshed"),
       preferredPath = "",
     ) => {
       const trimmedRoot = root.trim();
@@ -728,13 +595,11 @@ export function App() {
     setActivePath(demoNotes[0]?.path ?? "");
     setVaultRoot("");
     setSaveError(false);
-    setStatus(
-      "Demo vault loaded. Enter a local path in Settings to open real notes.",
-    );
+    setStatus(tRef.current("status.demoLoaded"));
   }, []);
 
   const refreshVaultFromDisk = useCallback(
-    async (reason = "Vault refreshed from disk.") => {
+    async (reason = tRef.current("status.vaultRefreshed")) => {
       await loadVaultFromDisk(vaultRoot, reason);
     },
     [loadVaultFromDisk, vaultRoot],
@@ -748,11 +613,17 @@ export function App() {
         if (cancelled) return;
 
         try {
-          const [tocOpen, tocNum, viewMode] = await Promise.all([
+          const [tocOpen, tocNum, viewMode, tocWidth, metadataWidth] = await Promise.all([
             getSetting("mdxeditor-toc-open"),
             getSetting("mdxeditor-toc-numbering"),
             getSetting("mdxeditor-view-mode"),
+            getSetting("mdxeditor-toc-width"),
+            getSetting("mdxeditor-metadata-width"),
           ]);
+          if (tocWidth !== null)
+            window.localStorage.setItem("mdxeditor-toc-width", tocWidth);
+          if (metadataWidth !== null)
+            window.localStorage.setItem("mdxeditor-metadata-width", metadataWidth);
           if (tocOpen !== null)
             window.localStorage.setItem("mdxeditor-toc-open", tocOpen);
           if (tocNum !== null)
@@ -817,7 +688,7 @@ export function App() {
               ...JSON.parse(savedLlmSettings),
             };
           } catch {
-            setStatus("LLM settings could not be loaded. Defaults restored.");
+            setStatus(tRef.current("status.llmSettingsReset"));
           }
         }
         setLlmSettings({ ...defaultLlmSettings, ...llmSettingsFromStorage });
@@ -826,8 +697,8 @@ export function App() {
             await restoreVaultOnStartup(
               vaultRootFromSettings,
               savedSettings.vaultRoot
-                ? "Last vault restored from SQLite."
-                : "Last vault migrated from browser fallback.",
+                ? tRef.current("status.vaultRestored")
+                : tRef.current("status.vaultMigrated"),
               savedSettings.activePath || legacyActivePath,
             );
           } catch (error) {
@@ -846,7 +717,7 @@ export function App() {
           try {
             await restoreVaultOnStartup(
               remembered,
-              "Last vault restored from browser fallback.",
+              tRef.current("status.vaultRestored"),
               window.localStorage.getItem(LAST_ACTIVE_PATH_KEY) ?? "",
             );
           } catch (error) {
@@ -864,7 +735,7 @@ export function App() {
               ...JSON.parse(savedLlmSettings),
             });
           } catch {
-            setStatus("LLM settings could not be loaded. Defaults restored.");
+            setStatus(tRef.current("status.llmSettingsReset"));
           }
         }
       })
@@ -936,60 +807,13 @@ export function App() {
   useVaultSync({ vaultRoot, notes, notesRef, activeNote, settingsLoaded, loadedRoot: loadedRootRef, vaultRef, queue: saveQueueRef, setNotes, setActivePath, setLinkVersion, setStatus });
 
   useEffect(() => {
-    if (!categoryFilterOpen) return;
-
-    function closeCategoryFilter(event: PointerEvent) {
-      if (!categoryFilterRef.current?.contains(event.target as Node)) {
-        setCategoryFilterOpen(false);
-      }
-    }
-
-    window.addEventListener("pointerdown", closeCategoryFilter);
-    return () => {
-      window.removeEventListener("pointerdown", closeCategoryFilter);
-    };
-  }, [categoryFilterOpen]);
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-
-    function closeSettings(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setSettingsOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", closeSettings);
-    return () => {
-      window.removeEventListener("keydown", closeSettings);
-    };
-  }, [settingsOpen]);
-
-  useEffect(() => {
-    if (!tagsPopoverOpen) return;
-
-    function closeTags(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setTagsPopoverOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", closeTags);
-    return () => {
-      window.removeEventListener("keydown", closeTags);
-    };
-  }, [tagsPopoverOpen]);
-
-  useEffect(() => {
     const unlistenPromise = listen("inote://empty-trash", async () => {
       if (!vaultRoot.trim()) return;
 
       // Yield to event loop to allow menu interaction to finish
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const confirmed = await safeConfirm(
-        "Are you sure you want to permanently empty the trash? This action cannot be undone.",
-      );
+      const confirmed = await safeConfirm(t("app.emptyTrashConfirm"));
       if (!confirmed) return;
 
       // Yield to event loop to allow macOS NSAlert dialog to close completely
@@ -1003,7 +827,8 @@ export function App() {
         setIndexedResults((current) =>
           current.filter((n) => !n.path.startsWith(".trash/")),
         );
-        setStatus("Trash emptied.");
+        setStatus(t("app.trashEmptied"));
+        toast.show({ message: t("app.trashEmptied"), tone: "success" });
         setActivePath((current) =>
           current.startsWith(".trash/") ? "" : current,
         );
@@ -1015,19 +840,19 @@ export function App() {
     return () => {
       unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
-  }, [vaultRoot, safeConfirm]);
+  }, [vaultRoot, safeConfirm, t, toast]);
 
   useEffect(() => {
     const unlistenPromise = listen("inote://rebuild-index", async () => {
       if (!vaultRoot.trim()) return;
       await rebuildSearchIndex(vaultRoot.trim(), true);
-      await refreshVaultFromDisk("Full index rebuilt.");
+      await refreshVaultFromDisk(t("status.indexRebuilt"));
     });
 
     return () => {
       unlistenPromise.then((dispose) => dispose()).catch(() => { });
     };
-  }, [vaultRoot, refreshVaultFromDisk]);
+  }, [vaultRoot, refreshVaultFromDisk, t]);
 
   useEffect(() => {
     const unlistenPromise = listen(OPEN_SETTINGS_EVENT, () => {
@@ -1077,7 +902,7 @@ export function App() {
             getNotes: () => notesRef.current,
             save: (note) => saveNoteWithPathSyncRef.current(note),
             persistDrafts: (drafts) => saveQueueRef.current(() => saveNoteDrafts(root, drafts)),
-            confirmClose: () => safeConfirm("有未保存的笔记。草稿已保留，是否退出？"),
+            confirmClose: () => safeConfirm(tRef.current("confirm.quitWithDrafts")),
           });
           if (!close) { closeRequestInProgressRef.current = false; return; }
         }
@@ -1128,11 +953,19 @@ export function App() {
           )
         );
       };
-      const searchResults =
-        vaultRoot.trim() && query.trim()
+      const textQuery = parsedQuery.indexQuery;
+      const searchResults: Array<Note | SearchResult> =
+        vaultRoot.trim() && textQuery.trim()
           ? indexedResults
-          : searchNotes(notes, query);
-      return searchResults.filter(matchesSearchScope);
+          : rankLocalResults(searchNotes(notes, textQuery), textQuery);
+      const hasFieldFilters = parsedQuery.folders.length > 0 || parsedQuery.statuses.length > 0;
+      const notesByPath = hasFieldFilters ? new Map(notes.map((note) => [note.path, note])) : null;
+      return searchResults.filter((result) => {
+        if (!matchesSearchScope(result)) return false;
+        if (!notesByPath) return true;
+        const note = notesByPath.get(result.path) ?? result;
+        return matchesSearchFilters({ category: note.category, status: "status" in note ? note.status : undefined }, parsedQuery);
+      });
     }
     if (activeView === "today")
       return getTodayNote(notes)
@@ -1185,10 +1018,12 @@ export function App() {
     activeView,
     indexedResults,
     notes,
-    query,
+    parsedQuery,
     searchCategorySet,
     vaultRoot,
   ]);
+  const visibleNotesRef = useRef(visibleNotes);
+  visibleNotesRef.current = visibleNotes;
 
   const [renderedCount, setRenderedCount] = useState(NOTES_PAGE_SIZE);
   const initialScrollDoneRef = useRef(false);
@@ -1239,50 +1074,43 @@ export function App() {
     }
   }, [renderedCount, visibleNotes.length]);
 
-  const visibleNoteGroups = useMemo(() => {
+  const visibleNoteGroups = useMemo<NoteGroup[]>(() => {
     const sliced = visibleNotes.slice(0, renderedCount);
     if (activeView === "todo") {
       const today = localDateString();
-      const groups = {
-        Overdue: [] as Array<Note | SearchResult>,
-        "Due Today": [] as Array<Note | SearchResult>,
-        Upcoming: [] as Array<Note | SearchResult>,
-        "No Due Date": [] as Array<Note | SearchResult>,
-        "Recently Completed": [] as Array<Note | SearchResult>,
+      const groups: Record<string, Array<Note | SearchResult>> = {
+        overdue: [],
+        dueToday: [],
+        upcoming: [],
+        noDueDate: [],
+        recentlyCompleted: [],
       };
 
       for (const note of sliced) {
         if ("status" in note && note.status === "done") {
-          groups["Recently Completed"].push(note);
+          groups.recentlyCompleted.push(note);
         } else if ("due" in note && note.due) {
           const dueDate = note.due.slice(0, 10);
           if (dueDate < today) {
-            groups["Overdue"].push(note);
+            groups.overdue.push(note);
           } else if (dueDate === today) {
-            groups["Due Today"].push(note);
+            groups.dueToday.push(note);
           } else {
-            groups["Upcoming"].push(note);
+            groups.upcoming.push(note);
           }
         } else {
-          groups["No Due Date"].push(note);
+          groups.noDueDate.push(note);
         }
       }
 
-      return [
-        { month: "Overdue", notes: groups["Overdue"], isCollapsed: false },
-        { month: "Due Today", notes: groups["Due Today"], isCollapsed: false },
-        { month: "Upcoming", notes: groups["Upcoming"], isCollapsed: false },
-        {
-          month: "No Due Date",
-          notes: groups["No Due Date"],
-          isCollapsed: false,
-        },
-        {
-          month: "Recently Completed",
-          notes: groups["Recently Completed"],
-          isCollapsed: true,
-        },
-      ].filter((g) => g.notes.length > 0);
+      return Object.entries(groups)
+        .map(([id, groupNotes]) => ({
+          id,
+          label: t(`todo.${id}`),
+          notes: groupNotes,
+          isCollapsed: id === "recentlyCompleted",
+        }))
+        .filter((group) => group.notes.length > 0);
     }
 
     const groups = new Map<string, Array<Note | SearchResult>>();
@@ -1293,12 +1121,13 @@ export function App() {
     }
     return Array.from(groups.entries())
       .map(([month, groupedNotes]) => ({
-        month,
+        id: month,
+        label: month,
         notes: groupedNotes,
         isCollapsed: false,
       }))
-      .sort((a, b) => b.month.localeCompare(a.month));
-  }, [visibleNotes, renderedCount, activeView]);
+      .sort((a, b) => b.id.localeCompare(a.id));
+  }, [visibleNotes, renderedCount, activeView, t]);
 
   const handleNoteListKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -1494,30 +1323,6 @@ export function App() {
     );
   }
 
-  async function updateNoteStatus(path: string, status: string) {
-    if (!vaultRoot.trim()) return;
-    const noteToUpdate = notes.find((n) => n.path === path);
-    if (!noteToUpdate) return;
-
-    if (activeNote && activeNote.path === path) {
-      updateActiveNoteStatus(status);
-      return;
-    }
-
-    try {
-      const loaded = noteToUpdate.bodyLoaded === false ? await readNote(vaultRoot.trim(), path) : noteToUpdate;
-      const updatedNote = {
-        ...loaded,
-        status,
-        updatedAt: lockUpdateTime ? noteToUpdate.updatedAt : localDateString(),
-      };
-      const saved = await saveNoteWithPathSync(updatedNote, undefined, noteToUpdate);
-      setStatus(`Updated status for ${saved.title}.`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   function updateActiveNotePriority(priority: string) {
     if (!activeNote) return;
     setNotes((current) =>
@@ -1573,11 +1378,11 @@ export function App() {
 
   async function openVault() {
     if (!vaultPathInput.trim()) {
-      setStatus("Enter a vault path first.");
+      setStatus(t("status.enterVaultPath"));
       return;
     }
     try {
-      await loadVaultFromDisk(vaultPathInput.trim(), "Vault opened. Markdown notes indexed.");
+      await loadVaultFromDisk(vaultPathInput.trim(), t("status.vaultOpened"));
       window.localStorage.setItem(LAST_VAULT_KEY, vaultPathInput.trim());
       setSaveError(false);
     } catch (error) {
@@ -1587,15 +1392,15 @@ export function App() {
 
   async function initVault() {
     if (!vaultPathInput.trim()) {
-      setStatus("Enter a vault path first.");
+      setStatus(t("status.enterVaultPath"));
       return;
     }
     try {
       await initializeVault(vaultPathInput.trim());
-      await loadVaultFromDisk(vaultPathInput.trim(), "Starter vault folders are ready.");
+      await loadVaultFromDisk(vaultPathInput.trim(), t("status.vaultInitialized"));
       window.localStorage.setItem(LAST_VAULT_KEY, vaultPathInput.trim());
       setSaveError(false);
-      setStatus("Starter vault folders are ready.");
+      setStatus(t("status.vaultInitialized"));
     } catch (error) {
       setSaveError(true);
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1606,7 +1411,7 @@ export function App() {
     if (closeRequestInProgressRef.current) return false;
     const savingRoot = vaultRef.current.trim();
     if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before saving.");
+      setStatus(t("status.openVaultFirst"));
       return false;
     }
     try {
@@ -1638,7 +1443,7 @@ export function App() {
       if (activeNote.path !== saved.path) setActivePath((path) => path === activeNote.path ? saved.path : path);
       if (activeNoteRef.current?.path === activeNote.path) setActiveCategory(saved.category);
       setSaveError(false);
-      setStatus(`Saved ${saved.path}.`);
+      setStatus(t("status.saved", { path: saved.path }));
       return true;
     } catch (error) {
       setSaveError(true);
@@ -1652,7 +1457,7 @@ export function App() {
   async function saveNoteWithPathSync(note: Note, agent?: NoteCommitInput['agent'], submitted = note): Promise<Note> {
     const root = vaultRef.current.trim();
     return saveQueueRef.current(async () => {
-      if (root !== vaultRef.current.trim()) throw new Error("The active vault changed before saving.");
+      if (root !== vaultRef.current.trim()) throw new Error(t("errors.vaultChanged"));
       const saved = await commitNote({
         vaultRoot: root,
         path: note.path,
@@ -1670,7 +1475,7 @@ export function App() {
 
   async function applyAgentCurrentNote(result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) {
     const before = activeNoteRef.current;
-    if (!before || !vaultRef.current.trim()) throw new Error("Open a real vault before applying agent changes.");
+    if (!before || !vaultRef.current.trim()) throw new Error(t("status.openVaultFirst"));
     const root = vaultRef.current;
     const change = buildAgentNoteCommit(before, result, selectedOperationIndexes, turnId, sessionId, lockUpdateTime ? before.updatedAt : localDateString(), false);
     setIsSaving(true);
@@ -1680,7 +1485,7 @@ export function App() {
       setLinkVersion((version) => version + 1);
       setActivePath((path) => path === before.path ? saved.path : path);
       setSaveError(false);
-      setStatus(`Agent updated ${change.changedFields.join(", ") || "note"}.`);
+      setStatus(t("status.agentUpdated", { fields: change.changedFields.join(", ") || t("status.noteFallback") }));
     } catch (error) {
       setSaveError(true);
       setStatus(String(error));
@@ -1690,7 +1495,7 @@ export function App() {
 
   async function checkExternalActiveNote() {
     if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before checking disk changes.");
+      setStatus(t("status.openVaultFirst"));
       return;
     }
     try {
@@ -1698,15 +1503,16 @@ export function App() {
       const changedOnDisk = diskNote.sourceRevision !== activeNote.sourceRevision;
 
       if (!changedOnDisk) {
-        setStatus("Disk version matches the editor.");
+        setStatus(t("status.diskMatches"));
+        toast.show({ message: t("status.diskMatches") });
         return;
       }
 
       const reload = await safeConfirm(
-        `${activeNote.path} changed on disk. Reload the disk version?`,
+        t("confirm.reloadFromDisk", { path: activeNote.path }),
       );
       if (!reload) {
-        setStatus("Kept editor version. Save to overwrite disk when ready.");
+        setStatus(t("status.keptEditorVersion"));
         setNotes((current) =>
           current.map((note) =>
             note.path === diskNote.path ? { ...note, isDirty: true, sourceRevision: diskNote.sourceRevision } : note,
@@ -1719,7 +1525,7 @@ export function App() {
         current.map((note) => (note.path === diskNote.path ? diskNote : note)),
       );
       setSaveError(false);
-      setStatus(`Reloaded ${diskNote.path} from disk.`);
+      setStatus(t("status.reloaded", { path: diskNote.path }));
     } catch (error) {
       setSaveError(true);
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1728,17 +1534,17 @@ export function App() {
 
   async function archiveActiveInboxNote() {
     if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before archiving inbox notes.");
+      setStatus(t("status.openVaultFirst"));
       return;
     }
     if (!activeNote.path.startsWith("00-inbox/")) {
-      setStatus("Only inbox notes can use the archive flow.");
+      setStatus(t("status.inboxOnly"));
       return;
     }
-    const title = await safePrompt("Archive title", activeNote.title);
+    const title = await safePrompt(t("prompt.archiveTitle"), activeNote.title);
     if (!title) return;
     const category = await safePrompt(
-      "Archive category",
+      t("prompt.archiveCategory"),
       activeCategory && activeCategory !== "00-inbox"
         ? activeCategory
         : "knowledge",
@@ -1757,7 +1563,7 @@ export function App() {
       setActiveCategory(archived.category);
       setActiveView("category");
       setSaveError(false);
-      setStatus(`Archived to ${archived.path}.`);
+      setStatus(t("status.archivedTo", { path: archived.path }));
     } catch (error) {
       setSaveError(true);
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1766,7 +1572,8 @@ export function App() {
 
   async function addTodayNote() {
     if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before creating today note.");
+      setStatus(t("status.openVaultFirst"));
+      toast.show({ message: t("status.openVaultFirst"), tone: "error" });
       return;
     }
 
@@ -1790,7 +1597,7 @@ export function App() {
       setActiveCategory(note.category);
       setActiveView("category");
       setSaveError(false);
-      setStatus(`Opened ${note.path}.`);
+      setStatus(t("status.opened", { path: note.path }));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -1798,7 +1605,8 @@ export function App() {
 
   async function addCategoryNote() {
     if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before creating notes.");
+      setStatus(t("status.openVaultFirst"));
+      toast.show({ message: t("status.openVaultFirst"), tone: "error" });
       return;
     }
     const title = "无标题";
@@ -1827,7 +1635,7 @@ export function App() {
       setActiveCategory(note.category);
       setActiveView("category");
       setSaveError(false);
-      setStatus(`Created ${note.path}.`);
+      setStatus(t("status.created", { path: note.path }));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -1858,7 +1666,7 @@ export function App() {
   async function createAgentNote(result: AgentResult, selectedOperationIndexes: number[], turnId: string, sessionId: string) {
     const before = activeNoteRef.current;
     const root = vaultRef.current.trim();
-    if (!before || !root) throw new Error("Open a real vault before creating notes.");
+    if (!before || !root) throw new Error(t("status.openVaultFirst"));
     const change = buildAgentNoteCommit(before, result, selectedOperationIndexes, turnId, sessionId, localDateString(), true, notesRef.current.map((note) => note.path));
     const saved = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path: change.note.path, create: true, content: noteToMarkdown(change.note), agent: change.agent, sourceCheck: before.sourceRevision ? { path: before.path, revision: before.sourceRevision } : undefined }));
     if (vaultRef.current.trim() !== root) return;
@@ -1866,16 +1674,16 @@ export function App() {
     setLinkVersion((version) => version + 1);
     setActivePath((path) => path === before.path ? saved.path : path);
     setSaveError(false);
-    setStatus(`Agent created ${saved.path}.`);
+    setStatus(t("status.agentCreated", { path: saved.path }));
   }
 
   async function undoLastAgentApply() {
     const before = activeNoteRef.current;
     const root = vaultRef.current.trim();
-    if (!before || !root) throw new Error("Open a real vault before undoing Agent changes.");
+    if (!before || !root) throw new Error(t("status.openVaultFirst"));
     const snapshot = await loadLastAgentUndoSnapshot({ vaultRoot: root, notePath: before.path });
-    if (!snapshot) throw new Error("No Agent undo snapshot is available.");
-    if (notesRef.current.some((note) => note.isDirty && (note.path === before.path || note.path === snapshot.createdNotePath))) throw new Error("请先保存当前草稿，再撤销 Agent 修改。");
+    if (!snapshot) throw new Error(t("errors.noAgentUndo"));
+    if (notesRef.current.some((note) => note.isDirty && (note.path === before.path || note.path === snapshot.createdNotePath))) throw new Error(t("errors.saveBeforeAgentUndo"));
     const result = await saveQueueRef.current(() => undoAgentChange(root, before.path));
     if (vaultRef.current.trim() !== root) return;
     setNotes((current) => {
@@ -1885,16 +1693,17 @@ export function App() {
     setActivePath((path) => path === before.path || path === result.removedPath ? result.activePath : path);
     setLinkVersion((version) => version + 1);
     setSaveError(false);
-    setStatus("已撤销上次 Agent 修改。");
+    setStatus(t("status.agentUndone"));
   }
 
   async function addFolder() {
     if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before creating folders.");
+      setStatus(t("status.openVaultFirst"));
+      toast.show({ message: t("status.openVaultFirst"), tone: "error" });
       return;
     }
     const path = await safePrompt(
-      "Folder path",
+      t("prompt.folderPath"),
       activeCategory || "knowledge/new-topic",
     );
     if (!path) return;
@@ -1902,81 +1711,48 @@ export function App() {
       await createFolder({ vaultRoot: vaultRoot.trim(), path });
       setActiveCategory(path);
       setActiveView("category");
-      setStatus(`Created folder ${path}.`);
+      setStatus(t("status.folderCreated", { path }));
+      toast.show({ message: t("status.folderCreated", { path }), tone: "success" });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }
-
-  async function renameActiveNote() {
-    if (!activeNote || !vaultRoot.trim()) {
-      setStatus("Open a real vault before renaming notes.");
-      return;
-    }
-    const currentName = activeNote.path.split("/").pop() ?? activeNote.path;
-    const nextName = await safePrompt("New filename", currentName);
-    if (!nextName || nextName === currentName) return;
-    const folder = activeNote.path.includes("/")
-      ? activeNote.path.split("/").slice(0, -1).join("/")
-      : "";
-    const normalized = nextName.endsWith(".md") ? nextName : `${nextName}.md`;
-    const to = folder ? `${folder}/${normalized}` : normalized;
-    await moveActiveNote(to);
-  }
-
-  async function moveActiveNotePrompt() {
-    if (!activeNote) return;
-    const nextPath = await safePrompt("Move to path", activeNote.path);
-    if (!nextPath || nextPath === activeNote.path) return;
-    await moveActiveNote(
-      nextPath.endsWith(".md") ? nextPath : `${nextPath}.md`,
-    );
-  }
-
-  async function moveActiveNote(to: string) {
-    const before = activeNoteRef.current;
-    const root = vaultRef.current.trim();
-    if (!before || !root) return;
-    try {
-      setIsSaving(true);
-      const moved = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path: before.path, targetPath: to, expectedRevision: before.sourceRevision, content: noteToMarkdown(before) }));
-      if (vaultRef.current.trim() !== root) return;
-      setNotes((current) => acknowledgeSave(current, before, moved));
-      setActivePath((path) => path === before.path ? moved.path : path);
-      setLinkVersion((version) => version + 1);
-      setSaveError(false);
-      setStatus(`Moved to ${moved.path}.`);
-    } catch (error) { setStatus(String(error)); }
-    finally { setIsSaving(false); }
   }
 
   async function deleteNoteByPath(path: string) {
     if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before deleting notes.");
+      setStatus(t("status.openVaultFirst"));
       return;
     }
     const isTrash = path.startsWith(".trash/");
-    const confirmed = await safeConfirm(
-      isTrash ? `Permanently delete ${path}?` : `Move ${path} to trash?`,
-    );
-    if (!confirmed) return;
+    const note = notesRef.current.find((item) => item.path === path);
+    if (isTrash && !(await safeConfirm(t("confirm.permanentDelete", { title: note?.title ?? path })))) return;
+    if (!isTrash && note?.isDirty && !(await safeConfirm(t("confirm.deleteDirty", { title: note.title })))) return;
     try {
-      await deleteNote(vaultRoot.trim(), path);
-      const remaining = notesRef.current.filter((note) => note.path !== path);
-      setNotes((current) => current.filter((note) => note.path !== path));
-      setIndexedResults((current) =>
-        current.filter((note) => note.path !== path),
-      );
+      const trashedPath = await deleteNote(vaultRoot.trim(), path);
+      const visible = visibleNotesRef.current;
+      const index = visible.findIndex((item) => item.path === path);
+      const neighbour = visible[index + 1] ?? visible[index - 1];
+      const remaining = notesRef.current.filter((item) => item.path !== path);
+      setNotes((current) => current.filter((item) => item.path !== path));
+      setIndexedResults((current) => current.filter((item) => item.path !== path));
       setLinkVersion((current) => current + 1);
-      setActivePath((current) =>
-        current === path ? (remaining[0]?.path ?? "") : current,
-      );
+      setActivePath((current) => current === path ? (neighbour?.path ?? remaining[0]?.path ?? "") : current);
       setSaveError(false);
-      setStatus(
-        isTrash ? `Permanently deleted ${path}.` : `Moved ${path} to trash.`,
-      );
+      const title = note?.title ?? path;
+      if (isTrash || !trashedPath) {
+        setStatus(t("status.deletedPermanently", { title }));
+        toast.show({ message: t("status.deletedPermanently", { title }) });
+      } else {
+        setStatus(t("status.movedToTrash", { title }));
+        toast.show({
+          message: t("toast.movedToTrash", { title }),
+          actionLabel: t("common.undo"),
+          onAction: () => void restoreTrashedNote(trashedPath, path),
+        });
+      }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      setStatus(errorMessage(error));
+      toast.show({ message: errorMessage(error), tone: "error" });
     }
   }
 
@@ -1985,525 +1761,499 @@ export function App() {
     void deleteNoteByPath(activeNote.path);
   }
 
-  function startSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!leftSidebarVisible || event.button !== 0) return;
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = leftSidebarWidth;
-
-    function resize(moveEvent: PointerEvent) {
-      const nextWidth = Math.min(
-        560,
-        Math.max(220, Math.round(startWidth + moveEvent.clientX - startX)),
-      );
-      setLeftSidebarWidth(nextWidth);
-    }
-
-    function stopResize() {
-      document.body.style.cursor = "";
-      window.removeEventListener("pointermove", resize);
-      window.removeEventListener("pointerup", stopResize);
-    }
-
-    document.body.style.cursor = "col-resize";
-    window.addEventListener("pointermove", resize);
-    window.addEventListener("pointerup", stopResize);
-  }
-
-  function startRightSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!rightPanelVisible || event.button !== 0) return;
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = rightSidebarWidth;
-
-    function resize(moveEvent: PointerEvent) {
-      // Moving left increases width, moving right decreases width
-      const nextWidth = Math.min(
-        560,
-        Math.max(220, Math.round(startWidth - (moveEvent.clientX - startX))),
-      );
-      setRightSidebarWidth(nextWidth);
-    }
-
-    function stopResize() {
-      document.body.style.cursor = "";
-      window.removeEventListener("pointermove", resize);
-      window.removeEventListener("pointerup", stopResize);
-    }
-
-    document.body.style.cursor = "col-resize";
-    window.addEventListener("pointermove", resize);
-    window.addEventListener("pointerup", stopResize);
-  }
 
   async function rebuildIndex() {
     if (!vaultRoot.trim()) {
-      setStatus("Open a real vault before rebuilding the index.");
+      setStatus(t("status.openVaultFirst"));
       return;
     }
     try {
       await rebuildSearchIndex(vaultRoot.trim(), true);
-      await refreshVaultFromDisk("Search index rebuilt.");
+      await refreshVaultFromDisk(t("status.indexRebuilt"));
+      toast.show({ message: t("status.indexRebuilt"), tone: "success" });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
 
+  function pickFolder(title: string, current: string) {
+    return new Promise<string | null>((resolve) => {
+      setFolderRequest({ title, current, resolve });
+    });
+  }
+
+  /** Commits a note under a new path (rename or move), optionally changing fields at the same time. */
+  async function commitPathChange(path: string, to: string, patch: Partial<Note> = {}, successMessage?: string): Promise<Note | null> {
+    const root = vaultRef.current.trim();
+    const before = notesRef.current.find((note) => note.path === path);
+    if (!before || !root) {
+      setStatus(t("status.openVaultFirst"));
+      return null;
+    }
+    try {
+      setIsSaving(true);
+      const loaded = before.bodyLoaded === false ? await readNote(root, path) : before;
+      const existing = new Set(notesRef.current.filter((note) => note.path !== path).map((note) => note.path));
+      const targetPath = uniquePath(to, existing);
+      const moved = await saveQueueRef.current(() => commitNote({ vaultRoot: root, path, targetPath, expectedRevision: loaded.sourceRevision, content: noteToMarkdown({ ...loaded, ...patch }) }));
+      if (vaultRef.current.trim() !== root) return null;
+      setNotes((current) => before.bodyLoaded === false
+        ? current.map((note) => (note.path === path ? { ...moved, isDirty: false } : note))
+        : acknowledgeSave(current, before, moved));
+      setActivePath((current) => (current === path ? moved.path : current));
+      setLinkVersion((version) => version + 1);
+      setSaveError(false);
+      setStatus(successMessage ?? t("status.movedTo", { path: moved.path }));
+      return moved;
+    } catch (error) {
+      setStatus(errorMessage(error));
+      toast.show({ message: errorMessage(error), tone: "error" });
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function moveNoteToFolder(path: string, folder: string, options: { undoable?: boolean; message?: string } = {}) {
+    const target = normalizeFolder(folder);
+    if (folderOf(path) === target) return;
+    const filename = (path.split("/").pop() ?? path).replace(path.startsWith(".trash/") ? /^\d{4}-\d{2}-\d{2}-/ : /^$/, "");
+    const moved = await commitPathChange(path, target ? `${target}/${filename}` : filename, { category: target });
+    if (!moved) return;
+    const originalFolder = folderOf(path);
+    const undo = options.undoable === false || path.startsWith(".trash/")
+      ? {}
+      : {
+        actionLabel: t("common.undo"),
+        onAction: () => void moveNoteToFolder(moved.path, originalFolder, { undoable: false, message: t("toast.moveUndone") }),
+      };
+    toast.show({ message: options.message ?? t("toast.moved", { title: moved.title, folder: target || "/" }), ...undo });
+  }
+
+  async function moveNotePrompt(path: string) {
+    const note = notesRef.current.find((item) => item.path === path);
+    if (!note || !vaultRoot.trim()) {
+      setStatus(t("status.openVaultFirst"));
+      return;
+    }
+    const inTrash = path.startsWith(".trash/");
+    const folder = await pickFolder(t(inTrash ? "folderPicker.restoreTitle" : "folderPicker.moveTitle", { title: note.title }), inTrash ? "" : folderOf(path));
+    if (folder === null) return;
+    await moveNoteToFolder(path, folder);
+  }
+
+  async function renameNoteFile(path: string) {
+    if (!vaultRoot.trim() || !notesRef.current.some((note) => note.path === path)) {
+      setStatus(t("status.openVaultFirst"));
+      return;
+    }
+    const currentName = path.split("/").pop() ?? path;
+    const nextName = (await safePrompt(t("prompt.newFilename"), currentName))?.trim().replace(/[\\/]/g, "-");
+    if (!nextName || nextName === currentName) return;
+    const normalized = nextName.endsWith(".md") ? nextName : `${nextName}.md`;
+    const folder = folderOf(path);
+    const moved = await commitPathChange(path, folder ? `${folder}/${normalized}` : normalized);
+    if (moved) toast.show({ message: t("toast.renamed", { name: moved.path.split("/").pop() }) });
+  }
+
+  /** Inline title edit: updates the title and renames the file to match. */
+  async function renameActiveNoteTitle(nextTitle: string) {
+    const before = activeNoteRef.current;
+    const title = nextTitle.trim();
+    if (!before || !title || title === before.title) return;
+    if (!vaultRef.current.trim()) {
+      updateActiveNoteTitle(title);
+      return;
+    }
+    const folder = folderOf(before.path);
+    const filename = `${getFilenameForTitle(title)}.md`;
+    const moved = await commitPathChange(
+      before.path,
+      folder ? `${folder}/${filename}` : filename,
+      { title, updatedAt: lockUpdateTime ? before.updatedAt : localDateString() },
+      t("status.renamedTitle", { title }),
+    );
+    if (moved) toast.show({ message: t("toast.titleRenamed", { title }) });
+  }
+
+  function archiveTarget(note: Note): string {
+    return [ARCHIVE_ROOT, note.category].filter(Boolean).join("/");
+  }
+
+  async function restoreTrashedNote(trashedPath: string, originalPath: string) {
+    const root = vaultRef.current.trim();
+    if (!root) return;
+    try {
+      const existing = new Set(notesRef.current.map((note) => note.path));
+      const target = uniquePath(originalPath, existing);
+      const moved = await saveQueueRef.current(() => moveNote({ vaultRoot: root, from: trashedPath, to: target }));
+      const restored = await readNote(root, moved.path).catch(() => moved);
+      if (vaultRef.current.trim() !== root) return;
+      setNotes((current) => [restored, ...current.filter((note) => note.path !== restored.path && note.path !== trashedPath)]);
+      setIndexedResults((current) => current.filter((note) => note.path !== trashedPath));
+      setLinkVersion((version) => version + 1);
+      setActivePath(restored.path);
+      setStatus(t("status.restored", { path: restored.path }));
+      toast.show({ message: t("toast.restored", { title: restored.title }), tone: "success" });
+    } catch (error) {
+      toast.show({ message: errorMessage(error), tone: "error" });
+    }
+  }
+
+  async function updateNoteFields(path: string, patch: Partial<Note>, message: string) {
+    if (!vaultRoot.trim()) {
+      setStatus(t("status.openVaultFirst"));
+      return;
+    }
+    const noteToUpdate = notesRef.current.find((n) => n.path === path);
+    if (!noteToUpdate) return;
+
+    if (activeNoteRef.current?.path === path) {
+      setNotes((current) => current.map((note) => note.path === path ? {
+        ...note,
+        ...patch,
+        updatedAt: lockUpdateTime ? note.updatedAt : localDateString(),
+        isDirty: true,
+      } : note));
+      setStatus(t("status.unsavedFieldChange"));
+      return;
+    }
+
+    try {
+      const loaded = noteToUpdate.bodyLoaded === false ? await readNote(vaultRoot.trim(), path) : noteToUpdate;
+      const updatedNote = {
+        ...loaded,
+        ...patch,
+        updatedAt: lockUpdateTime ? noteToUpdate.updatedAt : localDateString(),
+      };
+      await saveNoteWithPathSync(updatedNote, undefined, noteToUpdate);
+      setStatus(message);
+    } catch (error) {
+      setStatus(errorMessage(error));
+      toast.show({ message: errorMessage(error), tone: "error" });
+    }
+  }
+
+  async function updateNoteStatus(path: string, status: string) {
+    const note = notesRef.current.find((item) => item.path === path);
+    await updateNoteFields(path, { status }, t("status.statusUpdated", { title: note?.title ?? path }));
+  }
+
+  async function setNoteDue(path: string, date: string) {
+    const note = notesRef.current.find((item) => item.path === path);
+    if (!note) return;
+    const due = moveDueDate(note.due, date);
+    await updateNoteFields(path, { due }, t("status.dueUpdated", { title: note.title, date }));
+    toast.show({ message: t("toast.dueSet", { title: note.title, date }) });
+  }
+
+  async function createTask(title: string, status: string) {
+    const root = vaultRef.current.trim();
+    if (!root) {
+      toast.show({ message: t("status.openVaultFirst"), tone: "error" });
+      return;
+    }
+    try {
+      const category = defaultCategory || categoryOptions[0]?.name || "knowledge";
+      const created = await createNote({ vaultRoot: root, title, category });
+      setNotes((current) => [created, ...current.filter((note) => note.path !== created.path)]);
+      const saved = await saveNoteWithPathSync({ ...created, status, updatedAt: localDateString() }, undefined, created);
+      setLinkVersion((version) => version + 1);
+      setStatus(t("status.created", { path: saved.path }));
+      toast.show({ message: t("toast.taskCreated", { title: saved.title }), tone: "success" });
+    } catch (error) {
+      toast.show({ message: errorMessage(error), tone: "error" });
+    }
+  }
+
+  async function copyNoteLink(note: Note) {
+    const link = `[[${note.title}]]`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.show({ message: t("toast.linkCopied", { link }) });
+    } catch {
+      toast.show({ message: t("toast.copyFailed"), tone: "error" });
+    }
+  }
+
+  async function revealNote(path: string) {
+    const root = vaultRef.current.trim();
+    if (!root) return;
+    try {
+      await revealItemInDir(`${root.replace(/\/$/, "")}/${path}`);
+    } catch (error) {
+      toast.show({ message: errorMessage(error), tone: "error" });
+    }
+  }
+
+  function openNote(path: string) {
+    if (activeView === "search" && query.trim()) rememberSearch(query);
+    setActivePath(path);
+  }
+
+  function openFolder(folder: string) {
+    setActiveCategory(folder);
+    setActiveView("category");
+    setLeftSidebarVisible(true);
+  }
+
+  function noteContextItems(path: string): ContextMenuEntry[] {
+    const note = notes.find((item) => item.path === path);
+    if (!note) return [];
+    const real = !!vaultRoot.trim();
+    const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window);
+    const inTrash = path.startsWith(".trash/");
+    const archived = note.category === ARCHIVE_ROOT || note.category.startsWith(`${ARCHIVE_ROOT}/`);
+    const open = { id: "open", label: t("menu.open"), icon: <Eye size={14} />, onSelect: () => openNote(path) };
+    if (inTrash) {
+      return [
+        open,
+        { id: "restore", label: t("menu.restoreTo"), icon: <FolderInput size={14} />, disabled: !real, onSelect: () => void moveNotePrompt(path) },
+        "separator",
+        { id: "delete", label: t("menu.deletePermanently"), icon: <Trash2 size={14} />, danger: true, disabled: !real, onSelect: () => void deleteNoteByPath(path) },
+      ];
+    }
+    return [
+      open,
+      "separator",
+      { id: "rename", label: t("menu.renameFile"), icon: <TextCursorInput size={14} />, disabled: !real, onSelect: () => void renameNoteFile(path) },
+      { id: "move", label: t("menu.moveTo"), icon: <FolderInput size={14} />, disabled: !real, onSelect: () => void moveNotePrompt(path) },
+      archived
+        ? { id: "unarchive", label: t("menu.unarchive"), icon: <Archive size={14} />, disabled: !real, onSelect: () => void moveNoteToFolder(path, note.category.replace(/^archive\/?/, "") || defaultCategory || "knowledge") }
+        : { id: "archive", label: t("menu.archive"), icon: <Archive size={14} />, disabled: !real, onSelect: () => void moveNoteToFolder(path, archiveTarget(note)) },
+      "separator",
+      { id: "copy-link", label: t("menu.copyLink"), icon: <Copy size={14} />, onSelect: () => void copyNoteLink(note) },
+      { id: "reveal", label: t("menu.reveal"), icon: <FolderOpen size={14} />, disabled: !real || !isTauri, onSelect: () => void revealNote(path) },
+      "separator",
+      { id: "delete", label: t("menu.moveToTrash"), icon: <Trash2 size={14} />, danger: true, shortcut: formatShortcut("deleteNote"), disabled: !real, onSelect: () => void deleteNoteByPath(path) },
+    ];
+  }
+
+  const leftVisible = leftSidebarVisible && !focusMode;
+  // The assistant works on the open note, so its column only takes space while a note is open.
+  const rightVisible = rightPanelVisible && !focusMode && !!activeNote;
+
+  const toggleLeftSidebar = () => {
+    if (focusMode) setFocusMode(false);
+    setLeftSidebarVisible((current) => (focusMode ? true : !current));
+  };
+  const toggleRightSidebar = () => {
+    if (focusMode) setFocusMode(false);
+    setRightSidebarVisible((current) => (focusMode ? true : !current));
+  };
+
+  useGlobalShortcuts({
+    newNote: () => void addCategoryNote(),
+    commandPalette: () => setPaletteMode((mode) => (mode === "all" ? null : "all")),
+    quickOpen: () => setPaletteMode((mode) => (mode === "notes" ? null : "notes")),
+    focusSearch: () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+    toggleLeftSidebar,
+    toggleRightSidebar: () => {
+      if (!mindMapActive) toggleRightSidebar();
+    },
+    historyBack: () => {
+      if (previousHistoryIndex >= 0) navigateNoteHistory(previousHistoryIndex);
+    },
+    historyForward: () => {
+      if (nextHistoryIndex >= 0) navigateNoteHistory(nextHistoryIndex);
+    },
+    togglePreview: () => {
+      if (activeNote) setPreviewMode((current) => !current);
+    },
+    deleteNote: () => {
+      if (activeNote) void deleteNoteByPath(activeNote.path);
+    },
+    focusMode: () => {
+      if (activeNote) setFocusMode((current) => !current);
+    },
+  });
+
+  useEffect(() => {
+    if (!focusMode) return;
+    function exitFocus(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog[open], .context-menu")) return;
+      setFocusMode(false);
+    }
+    window.addEventListener("keydown", exitFocus);
+    return () => window.removeEventListener("keydown", exitFocus);
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (!activeNote && focusMode) setFocusMode(false);
+  }, [activeNote, focusMode]);
+
+  const paletteCommands: PaletteCommand[] = paletteMode === "all" ? [
+    { id: "new-note", group: t("palette.groupCreate"), label: t("app.createNote"), icon: <Pencil size={15} />, shortcut: formatShortcut("newNote"), run: () => void addCategoryNote() },
+    { id: "today-note", group: t("palette.groupCreate"), label: t("settings.todayNote"), icon: <FilePlus2 size={15} />, run: () => void addTodayNote() },
+    { id: "mind-map", group: t("palette.groupCreate"), label: t("mindmap.title"), icon: <Network size={15} />, run: () => openMindMapDialog() },
+    { id: "new-folder", group: t("palette.groupCreate"), label: t("app.newFolder"), icon: <FolderPlus size={15} />, run: () => void addFolder() },
+    { id: "search", group: t("palette.groupNavigate"), label: t("palette.focusSearch"), icon: <Search size={15} />, shortcut: formatShortcut("focusSearch"), run: () => window.setTimeout(() => searchInputRef.current?.focus(), 0) },
+    { id: "quick-open", group: t("palette.groupNavigate"), label: t("palette.quickOpen"), icon: <Search size={15} />, shortcut: formatShortcut("quickOpen"), run: () => window.setTimeout(() => setPaletteMode("notes"), 0) },
+    { id: "todo", group: t("palette.groupNavigate"), label: t("app.todo"), icon: <ListTodo size={15} />, run: () => toggleSpecialView("todo") },
+    { id: "calendar", group: t("palette.groupNavigate"), label: t("app.calendar"), icon: <CalendarDays size={15} />, run: () => toggleSpecialView("calendar") },
+    { id: "archive", group: t("palette.groupNavigate"), label: t("app.archive"), icon: <Archive size={15} />, run: () => toggleSpecialView("archive") },
+    { id: "trash", group: t("palette.groupNavigate"), label: t("app.trash"), icon: <Trash size={15} />, run: () => toggleSpecialView("trash") },
+    { id: "tags", group: t("palette.groupNavigate"), label: t("app.tags"), icon: <Tags size={15} />, run: () => setTagsPopoverOpen(true) },
+    { id: "save", group: t("palette.groupNote"), label: t("editor.save"), icon: <Save size={15} />, shortcut: "⌘S", disabled: !activeNote, run: () => void saveActiveNote() },
+    { id: "rename", group: t("palette.groupNote"), label: t("menu.renameFile"), icon: <TextCursorInput size={15} />, disabled: !activeNote, run: () => activeNote && void renameNoteFile(activeNote.path) },
+    { id: "move", group: t("palette.groupNote"), label: t("menu.moveTo"), icon: <FolderInput size={15} />, disabled: !activeNote, run: () => activeNote && void moveNotePrompt(activeNote.path) },
+    { id: "check-file", group: t("palette.groupNote"), label: t("editor.checkFile"), icon: <RefreshCw size={15} />, disabled: !activeNote, run: () => void checkExternalActiveNote() },
+    { id: "preview", group: t("palette.groupNote"), label: t(previewMode ? "palette.exitPreview" : "palette.preview"), icon: <Eye size={15} />, shortcut: formatShortcut("togglePreview"), disabled: !activeNote, run: () => setPreviewMode((current) => !current) },
+    { id: "focus", group: t("palette.groupNote"), label: t(focusMode ? "focus.exit" : "focus.enter"), icon: <Focus size={15} />, shortcut: formatShortcut("focusMode"), disabled: !activeNote, run: () => setFocusMode((current) => !current) },
+    { id: "delete", group: t("palette.groupNote"), label: t("menu.moveToTrash"), icon: <Trash2 size={15} />, shortcut: formatShortcut("deleteNote"), disabled: !activeNote, run: () => activeNote && void deleteNoteByPath(activeNote.path) },
+    { id: "left", group: t("palette.groupView"), label: t(leftVisible ? "app.hideLeftSidebar" : "app.showLeftSidebar"), icon: <PanelLeft size={15} />, shortcut: formatShortcut("toggleLeftSidebar"), run: toggleLeftSidebar },
+    { id: "right", group: t("palette.groupView"), label: t(rightVisible ? "app.hideRightSidebar" : "app.showRightSidebar"), icon: <PanelRight size={15} />, shortcut: formatShortcut("toggleRightSidebar"), disabled: mindMapActive, run: toggleRightSidebar },
+    { id: "cards", group: t("palette.groupView"), label: t("app.cardView"), icon: <LayoutGrid size={15} />, run: () => setNoteListMode("cards") },
+    { id: "summary", group: t("palette.groupView"), label: t("app.summaryView"), icon: <List size={15} />, run: () => setNoteListMode("summary") },
+    { id: "settings", group: t("palette.groupApp"), label: t("app.settings"), icon: <Settings size={15} />, shortcut: "⌘,", run: () => setSettingsOpen(true) },
+    { id: "rebuild-index", group: t("palette.groupApp"), label: t("settings.rebuildIndex"), icon: <RefreshCw size={15} />, disabled: !vaultRoot.trim(), run: () => void rebuildIndex() },
+  ] : [];
+
+  function openMindMapDialog() {
+    setMindMapTarget({ root: vaultRoot.trim(), category: activeView === "category" ? activeCategory : activeView === "search" && selectedSearchCategories.length === 1 ? selectedSearchCategories[0] : defaultCategory || "knowledge" });
+  }
+
+  const contextMenuNote = contextMenu ? notes.find((note) => note.path === contextMenu.path) : undefined;
+
   return (
     <main
       inert={isClosing}
-      className="flex flex-col h-screen w-screen bg-base-100 text-base-content overflow-hidden"
+      className={`app-root flex flex-col h-screen w-screen bg-base-100 text-base-content overflow-hidden ${focusMode ? "focus-mode" : ""}`}
       data-theme={themeDatasetValue}
     >
-      <header
-        className="navbar bg-base-100/90 backdrop-blur border-b border-base-300 z-10 h-[52px] min-h-[52px] pl-[82px] pr-2 max-[900px]:pl-[74px]"
-        style={{ WebkitAppRegion: "drag" } as any}
-        onMouseDown={(e) => {
-          if (
-            (e.target as HTMLElement).closest(
-              "button, input, a, [data-no-drag]",
-            )
-          )
-            return;
-          if (e.button !== 0) return;
-          e.preventDefault();
-          getCurrentWindow()
-            .startDragging()
-            .catch(() => { });
+      <TitleBar
+        vaultName={vaultRoot.trim() ? vaultRoot.split("/").filter(Boolean).pop() ?? "" : t("app.demoWorkspace")}
+        leftSidebarVisible={leftVisible}
+        onToggleLeftSidebar={toggleLeftSidebar}
+        rightSidebarVisible={rightVisible}
+        onToggleRightSidebar={toggleRightSidebar}
+        showRightSidebarToggle={!mindMapActive}
+        canGoBack={previousHistoryIndex >= 0}
+        canGoForward={nextHistoryIndex >= 0}
+        onBack={() => navigateNoteHistory(previousHistoryIndex)}
+        onForward={() => navigateNoteHistory(nextHistoryIndex)}
+        query={query}
+        onQueryChange={(next) => {
+          if (query !== "" && next === "") initialScrollDoneRef.current = false;
+          setQuery(next);
+          setActiveView("search");
         }}
-      >
-        <div className="mr-2 flex min-w-0 flex-none select-none flex-col items-start">
-          <strong className="text-sm font-bold leading-tight">iNote</strong>
-          <span className="max-w-[140px] truncate text-xs leading-tight text-base-content/60">
-            {vaultRoot.trim()
-              ? vaultRoot.split("/").filter(Boolean).pop()
-              : "Demo workspace"}
-          </span>
-        </div>
-        <div
-          className="flex-none"
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
-          <button
-            className={`btn btn-square btn-ghost btn-sm ${leftSidebarVisible ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => setLeftSidebarVisible((current) => !current)}
-            title={
-              leftSidebarVisible ? "Hide left sidebar" : "Show left sidebar"
-            }
-            aria-label={
-              leftSidebarVisible ? "Hide left sidebar" : "Show left sidebar"
-            }
-          >
-            <PanelLeft size={18} />
-          </button>
-        </div>
-        <div
-          className="flex flex-none items-center gap-0.5"
-          data-no-drag
-          aria-label={t("app.noteNavigation")}
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
-          <button
-            className="btn btn-square btn-ghost btn-sm disabled:bg-transparent disabled:text-base-content/20 disabled:opacity-40"
-            type="button"
-            disabled={previousHistoryIndex < 0}
-            onClick={() => navigateNoteHistory(previousHistoryIndex)}
-            title={t("app.previousNote")}
-            aria-label={t("app.previousNote")}
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            className="btn btn-square btn-ghost btn-sm disabled:bg-transparent disabled:text-base-content/20 disabled:opacity-40"
-            type="button"
-            disabled={nextHistoryIndex < 0}
-            onClick={() => navigateNoteHistory(nextHistoryIndex)}
-            title={t("app.nextNote")}
-            aria-label={t("app.nextNote")}
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-        <div className="flex-1" />
-        <div
-          className="min-w-0 flex-none px-2"
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
-          <label className="input input-sm input-bordered flex w-[min(320px,28vw)] min-w-[180px] items-center gap-2 transition-all focus-within:w-[min(380px,34vw)]">
-            <Search size={16} className="text-base-content/50" />
-            <input
-              className="grow"
-              aria-label={t("app.searchPlaceholder")}
-              placeholder={t("app.searchPlaceholder")}
-              value={query}
-              onChange={(event) => {
-                if (query !== "" && event.target.value === "") {
-                  initialScrollDoneRef.current = false;
-                }
-                setQuery(event.target.value);
-                setActiveView("search");
-              }}
-            />
-            {query && (
-              <button
-                className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
-                type="button"
-                onClick={() => {
-                  initialScrollDoneRef.current = false;
-                  setQuery("");
-                }}
-                title={t("app.clearSearch")}
-                aria-label={t("app.clearSearch")}
-              >
-                <XCircle size={14} />
-              </button>
-            )}
-          </label>
-        </div>
-        <div
-          className="flex flex-none items-center gap-1"
-          aria-label="Window actions"
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
-          <button
-            className="btn btn-ghost btn-sm btn-square"
-            type="button"
-            onClick={addCategoryNote}
-            title={t("app.createNote")}
-            aria-label={t("app.createNote")}
-          >
-            <Pencil size={18} className="text-accent" />
-          </button>
-
-          <button className="btn btn-ghost btn-sm btn-square" type="button" title={t("mindmap.title")} aria-label={t("mindmap.title")}
-            onClick={() => setMindMapTarget({ root: vaultRoot.trim(), category: activeView === "category" ? activeCategory : activeView === "search" && selectedSearchCategories.length === 1 ? selectedSearchCategories[0] : defaultCategory || "knowledge" })}>
-            <Network size={18} className="text-accent" />
-          </button>
-
-          {showTodayNoteButton ? (
-            <button
-              className="btn btn-ghost btn-sm btn-square"
-              type="button"
-              onClick={addTodayNote}
-              title={t("settings.todayNote")}
-              aria-label={t("settings.todayNote")}
-            >
-              <FilePlus2 size={18} className="text-accent" />
-            </button>
-          ) : null}
-
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${tagsPopoverOpen ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => setTagsPopoverOpen(true)}
-            title={t("app.tags")}
-            aria-label={t("app.tags")}
-          >
-            <Tags size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${activeView === "todo" ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => toggleSpecialView("todo")}
-            title="Todo List"
-            aria-label="Toggle Todo List"
-          >
-            <ListTodo size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${activeView === "calendar" ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => toggleSpecialView("calendar")}
-            title={t("app.calendar")}
-            aria-label={t("app.calendar")}
-          >
-            <CalendarDays size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${activeView === "archive" ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => toggleSpecialView("archive")}
-            title={t("app.archive")}
-            aria-label={t("app.archive")}
-          >
-            <Archive size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${activeView === "trash" ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => toggleSpecialView("trash")}
-            title={t("app.trash")}
-            aria-label={t("app.trash")}
-          >
-            <Trash size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost btn-sm btn-square ${settingsOpen ? "bg-base-content/10 text-primary" : ""}`}
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            title={t("app.settings")}
-            aria-label={t("app.settings")}
-          >
-            <Settings size={18} />
-          </button>
-          {!mindMapActive && (
-            <button
-              className={`btn btn-ghost btn-sm btn-square ${rightSidebarVisible ? "bg-base-content/10 text-primary" : ""}`}
-              type="button"
-              onClick={() => setRightSidebarVisible((current) => !current)}
-              title={
-                rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
-              }
-              aria-label={
-                rightSidebarVisible ? "Hide right sidebar" : "Show right sidebar"
-              }
-            >
-              <PanelRight size={18} />
-            </button>
-          )}
-        </div>
-      </header>
+        onClearSearch={() => {
+          initialScrollDoneRef.current = false;
+          setQuery("");
+        }}
+        searchInputRef={searchInputRef}
+        activeView={activeView}
+        onToggleView={toggleSpecialView}
+        tagsOpen={tagsPopoverOpen}
+        onOpenTags={() => setTagsPopoverOpen(true)}
+        settingsOpen={settingsOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenPalette={() => setPaletteMode("all")}
+        showTodayNoteButton={showTodayNoteButton}
+        onCreateNote={() => void addCategoryNote()}
+        onCreateToday={() => void addTodayNote()}
+        onCreateMindMap={openMindMapDialog}
+        onCreateFolder={() => void addFolder()}
+      />
 
       <div
         className="flex-1 grid min-h-0 overflow-hidden bg-base-100"
         style={{
-          gridTemplateColumns: `${leftSidebarVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${rightPanelVisible ? `5px ${rightSidebarWidth}px` : "0 0"
-            }`,
+          gridTemplateColumns: `${leftVisible ? `${leftSidebarWidth}px 5px` : "0 0"} minmax(0, 1fr) ${rightVisible ? `5px ${rightSidebarWidth}px` : "0 0"}`,
         }}
       >
-        <aside
-          className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${leftSidebarVisible ? "border-r" : "invisible opacity-0 border-none"}`}
-        >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-base-300 bg-base-200/50">
-            <details
-              ref={categoryFilterRef}
-              className="dropdown dropdown-bottom"
-              data-no-drag
-              open={categoryFilterOpen}
-              onBlur={(event) => {
-                if (categoryFilterPointerInsideRef.current) return;
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null,
-                  )
-                ) {
-                  setCategoryFilterOpen(false);
-                }
-              }}
-              onPointerDownCapture={() => {
-                categoryFilterPointerInsideRef.current = true;
-                window.setTimeout(() => {
-                  categoryFilterPointerInsideRef.current = false;
-                }, 0);
-              }}
-              onToggle={(event) =>
-                setCategoryFilterOpen(event.currentTarget.open)
-              }
-            >
-              <summary
-                className="btn btn-sm btn-ghost px-2 font-medium"
-                title={searchScopeLabel}
-              >
-                {activeView === "today"
-                  ? t("app.today")
-                  : activeView === "search"
-                    ? searchScopeLabel
-                    : activeView === "category"
-                      ? activeCategory
-                      : activeView === "archive"
-                        ? t("app.archive")
-                        : activeView === "trash"
-                          ? t("app.trash")
-                          : t("app.allNotes")}
-              </summary>
-              <div className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 max-h-[50vh] overflow-y-auto border border-base-300 flex-nowrap mt-1">
-                <label className="label cursor-pointer justify-start gap-3 hover:bg-base-200 rounded px-2">
-                  <input
-                    className="checkbox checkbox-sm"
-                    checked={selectedSearchCategories.length === 0}
-                    type="checkbox"
-                    onChange={() => {
-                      setSelectedSearchCategories([]);
-                      setActiveView("search");
-                    }}
-                  />
-                  <span className="label-text font-medium">
-                    {t("app.allCategories")}
-                  </span>
-                </label>
-                {categoryOptions.map((category) => (
-                  <label
-                    key={category.name}
-                    className="label cursor-pointer justify-start gap-3 hover:bg-base-200 rounded px-2"
-                  >
-                    <input
-                      className="checkbox checkbox-sm"
-                      checked={searchCategorySet.has(category.name)}
-                      type="checkbox"
-                      onChange={(event) => {
-                        setActiveView("search");
-                        setSelectedSearchCategories((current) => {
-                          if (event.target.checked)
-                            return [...current, category.name].sort((a, b) =>
-                              a.localeCompare(b),
-                            );
-                          return current.filter(
-                            (name) => name !== category.name,
-                          );
-                        });
-                      }}
-                    />
-                    <span className="label-text flex-1 truncate">
-                      {category.name}
-                    </span>
-                    <span className="badge badge-sm badge-ghost">
-                      {category.count}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </details>
-            <div className="flex items-center gap-1">
-              <div
-                className="flex items-center gap-1 bg-base-200/50 rounded-lg p-1"
-                aria-label="Note list display mode"
-              >
-                <span className="text-[10px] font-mono text-base-content/50 px-1">
-                  {visibleNotes.length}
-                </span>
-                <button
-                  className={`btn btn-xs btn-ghost btn-square ${noteListMode === "cards" ? "bg-base-content/20" : ""}`}
-                  type="button"
-                  onClick={() => setNoteListMode("cards")}
-                  title="Card view"
-                  aria-label="Card view"
-                >
-                  <LayoutGrid size={13} />
-                </button>
-                <button
-                  className={`btn btn-xs btn-ghost btn-square ${noteListMode === "summary" ? "bg-base-content/20" : ""}`}
-                  type="button"
-                  onClick={() => setNoteListMode("summary")}
-                  title="Summary view"
-                  aria-label="Summary view"
-                >
-                  <List size={13} />
-                </button>
-              </div>
-            </div>
-          </div>
-          <div
-            className={`note-list flex-1 min-h-0 overflow-y-auto px-2 py-2 flex flex-col gap-2 ${noteListMode}`}
-            tabIndex={0}
-            onKeyDown={handleNoteListKeyDown}
-            onScroll={handleNoteListScroll}
-          >
-            {visibleNoteGroups.map((group) => {
-              const header = (
-                <div className="flex items-center justify-between w-full">
-                  <h3 className="text-xs font-bold text-base-content/70 uppercase tracking-wider m-0">
-                    {group.month}
-                  </h3>
-                  <span className="text-[10px] bg-base-300 text-base-content/70 px-1.5 py-0.5 rounded-full">
-                    {group.notes.length}
-                  </span>
-                </div>
-              );
-              const content = (
-                <div
-                  className={`mt-2 ${noteListMode === "cards" ? "note-card-grid" : "note-summary-stack flex flex-col gap-0.5"}`}
-                >
-                  {group.notes.map((note) =>
-                    noteListMode === "cards" ? (
-                      <NoteCardItem
-                        vaultRoot={vaultRoot}
-                        previewNote={activeView === "search" ? notes.find((item) => item.path === note.path) : undefined}
-                        key={note.path}
-                        note={note}
-                        isActive={note.path === activePath}
-                        onSelect={setActivePath}
-                        searchQuery={activeView === "search" ? query : ""}
-                      />
-                    ) : (
-                      <NoteRowItem
-                        key={note.path}
-                        note={note}
-                        isActive={note.path === activePath}
-                        onSelect={setActivePath}
-                        searchQuery={activeView === "search" ? query : ""}
-                      />
-                    ),
-                  )}
-                </div>
-              );
-
-              return (
-                <section className="mb-4 last:mb-0" key={group.month}>
-                  {group.isCollapsed ? (
-                    <details className="group" data-no-drag>
-                      <summary className="flex items-center cursor-pointer select-none py-1.5 px-2 hover:bg-base-200/50 rounded-lg transition-colors marker:text-base-content/50 marker:text-xs">
-                        {header}
-                      </summary>
-                      <div className="mt-1 px-1">{content}</div>
-                    </details>
-                  ) : (
-                    <>
-                      <div className="flex items-center px-2 py-1.5 mb-1">
-                        {header}
-                      </div>
-                      <div className="px-1">{content}</div>
-                    </>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        </aside>
-        <div
-          className={`w-full h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/50 transition-colors z-10 ${leftSidebarVisible ? "" : "invisible opacity-0"}`}
-          onPointerDown={startSidebarResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize left sidebar"
+        <NoteListPanel
+          visible={leftVisible}
+          activeView={activeView}
+          activeCategory={activeCategory}
+          searchScopeLabel={searchScopeLabel}
+          query={searchHighlightQuery}
+          categoryOptions={categoryOptions}
+          selectedSearchCategories={selectedSearchCategories}
+          onSelectAllCategories={() => {
+            setSelectedSearchCategories([]);
+            setActiveView("search");
+          }}
+          onToggleSearchCategory={(name, checked) => {
+            setActiveView("search");
+            setSelectedSearchCategories((current) => checked
+              ? [...current, name].sort((a, b) => a.localeCompare(b))
+              : current.filter((item) => item !== name));
+          }}
+          categoryFilterOpen={categoryFilterOpen}
+          setCategoryFilterOpen={setCategoryFilterOpen}
+          categoryFilterRef={categoryFilterRef}
+          noteListMode={noteListMode}
+          setNoteListMode={setNoteListMode}
+          visibleCount={visibleNotes.length}
+          groups={visibleNoteGroups}
+          notes={notes}
+          activePath={activePath}
+          vaultRoot={vaultRoot}
+          onSelect={openNote}
+          onNoteContextMenu={(path, x, y) => setContextMenu({ path, x, y })}
+          onKeyDown={handleNoteListKeyDown}
+          onScroll={handleNoteListScroll}
+          onCreateNote={() => void addCategoryNote()}
+          canCreate={!!vaultRoot.trim()}
+        />
+        <ResizeHandle
+          side="left"
+          hidden={!leftVisible}
+          width={leftSidebarWidth}
+          min={220}
+          max={560}
+          defaultWidth={LEFT_SIDEBAR_DEFAULT}
+          onResize={setLeftSidebarWidth}
+          label={t("app.resizeLeftSidebar")}
+          className="w-full h-full z-10"
         />
 
-        <section className="flex min-h-0 flex-col min-w-0 bg-base-100 relative shadow-inner">
+        <section className="workspace-main flex min-h-0 flex-col min-w-0 bg-base-100 relative shadow-inner">
           {activeView === "calendar" ? (
-            <Suspense fallback={<div className="empty">Loading calendar…</div>}>
+            <Suspense fallback={<Skeleton variant="calendar" label={t("loading.calendar")} />}>
               <CalendarView
                 notes={notes}
                 onSelectNote={setActivePath}
                 onClose={() => toggleSpecialView("calendar")}
+                onSetDue={setNoteDue}
               />
             </Suspense>
           ) : activeView === "todo" && !activeNote ? (
-            <Suspense
-              fallback={<div className="empty">Loading todo dashboard…</div>}
-            >
+            <Suspense fallback={<Skeleton variant="board" label={t("loading.todo")} />}>
               <TodoDashboard
                 notes={visibleNotes}
                 onSelectNote={setActivePath}
                 onUpdateNoteStatus={updateNoteStatus}
+                onCreateTask={createTask}
+                canCreate={!!vaultRoot.trim()}
               />
             </Suspense>
           ) : activeNote ? (
             startupMigrationPath === activeNote.path ? (
-              <div className="empty">Optimizing embedded note images…</div>
+              <EmptyState icon={<RefreshCw size={28} className="animate-spin" />} title={t("loading.migratingImages")} />
             ) : !editorPaintReady || activeNote.bodyLoaded === false ? (
-              <div className="empty">Loading note…</div>
+              <Skeleton variant="editor" label={t("loading.note")} />
             ) : (
-              <FeatureBoundary resetKey={activeNote.path}><Suspense fallback={<div className="empty">Loading note…</div>}><Editor
+              <FeatureBoundary resetKey={activeNote.path}><Suspense fallback={<Skeleton variant="editor" label={t("loading.note")} />}><Editor
                 key={activeNote.path}
                 vaultRoot={vaultRoot.trim()}
                 note={activeNote}
-                searchQuery={activeView === "search" ? query : ""}
+                searchQuery={activeView === "search" ? searchHighlightQuery : ""}
                 onChange={updateActiveNote}
                 onSave={saveActiveNote}
-                onRename={renameActiveNote}
-                onMove={moveActiveNotePrompt}
+                onRename={() => void renameNoteFile(activeNote.path)}
+                onRenameTitle={(title) => void renameActiveNoteTitle(title)}
+                onMove={() => void moveNotePrompt(activeNote.path)}
                 onCheckExternal={checkExternalActiveNote}
                 onDelete={deleteActiveNote}
+                onNavigateFolder={openFolder}
+                focusMode={focusMode}
+                onToggleFocusMode={() => setFocusMode((current) => !current)}
                 previewMode={previewMode}
                 onTogglePreview={() => setPreviewMode((current) => !current)}
                 saveState={saveState}
@@ -2523,30 +2273,34 @@ export function App() {
               /></Suspense></FeatureBoundary>
             )
           ) : (
-            <div className="empty">
-              {activeView === "search" && query.startsWith("#")
-                ? t("app.noNoteSelected")
-                : t("app.noNoteSelected")}
-            </div>
+            <EmptyState
+              icon={<FilePlus2 size={32} />}
+              title={t("empty.noNoteTitle")}
+              description={t("empty.noNoteHint", { newNote: formatShortcut("newNote"), quickOpen: formatShortcut("quickOpen") })}
+              action={vaultRoot.trim() ? { label: t("app.createNote"), onClick: () => void addCategoryNote(), icon: <Pencil size={14} /> } : { label: t("app.settings"), onClick: () => setSettingsOpen(true), icon: <Settings size={14} /> }}
+            />
           )}
         </section>
 
-        <div
-          className={`w-full h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/50 transition-colors z-10 ${rightPanelVisible ? "" : "invisible opacity-0"}`}
-          onPointerDown={startRightSidebarResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize right sidebar"
+        <ResizeHandle
+          side="right"
+          hidden={!rightVisible}
+          width={rightSidebarWidth}
+          min={220}
+          max={560}
+          defaultWidth={RIGHT_SIDEBAR_DEFAULT}
+          onResize={setRightSidebarWidth}
+          label={t("app.resizeRightSidebar")}
+          className="w-full h-full z-10"
         />
 
         <aside
-          className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightPanelVisible ? "border-l" : "invisible opacity-0 border-none"}`}
+          className={`flex min-h-0 flex-col overflow-hidden bg-base-200/40 border-base-300 ${rightVisible ? "border-l" : "invisible opacity-0 border-none"}`}
+          aria-label={t("app.assistant")}
         >
-          {rightPanelVisible && activeNote && activeNote.bodyLoaded !== false ? (
+          {rightVisible && activeNote && activeNote.bodyLoaded !== false ? (
             <FeatureBoundary resetKey={activeNote.path}>
-              <Suspense
-                fallback={<div className="empty">Loading note agent...</div>}
-              >
+              <Suspense fallback={<Skeleton variant="panel" label={t("loading.agent")} />}>
                 <NoteAgent
                   note={activeNote}
                   notes={notes}
@@ -2564,161 +2318,106 @@ export function App() {
 
       {mindMapTarget && <Suspense fallback={null}><MindMapDialog onClose={() => setMindMapTarget(null)} onCreate={createMindMapNote} canCreate={!!mindMapTarget.root && mindMapTarget.root === vaultRoot.trim()} /></Suspense>}
 
-      {settingsOpen ? (
-        <div
-          className="settings-window-backdrop modal modal-open"
-          role="presentation"
-          onMouseDown={() => setSettingsOpen(false)}
-        >
-          <div
-            className="settings-window modal-box h-[min(760px,86vh)] max-h-[86vh] w-[min(840px,92vw)] max-w-none overflow-hidden p-0"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Settings"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <Suspense fallback={<div className="empty">Loading settings…</div>}>
-              <SettingsPanel
-                vaultRoot={vaultPathInput}
-                reminderVaultRoot={vaultRoot.trim()}
-                status={status}
-                llmSettings={llmSettings}
-                themePreference={themePreference}
-                effectiveTheme={effectiveTheme}
-                colorTheme={colorTheme}
-                baseFontSize={baseFontSize}
-                defaultCategory={defaultCategory}
-                categories={categoryOptions}
-                showTodayNoteButton={showTodayNoteButton}
-                onShowTodayNoteButtonChange={setShowTodayNoteButton}
-                lockUpdateTime={lockUpdateTime}
-                onLockUpdateTimeChange={setLockUpdateTime}
-                autoSaveOnExit={autoSaveOnExit}
-                onAutoSaveOnExitChange={setAutoSaveOnExit}
-                onVaultRootChange={setVaultPathInput}
-                onLlmSettingsChange={setLlmSettings}
-                onThemePreferenceChange={setThemePreference}
-                onColorThemeChange={setColorTheme}
-                onBaseFontSizeChange={setBaseFontSize}
-                fontFamily={fontFamily}
-                onFontFamilyChange={setFontFamily}
-                onDefaultCategoryChange={setDefaultCategory}
-                onOpenVault={openVault}
-                onInitializeVault={initVault}
-                onCreateToday={addTodayNote}
-                onCreateFolder={addFolder}
-                onRebuildIndex={rebuildIndex}
-                onClose={() => setSettingsOpen(false)}
-              />
-            </Suspense>
-          </div>
-        </div>
+      <Modal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        label={t("app.settings")}
+        boxClassName="settings-window h-[min(760px,86vh)] max-h-[86vh] w-[min(840px,92vw)] max-w-none overflow-hidden p-0"
+      >
+        <Suspense fallback={<Skeleton variant="panel" label={t("loading.settings")} />}>
+          <SettingsPanel
+            vaultRoot={vaultPathInput}
+            reminderVaultRoot={vaultRoot.trim()}
+            status={status}
+            llmSettings={llmSettings}
+            themePreference={themePreference}
+            effectiveTheme={effectiveTheme}
+            colorTheme={colorTheme}
+            baseFontSize={baseFontSize}
+            defaultCategory={defaultCategory}
+            categories={categoryOptions}
+            showTodayNoteButton={showTodayNoteButton}
+            onShowTodayNoteButtonChange={setShowTodayNoteButton}
+            lockUpdateTime={lockUpdateTime}
+            onLockUpdateTimeChange={setLockUpdateTime}
+            autoSaveOnExit={autoSaveOnExit}
+            onAutoSaveOnExitChange={setAutoSaveOnExit}
+            onVaultRootChange={setVaultPathInput}
+            onLlmSettingsChange={setLlmSettings}
+            onThemePreferenceChange={setThemePreference}
+            onColorThemeChange={setColorTheme}
+            onBaseFontSizeChange={setBaseFontSize}
+            fontFamily={fontFamily}
+            onFontFamilyChange={setFontFamily}
+            onDefaultCategoryChange={setDefaultCategory}
+            onOpenVault={openVault}
+            onInitializeVault={initVault}
+            onCreateToday={addTodayNote}
+            onCreateFolder={addFolder}
+            onRebuildIndex={rebuildIndex}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </Suspense>
+      </Modal>
+
+      <Modal
+        open={tagsPopoverOpen}
+        onClose={() => setTagsPopoverOpen(false)}
+        label={t("app.tags")}
+        boxClassName="max-h-[86vh] w-[min(760px,92vw)] max-w-none overflow-hidden p-0"
+      >
+        <Suspense fallback={<Skeleton variant="panel" label={t("loading.tags")} />}>
+          <TagsPanel
+            notes={notes}
+            onSelectNote={(path) => {
+              setActivePath(path);
+            }}
+            onClose={() => setTagsPopoverOpen(false)}
+          />
+        </Suspense>
+      </Modal>
+
+      <PromptDialog request={promptConfig} onDone={() => setPromptConfig(null)} />
+      <FolderPicker request={folderRequest} folders={categoryOptions.filter((folder) => !folder.name.startsWith("."))} onDone={() => setFolderRequest(null)} />
+      <CommandPalette
+        open={paletteMode !== null}
+        mode={paletteMode ?? "all"}
+        commands={paletteCommands}
+        notes={notes}
+        onOpenNote={(path) => {
+          if (activeView === "todo" || activeView === "calendar") toggleSpecialView(activeView);
+          setActivePath(path);
+        }}
+        onClose={() => setPaletteMode(null)}
+      />
+      {contextMenu && contextMenuNote ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          label={t("menu.label", { title: contextMenuNote.title })}
+          items={noteContextItems(contextMenu.path)}
+          onClose={closeContextMenu}
+        />
       ) : null}
 
-      {tagsPopoverOpen ? (
-        <div
-          className="tags-popover-backdrop modal modal-open"
-          role="presentation"
-          onMouseDown={() => setTagsPopoverOpen(false)}
-        >
-          <div
-            className="modal-box max-h-[86vh] w-[min(760px,92vw)] max-w-none overflow-hidden p-0"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Tags"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <Suspense fallback={<div className="empty">Loading tags…</div>}>
-              <TagsPanel
-                notes={notes}
-                onSelectNote={(path) => {
-                  setActivePath(path);
-                }}
-                onClose={() => setTagsPopoverOpen(false)}
-              />
-            </Suspense>
-          </div>
-        </div>
-      ) : null}
-
-      {promptConfig ? (
-        <div
-          className="settings-window-backdrop modal modal-open"
-          role="presentation"
-          style={{ zIndex: 1000 }}
-          onMouseDown={() => {
-            promptConfig.resolve(null);
-            setPromptConfig(null);
-          }}
-        >
-          <div
-            className="settings-window modal-box w-[min(420px,92vw)] max-w-none p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label={promptConfig.message}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const val = new FormData(e.currentTarget).get("val") as string;
-                promptConfig.resolve(val);
-                setPromptConfig(null);
-              }}
-            >
-              <h3 className="mb-4 mt-0 text-lg font-semibold">
-                {promptConfig.message}
-              </h3>
-              <input
-                className="input input-bordered mb-6 w-full"
-                name="val"
-                defaultValue={promptConfig.defaultValue}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    promptConfig.resolve(null);
-                    setPromptConfig(null);
-                  }
-                }}
-              />
-              <div className="modal-action">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    promptConfig.resolve(null);
-                    setPromptConfig(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  OK
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      <footer className="status-bar">
-        <span className={`status-pill ${saveState}`}>{saveLabel}</span>
-        <span>
-          Vault:{" "}
-          {vaultRoot.trim()
-            ? vaultRoot.split("/").filter(Boolean).pop()
-            : "Demo workspace"}
-        </span>
-        <span>{notes.length} notes</span>
-        <span>{status}</span>
-        {(reminderError || reminderConflicts.length > 0) && <button type="button" className="text-error" title={reminderError || t('reminders.conflictHint')} onClick={() => setSettingsOpen(true)}>{t('reminders.syncFailed')}</button>}
-        <span>{activeNote ? activeNote.path : "No note"}</span>
-        <span>
-          {activeNote
-            ? `${activeNote.wordCount} words`
-            : `${totalWords} words total`}
-        </span>
-      </footer>
+      {focusMode ? (
+        <button type="button" className="focus-mode-exit" onClick={() => setFocusMode(false)}>
+          <Focus size={14} /> {t("focus.exit")} <kbd>Esc</kbd>
+        </button>
+      ) : (
+        <StatusBar
+          saveState={saveState}
+          saveLabel={saveLabel}
+          status={status}
+          pinStatus={saveError}
+          reminderError={reminderError}
+          reminderConflictCount={reminderConflicts.length}
+          onOpenSettings={() => setSettingsOpen(true)}
+          activeNote={activeNote}
+          noteCount={notes.length}
+          totalWords={totalWords}
+        />
+      )}
     </main>
   );
 }
