@@ -194,7 +194,7 @@ export function TitleBar(props: TitleBarProps) {
   );
 }
 
-function CreateMenu({ onCreateNote, onCreateToday, onCreateMindMap, onCreateFolder }: TitleBarProps) {
+function CreateMenu({ onCreateNote, onCreateToday, onCreateMindMap, onCreateFolder, showTodayNoteButton }: TitleBarProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -250,9 +250,11 @@ function CreateMenu({ onCreateNote, onCreateToday, onCreateMindMap, onCreateFold
             <Pencil size={15} /> <span className="flex-1">{t("app.createNote")}</span>
             <kbd>{formatShortcut("newNote")}</kbd>
           </button>
-          <button type="button" className="app-menu-item" role="menuitem" onClick={run(onCreateToday)}>
-            <FilePlus2 size={15} /> <span className="flex-1">{t("settings.todayNote")}</span>
-          </button>
+          {showTodayNoteButton ? (
+            <button type="button" className="app-menu-item" role="menuitem" onClick={run(onCreateToday)}>
+              <FilePlus2 size={15} /> <span className="flex-1">{t("settings.todayNote")}</span>
+            </button>
+          ) : null}
           <button type="button" className="app-menu-item" role="menuitem" onClick={run(onCreateMindMap)}>
             <Network size={15} /> <span className="flex-1">{t("mindmap.title")}</span>
           </button>

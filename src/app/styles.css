@@ -4365,10 +4365,10 @@ body.is-resizing * {
   top: calc(100% + 6px);
 }
 
-/* Focus mode: hide side panels and keep a comfortable line length */
-.focus-mode .editor {
-  padding-left: max(26px, calc((100% - 78ch) / 2));
-  padding-right: max(26px, calc((100% - 78ch) / 2));
+/* Focus mode: use the full workspace width with standard editor padding. */
+.focus-mode .editor .markdown-preview {
+  max-width: none;
+  width: 100%;
 }
 
 .focus-mode-exit {

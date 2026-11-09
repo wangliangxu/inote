@@ -8,7 +8,7 @@ import type { Note, UserSettings } from '../shared/types'
 import { isMacPlatform } from './shortcuts'
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => vi.fn()) }))
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { resolvedLanguage: 'en', changeLanguage: vi.fn() } }) }))
 vi.mock('../shared/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('../shared/api')>(),
   loadUserSettings: vi.fn(),
@@ -20,7 +20,12 @@ vi.mock('../shared/fixtures', async (importOriginal) => {
   return { demoNotes: actual.demoNotes.map((note, index) => index === 0 ? { ...note, status: 'todo' } : note) }
 })
 vi.mock('../features/editor/Editor', () => ({
-  Editor: ({ note }: { note: Note }) => <div data-testid="editor">{note.path}</div>,
+  Editor: ({ note, onNavigateFolder }: { note: Note; onNavigateFolder: (folder: string) => void }) => (
+    <>
+      <div data-testid="editor">{note.path}</div>
+      <button onClick={() => onNavigateFolder(note.category)}>Open note folder</button>
+    </>
+  ),
 }))
 vi.mock('../features/calendar/CalendarView', () => ({
   CalendarView: () => <div data-testid="calendar">Calendar</div>,
@@ -55,6 +60,32 @@ describe('workspace view navigation', () => {
     Element.prototype.scrollIntoView = vi.fn()
   })
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+  it('selects the breadcrumb category and uses it when extending or clearing the filter', async () => {
+    await openWorkspace()
+    await screen.findByTestId('editor')
+    // Start with a different search scope to catch stale checkbox state.
+    const dropdown = document.querySelector('details.dropdown') as HTMLDetailsElement
+    fireEvent.click(dropdown.querySelector('summary')!)
+    fireEvent.click(screen.getByRole('checkbox', { name: /00-inbox/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open note folder' }))
+    expect(dropdown.querySelector('summary')?.textContent).toBe('journal')
+    const checkbox = (name: string | RegExp) => screen.getByRole('checkbox', { name }) as HTMLInputElement
+    expect(checkbox('app.allCategories').checked).toBe(false)
+    expect(checkbox(/journal/).checked).toBe(true)
+    expect(checkbox(/00-inbox/).checked).toBe(false)
+
+    fireEvent.click(checkbox(/knowledge\/rust/))
+    expect(checkbox(/journal/).checked).toBe(true)
+    expect(checkbox(/knowledge\/rust/).checked).toBe(true)
+    expect(checkbox(/00-inbox/).checked).toBe(false)
+    expect(ordinaryNote()).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open note folder' }))
+    fireEvent.click(checkbox(/journal/))
+    expect(checkbox('app.allCategories').checked).toBe(true)
+    expect(screen.getByRole('button', { name: /Quick Thought/ })).toBeTruthy()
+  })
 
   it.each(['app.cardView', 'app.summaryView'])('highlights matching titles and body context in %s', async (mode) => {
     await openWorkspace()
@@ -142,6 +173,26 @@ describe('workspace interactions', () => {
     Element.prototype.scrollIntoView = vi.fn()
   })
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+  it('updates both Today note toolbar entries when the setting changes', async () => {
+    await openWorkspace()
+    fireEvent.click(screen.getByRole('button', { name: 'app.createMenu' }))
+    expect(screen.queryByRole('menuitem', { name: 'settings.todayNote' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'settings.todayNote' })).toBeNull()
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    clickView('app.settings')
+    const setting = await screen.findByRole('checkbox', { name: 'settings.showTodayNoteButton' })
+    fireEvent.click(setting)
+    expect(screen.getByRole('button', { name: 'settings.todayNote' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'app.createMenu' }))
+    expect(screen.getByRole('menuitem', { name: 'settings.todayNote' })).toBeTruthy()
+
+    fireEvent.click(setting)
+    expect(screen.queryByRole('button', { name: 'settings.todayNote' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'settings.todayNote' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: /app.createNote/ })).toBeTruthy()
+  })
 
   it('opens a note context menu whose file actions need a real vault', async () => {
     await openWorkspace()

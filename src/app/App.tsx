@@ -413,6 +413,9 @@ function Workspace() {
     () => new Set(selectedSearchCategories),
     [selectedSearchCategories],
   );
+  const categoryFilterSelection = activeView === "category"
+    ? [activeCategory]
+    : selectedSearchCategories;
   const searchScopeLabel =
     selectedSearchCategories.length === 0
       ? t("app.allCategories")
@@ -2173,16 +2176,16 @@ function Workspace() {
           searchScopeLabel={searchScopeLabel}
           query={searchHighlightQuery}
           categoryOptions={categoryOptions}
-          selectedSearchCategories={selectedSearchCategories}
+          selectedSearchCategories={categoryFilterSelection}
           onSelectAllCategories={() => {
             setSelectedSearchCategories([]);
             setActiveView("search");
           }}
           onToggleSearchCategory={(name, checked) => {
             setActiveView("search");
-            setSelectedSearchCategories((current) => checked
-              ? [...current, name].sort((a, b) => a.localeCompare(b))
-              : current.filter((item) => item !== name));
+            setSelectedSearchCategories(checked
+              ? [...new Set([...categoryFilterSelection, name])].sort((a, b) => a.localeCompare(b))
+              : categoryFilterSelection.filter((item) => item !== name));
           }}
           categoryFilterOpen={categoryFilterOpen}
           setCategoryFilterOpen={setCategoryFilterOpen}
