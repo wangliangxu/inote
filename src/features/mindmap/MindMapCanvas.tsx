@@ -22,6 +22,7 @@ import {
 } from './mindmapLayout'
 export interface MindMapCanvasHandle {
   fit: () => void
+  focus: () => void
   editNode: (id: string) => void
 }
 interface Props {
@@ -225,7 +226,11 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       )
       canvas.scrollTo?.({ top: 0, left: 0 })
     }
-    useImperativeHandle(ref, () => ({ fit: () => fit(), editNode: setPendingEditId }))
+    useImperativeHandle(ref, () => ({
+      fit: () => fit(),
+      focus: () => canvasRef.current?.focus({ preventScroll: true }),
+      editNode: setPendingEditId,
+    }))
     useLayoutEffect(() => {
       const canvas = canvasRef.current,
         forest = forestRef.current,
@@ -449,6 +454,11 @@ export const MindMapCanvas = forwardRef<MindMapCanvasHandle, Props>(
       <div
         ref={canvasRef}
         className="mindmap-canvas"
+        onClick={(event) => {
+          // WebKit does not reliably focus the canvas when its background is clicked.
+          if (!(event.target as HTMLElement).closest('button,textarea,input,select,a'))
+            canvasRef.current?.focus({ preventScroll: true })
+        }}
         onPointerMove={movePointer}
         onPointerUp={finishPointer}
         onPointerCancel={endDrag}

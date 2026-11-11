@@ -295,7 +295,7 @@
     "working": "Working…",
     "openVault": "Open a local vault in Settings first.",
     "created": "Created mind map: {{path}}",
-    "shortcuts": "Click a node to edit its text: Enter confirms, Shift+Enter inserts a new line, Esc cancels. With the canvas focused, Tab adds a child, Enter adds a sibling, Delete removes a branch; Ctrl / Cmd + Z undoes changes.",
+    "shortcuts": "Click a node to edit its text: Enter confirms, Shift+Enter inserts a new line, Esc cancels. After pressing Enter to finish editing or clicking the canvas background, Tab adds a child, Enter adds a sibling, Backspace (⌫ on Mac) or Delete removes a branch; Ctrl / Cmd + Z undoes changes.",
     "importHint": "Supports FreeMind (.mm), OPML, iNote mind map JSON, and native MindNode import in the desktop app. Each file creates a new note; originals remain unchanged. Limits: 10 MiB, 5000 nodes, 64 levels per file; 100 files per batch.",
     "mindnodeHint": "Native import supports MindNode Classic internal formats 6 and 9 in packages or ZIP single files. Text, hierarchy, order, notes, links and folding are preserved. Use “Choose MindNode package folder” if the package appears as a directory. For other versions, export as FreeMind or OPML first.",
     "errors": {

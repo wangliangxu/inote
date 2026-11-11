@@ -199,6 +199,7 @@ export function MindMapWorkspace({
           map.roots.find((n) => n.id !== selected.node.id)?.id ??
           '',
       )
+      canvasRef.current?.focus()
     })
   }
   function keyDown(event: KeyboardEvent) {

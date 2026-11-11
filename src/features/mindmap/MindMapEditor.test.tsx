@@ -11,7 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../../shared/types'
 import { parseMarkdownWithFrontmatter } from '../../shared/noteMarkdown'
-import { createMindMap, getNoteMindMap, withMindMap } from './mindmap'
+import { createMindMap, getNoteMindMap, newNode, withMindMap, type MindMap } from './mindmap'
 import { Editor } from './MindMapEditor'
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -40,12 +40,14 @@ afterEach(() => {
 function Harness({
   onSave = vi.fn(),
   previewMode = false,
+  initialMap = createMindMap('Central topic'),
 }: {
   onSave?: (note: Note) => void
   previewMode?: boolean
+  initialMap?: MindMap
 }) {
   const [note, setNote] = useState(
-    withMindMap(base, createMindMap('Central topic')),
+    withMindMap(base, initialMap),
   )
   return (
     <Editor
@@ -166,6 +168,72 @@ describe('mind map editor integration', () => {
     expect(screen.queryByRole('button', { name: 'mindmap.newNode' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'mindmap.expand' }))
     expect(screen.getByRole('button', { name: 'mindmap.newNode' })).toBeTruthy()
+  })
+  it.each([
+    ['map', 'Backspace'], ['map', 'Delete'],
+    ['outline', 'Backspace'], ['outline', 'Delete'],
+  ])('deletes branches with %s view and %s while retaining focus and undo history', (view, key) => {
+    const map = createMindMap('Central topic')
+    const branch = newNode('Branch')
+    branch.children.push(newNode('Leaf'))
+    map.roots[0].children.push(branch)
+    render(<Harness initialMap={map} />)
+    if (view === 'outline')
+      fireEvent.click(screen.getByRole('button', { name: 'mindmap.outline' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Leaf' }))
+    fireEvent.keyDown(screen.getByLabelText('mindmap.nodeText'), { key: 'Enter' })
+    // Keyboard navigation can focus a node directly instead of the canvas.
+    screen.getByRole('button', { name: 'Leaf' }).focus()
+    expect(fireEvent.keyDown(document.activeElement!, { key })).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Leaf' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByLabelText('mindmap.canvas'))
+    expect(fireEvent.keyDown(document.activeElement!, { key })).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Branch' })).toBeNull()
+    // The last root remains protected.
+    fireEvent.keyDown(document.activeElement!, { key })
+    expect(screen.getByRole('button', { name: 'Central topic' })).toBeTruthy()
+    fireEvent.keyDown(document.activeElement!, { key: 'z', metaKey: true })
+    expect(screen.getByRole('button', { name: 'Branch' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Leaf' })).toBeNull()
+    fireEvent.keyDown(document.activeElement!, { key: 'z', metaKey: true })
+    expect(screen.getByRole('button', { name: 'Leaf' })).toBeTruthy()
+  })
+  it('focuses the canvas background for Backspace deletion after editing a branch', () => {
+    const save = vi.fn()
+    const map = createMindMap('Central topic')
+    const branch = newNode('Branch')
+    branch.children.push(newNode('Leaf'))
+    map.roots[0].children.push(branch)
+    render(<Harness initialMap={map} onSave={save} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Branch' }))
+    const input = screen.getByLabelText('mindmap.nodeText')
+    expect(document.activeElement).toBe(input)
+    expect(fireEvent.keyDown(input, { key: 'Backspace' })).toBe(true)
+    expect(screen.getByRole('button', { name: 'Leaf' })).toBeTruthy()
+    act(() => (input as HTMLTextAreaElement).blur())
+    // A background click need not move focus automatically in macOS WebKit.
+    expect(document.activeElement).toBe(document.body)
+    const canvas = screen.getByLabelText('mindmap.canvas')
+    fireEvent.click(canvas.querySelector('.mindmap-forest')!)
+    expect(document.activeElement).toBe(canvas)
+    expect(fireEvent.keyDown(document.activeElement!, { key: 'Backspace' })).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Branch' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Leaf' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'editor.save' }))
+    expect(getNoteMindMap(save.mock.calls[0][0])?.roots[0].children).toEqual([])
+    fireEvent.keyDown(canvas, { key: 'z', metaKey: true })
+    expect(screen.getByRole('button', { name: 'Branch' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Leaf' })).toBeTruthy()
+  })
+  it.each(['Backspace', 'Delete'])('keeps branches read-only for %s in preview mode', (key) => {
+    const change = vi.fn()
+    const map = createMindMap('Central topic')
+    map.roots[0].children.push(newNode('Branch'))
+    render(<Editor note={withMindMap(base, map)} onChange={change} previewMode />)
+    fireEvent.click(screen.getByRole('button', { name: 'Branch' }))
+    expect(fireEvent.keyDown(screen.getByLabelText('mindmap.canvas'), { key })).toBe(true)
+    expect(screen.getByRole('button', { name: 'Branch' })).toBeTruthy()
+    expect(change).not.toHaveBeenCalled()
   })
   it('edits node text on the canvas with the inspector hidden, saves immediately and undoes as one edit', () => {
     const save = vi.fn()

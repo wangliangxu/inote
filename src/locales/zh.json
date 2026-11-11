@@ -292,7 +292,7 @@
     "working": "正在处理…",
     "openVault": "请先在设置中打开本地笔记库。",
     "created": "已创建导图：{{path}}",
-    "shortcuts": "点击节点直接编辑文字：Enter 确认，Shift+Enter 换行，Esc 取消。画布聚焦时 Tab 添加子节点、Enter 添加同级、Delete 删除分支；Ctrl / Cmd + Z 撤销。",
+    "shortcuts": "点击节点直接编辑文字：Enter 确认，Shift+Enter 换行，Esc 取消。按 Enter 结束编辑或点击画布空白处后，Tab 添加子节点、Enter 添加同级、Backspace（Mac 的 ⌫ 键）或 Delete 删除分支；Ctrl / Cmd + Z 撤销。",
     "importHint": "支持 FreeMind (.mm)、OPML、iNote 导图 JSON，以及桌面版 MindNode 原生导入。每个文件创建一篇新笔记，原文件保持不变；单文件最多 10 MiB、5000 个节点、64 层，每批最多 100 个文件。",
     "mindnodeHint": "MindNode 原生导入支持 Classic 内部格式 6 和 9 的文件包及压缩单文件，保留文字、层级、顺序、备注、链接与折叠。若文件包显示为文件夹，可用「选择 MindNode 文件包目录」。其他版本请先导出 FreeMind 或 OPML。",
     "errors": {
