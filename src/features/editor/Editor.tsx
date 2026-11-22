@@ -8,6 +8,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { toMarkdownImagePreviewSrc } from '../../shared/markdownImages'
 import { normalizeMarkdownBody, preserveMarkdownTrailingWhitespace, EDITOR_TO_MARKDOWN_OPTIONS } from '../../shared/normalizeMarkdown'
 import { orderedListStartPlugin } from './orderedListStartPlugin'
+import { automaticCopyColorPlugin } from './automaticCopyColorPlugin'
 import { captureRichTextSelection, restoreRichTextSelection, type RichTextSelectionSnapshot } from './richTextSelection'
 import { isDarkThemeDatasetValue } from '../../shared/theme'
 import { TextCursorInput, RefreshCw, Save, Trash2, MoveRight, Info, Archive, Link2, ListTree, ListOrdered, MoreHorizontal, Focus, ChevronRight, Folder } from 'lucide-react'
@@ -1023,6 +1024,7 @@ export function Editor({
     headingsPlugin(),
     listsPlugin(),
     orderedListStartPlugin(),
+    automaticCopyColorPlugin(),
     quotePlugin(),
     thematicBreakPlugin(),
     markdownShortcutPlugin(),
