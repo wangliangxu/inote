@@ -5,3 +5,5 @@ src-tauri/target/
 .worktrees/
 .DS_Store
 *.log
+
+/软件著作权申请资料/
